@@ -62,6 +62,14 @@ func TestSanitizeEmailHeader(t *testing.T) {
 	}
 }
 
+func TestSanitizeEmailBody(t *testing.T) {
+	input := []byte("<script>alert('xss')</script><p>Hello</p>")
+	expected := "<p>Hello</p>"
+	if result := sanitizeEmailBody(input); result != expected {
+		t.Errorf("sanitizeEmailBody() = %q, want %q", result, expected)
+	}
+}
+
 func TestValidateEmailAddress(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -178,7 +186,7 @@ func TestSanitizeAndValidateEmail(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := sanitizeAndValidateEmail(tt.email)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("sanitizeAndValidateEmail(%q) expected error but got none", tt.email)
