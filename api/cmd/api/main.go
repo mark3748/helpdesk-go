@@ -376,17 +376,32 @@ type Ticket struct {
 	CustomJSON  any        `json:"custom_json"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+	SLA         *SLAStatus `json:"sla,omitempty"`
+}
+
+type SLAStatus struct {
+	PolicyID             string  `json:"policy_id"`
+	ResponseElapsedMS    int64   `json:"response_elapsed_ms"`
+	ResolutionElapsedMS  int64   `json:"resolution_elapsed_ms"`
+	ResponseTargetMins   int     `json:"response_target_mins"`
+	ResolutionTargetMins int     `json:"resolution_target_mins"`
+	Paused               bool    `json:"paused"`
+	Reason               *string `json:"reason,omitempty"`
 }
 
 // ===== Handlers =====
 func (a *App) listTickets(c *gin.Context) {
 	ctx := c.Request.Context()
 	rows, err := a.db.Query(ctx, `
-        select id, number, title, coalesce(description,''), requester_id, assignee_id, team_id, priority,
-               urgency, category, subcategory, status, scheduled_at, due_at, source, custom_json, created_at, updated_at
-        from tickets
-        order by created_at desc
-        limit 200`)
+       select t.id, t.number, t.title, coalesce(t.description,''), t.requester_id, t.assignee_id, t.team_id, t.priority,
+              t.urgency, t.category, t.subcategory, t.status, t.scheduled_at, t.due_at, t.source, t.custom_json, t.created_at, t.updated_at,
+              sc.policy_id, sc.response_elapsed_ms, sc.resolution_elapsed_ms, sc.paused, sc.reason,
+              sp.response_target_mins, sp.resolution_target_mins
+       from tickets t
+       left join ticket_sla_clocks sc on sc.ticket_id = t.id
+       left join sla_policies sp on sp.id = sc.policy_id
+       order by t.created_at desc
+       limit 200`)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -396,12 +411,29 @@ func (a *App) listTickets(c *gin.Context) {
 	for rows.Next() {
 		var t Ticket
 		var customJSON []byte
+		var policyID *string
+		var respMS, resMS *int64
+		var paused *bool
+		var reason *string
+		var respTarget, resTarget *int32
 		if err := rows.Scan(&t.ID, &t.Number, &t.Title, &t.Description, &t.RequesterID, &t.AssigneeID, &t.TeamID,
-			&t.Priority, &t.Urgency, &t.Category, &t.Subcategory, &t.Status, &t.ScheduledAt, &t.DueAt, &t.Source, &customJSON, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			&t.Priority, &t.Urgency, &t.Category, &t.Subcategory, &t.Status, &t.ScheduledAt, &t.DueAt, &t.Source, &customJSON, &t.CreatedAt, &t.UpdatedAt,
+			&policyID, &respMS, &resMS, &paused, &reason, &respTarget, &resTarget); err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
 		t.CustomJSON = jsonRaw(customJSON)
+		if policyID != nil {
+			t.SLA = &SLAStatus{
+				PolicyID:             *policyID,
+				ResponseElapsedMS:    derefInt64(respMS),
+				ResolutionElapsedMS:  derefInt64(resMS),
+				ResponseTargetMins:   int(derefInt32(respTarget)),
+				ResolutionTargetMins: int(derefInt32(resTarget)),
+				Paused:               paused != nil && *paused,
+				Reason:               reason,
+			}
+		}
 		out = append(out, t)
 	}
 	c.JSON(200, out)
@@ -414,6 +446,20 @@ func (j jsonRaw) MarshalJSON() ([]byte, error) {
 		return []byte("null"), nil
 	}
 	return j, nil
+}
+
+func derefInt64(p *int64) int64 {
+	if p != nil {
+		return *p
+	}
+	return 0
+}
+
+func derefInt32(p *int32) int32 {
+	if p != nil {
+		return *p
+	}
+	return 0
 }
 
 type createTicketReq struct {
@@ -522,17 +568,39 @@ func (a *App) getTicket(c *gin.Context) {
 	ctx := c.Request.Context()
 	var t Ticket
 	var customJSON []byte
+	var policyID *string
+	var respMS, resMS *int64
+	var paused *bool
+	var reason *string
+	var respTarget, resTarget *int32
 	err := a.db.QueryRow(ctx, `
-        select id, number, title, coalesce(description,''), requester_id, assignee_id, team_id, priority,
-               urgency, category, subcategory, status, scheduled_at, due_at, source, custom_json, created_at, updated_at
-        from tickets where id=$1`, id).
+       select t.id, t.number, t.title, coalesce(t.description,''), t.requester_id, t.assignee_id, t.team_id, t.priority,
+              t.urgency, t.category, t.subcategory, t.status, t.scheduled_at, t.due_at, t.source, t.custom_json, t.created_at, t.updated_at,
+              sc.policy_id, sc.response_elapsed_ms, sc.resolution_elapsed_ms, sc.paused, sc.reason,
+              sp.response_target_mins, sp.resolution_target_mins
+       from tickets t
+       left join ticket_sla_clocks sc on sc.ticket_id = t.id
+       left join sla_policies sp on sp.id = sc.policy_id
+       where t.id=$1`, id).
 		Scan(&t.ID, &t.Number, &t.Title, &t.Description, &t.RequesterID, &t.AssigneeID, &t.TeamID, &t.Priority, &t.Urgency,
-			&t.Category, &t.Subcategory, &t.Status, &t.ScheduledAt, &t.DueAt, &t.Source, &customJSON, &t.CreatedAt, &t.UpdatedAt)
+			&t.Category, &t.Subcategory, &t.Status, &t.ScheduledAt, &t.DueAt, &t.Source, &customJSON, &t.CreatedAt, &t.UpdatedAt,
+			&policyID, &respMS, &resMS, &paused, &reason, &respTarget, &resTarget)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "not found"})
 		return
 	}
 	t.CustomJSON = jsonRaw(customJSON)
+	if policyID != nil {
+		t.SLA = &SLAStatus{
+			PolicyID:             *policyID,
+			ResponseElapsedMS:    derefInt64(respMS),
+			ResolutionElapsedMS:  derefInt64(resMS),
+			ResponseTargetMins:   int(derefInt32(respTarget)),
+			ResolutionTargetMins: int(derefInt32(resTarget)),
+			Paused:               paused != nil && *paused,
+			Reason:               reason,
+		}
+	}
 	c.JSON(200, t)
 }
 
