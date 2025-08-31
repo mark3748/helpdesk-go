@@ -20,7 +20,11 @@ import (
 
 // pollIMAP connects to an IMAP inbox, retrieves new messages and stores them.
 func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client) error {
-	addr := fmt.Sprintf("%s:993", c.IMAPHost)
+	port := c.IMAPPort
+	if port == 0 {
+		port = 993
+	}
+	addr := fmt.Sprintf("%s:%d", c.IMAPHost, port)
 	cli, err := imapclient.DialTLS(addr, nil)
 	if err != nil {
 		return err
