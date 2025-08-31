@@ -85,8 +85,8 @@ func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client)
 			log.Error().Err(err).Msg("parse message")
 			continue
 		}
-		subject := m.Header.Get("Subject")
-		from := m.Header.Get("From")
+		subject := sanitizeEmailHeader(m.Header.Get("Subject"))
+		from := sanitizeEmailHeader(m.Header.Get("From"))
 		body, err := io.ReadAll(m.Body)
 		if err != nil {
 			log.Error().Err(err).Msg("read message body")
