@@ -8,4 +8,6 @@ require (
     github.com/pressly/goose/v3 v3.20.0
     github.com/rs/zerolog v1.32.0
     github.com/joho/godotenv v1.5.1
+    github.com/golang-jwt/jwt/v5 v5.2.0
+    github.com/MicahParks/keyfunc v1.13.0
 )
