@@ -595,8 +595,8 @@ func (a *App) getTicket(c *gin.Context) {
 			PolicyID:             *policyID,
 			ResponseElapsedMS:    derefInt64(respMS),
 			ResolutionElapsedMS:  derefInt64(resMS),
-			ResponseTargetMins:   int(derefInt32(respTarget)),
-			ResolutionTargetMins: int(derefInt32(resTarget)),
+			ResponseTargetMins:   int(derefInt32(resTarget)),
+			ResolutionTargetMins: int(derefInt32(respTarget)),
 			Paused:               paused != nil && *paused,
 			Reason:               reason,
 		}
