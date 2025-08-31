@@ -102,6 +102,7 @@ func main() {
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Error().Err(err).Msg("redis ping failed (queue not active yet)")
 	}
+	defer rdb.Close()
 
 	log.Info().Msg("worker started")
 	for {

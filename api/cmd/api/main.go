@@ -132,6 +132,7 @@ func main() {
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Error().Err(err).Msg("redis ping")
 	}
+	defer rdb.Close()
 
 	a := &App{cfg: cfg, db: pool, r: gin.New(), jwks: jwks, m: mc, q: rdb}
 	a.r.Use(gin.Recovery())
