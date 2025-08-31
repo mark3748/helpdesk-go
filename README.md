@@ -27,6 +27,7 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
 
 ## API (MVP)
 - `GET /healthz`
+- `GET /me` (authenticated user info and roles)
 - `GET /tickets`
 - `POST /tickets`  (title, description, priority, urgency, category, subcategory, custom_json)
 - `GET /tickets/:id`
@@ -41,6 +42,6 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
    ```
 
 ### Notes
-- Auth is stubbed (DEV mode). Wire OIDC (Authentik) later (middleware placeholder included).
+- Auth uses OIDC JWTs with role checks (agents required for ticket updates).
 - Worker service is scaffolded but not wired to a queue yet.
 - This is a starter kit—intended to be iterated on.
