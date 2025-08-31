@@ -20,6 +20,9 @@ import (
 
 // pollIMAP connects to an IMAP inbox, retrieves new messages and stores them.
 func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client) error {
+	if mc == nil {
+		return fmt.Errorf("MinIO client is nil")
+	}
 	addr := fmt.Sprintf("%s:993", c.IMAPHost)
 	cli, err := imapclient.DialTLS(addr, nil)
 	if err != nil {
@@ -70,7 +73,7 @@ func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client)
 		}
 
 		key := fmt.Sprintf("email/%s.eml", uuid.NewString())
-		if mc != nil && c.MinIOBucket != "" {
+		if c.MinIOBucket != "" {
 			_, err = mc.PutObject(ctx, c.MinIOBucket, key, bytes.NewReader(raw), int64(len(raw)), minio.PutObjectOptions{})
 			if err != nil {
 				log.Error().Err(err).Msg("put object")
@@ -84,7 +87,11 @@ func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client)
 		}
 		subject := m.Header.Get("Subject")
 		from := m.Header.Get("From")
-		body, _ := io.ReadAll(m.Body)
+		body, err := io.ReadAll(m.Body)
+		if err != nil {
+			log.Error().Err(err).Msg("read message body")
+			continue
+		}
 		cleanBody := sanitizeEmailBody(body)
 
 		var ticketID int64
@@ -112,7 +119,11 @@ func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client)
 			"subject": subject,
 			"from":    from,
 		}
-		pj, _ := json.Marshal(parsed)
+		pj, err := json.Marshal(parsed)
+		if err != nil {
+			log.Error().Err(err).Msg("marshal parsed email")
+			continue
+		}
 		if _, err := db.Exec(ctx, "insert into email_inbound (raw_store_key, parsed_json, status, ticket_id) values ($1,$2,'processed',$3)", key, pj, ticketID); err != nil {
 			log.Error().Err(err).Msg("insert email_inbound")
 		}
