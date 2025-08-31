@@ -112,7 +112,11 @@ func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client)
 			"subject": subject,
 			"from":    from,
 		}
-		pj, _ := json.Marshal(parsed)
+		pj, err := json.Marshal(parsed)
+		if err != nil {
+			log.Error().Err(err).Msg("marshal parsed email")
+			continue
+		}
 		if _, err := db.Exec(ctx, "insert into email_inbound (raw_store_key, parsed_json, status, ticket_id) values ($1,$2,'processed',$3)", key, pj, ticketID); err != nil {
 			log.Error().Err(err).Msg("insert email_inbound")
 		}
