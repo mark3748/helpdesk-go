@@ -1,63 +1,69 @@
 package main
 
 import (
-	"context"
-	"crypto/sha256"
-	"embed"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"strings"
-	"time"
+    "context"
+    "crypto/sha256"
+    "embed"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "io"
+    "database/sql"
+    "net/http"
+    "os"
+    "strings"
+    "time"
 
-	"github.com/MicahParks/keyfunc"
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/pressly/goose/v3"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+    "github.com/gin-gonic/gin"
+    "github.com/golang-jwt/jwt/v5"
+    "github.com/google/uuid"
+    "github.com/jackc/pgx/v5"
+    "github.com/jackc/pgx/v5/pgconn"
+    "github.com/jackc/pgx/v5/pgxpool"
+    _ "github.com/jackc/pgx/v5/stdlib"
+    "github.com/joho/godotenv"
+    "github.com/lestrrat-go/jwx/v2/jwk"
+    "github.com/minio/minio-go/v7"
+    "github.com/minio/minio-go/v7/pkg/credentials"
+    "github.com/pressly/goose/v3"
+    "github.com/rs/zerolog"
+    "github.com/rs/zerolog/log"
 )
 
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
 type Config struct {
-	Addr          string
-	DatabaseURL   string
-	Env           string
-	OIDCIssuer    string
-	JWKSURL       string
-	MinIOEndpoint string
-	MinIOAccess   string
-	MinIOSecret   string
-	MinIOBucket   string
-	MinIOUseSSL   bool
+    Addr          string
+    DatabaseURL   string
+    Env           string
+    OIDCIssuer    string
+    JWKSURL       string
+    MinIOEndpoint string
+    MinIOAccess   string
+    MinIOSecret   string
+    MinIOBucket   string
+    MinIOUseSSL   bool
+    // Testing helpers
+    TestBypassAuth bool
 }
 
 func getConfig() Config {
-	_ = godotenv.Load()
-	cfg := Config{
-		Addr:          getEnv("ADDR", ":8080"),
-		DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
-		Env:           getEnv("ENV", "dev"),
-		OIDCIssuer:    getEnv("OIDC_ISSUER", ""),
-		JWKSURL:       getEnv("OIDC_JWKS_URL", ""),
-		MinIOEndpoint: getEnv("MINIO_ENDPOINT", ""),
-		MinIOAccess:   getEnv("MINIO_ACCESS_KEY", ""),
-		MinIOSecret:   getEnv("MINIO_SECRET_KEY", ""),
-		MinIOBucket:   getEnv("MINIO_BUCKET", ""),
-		MinIOUseSSL:   getEnv("MINIO_USE_SSL", "false") == "true",
-	}
-	return cfg
+    _ = godotenv.Load()
+    cfg := Config{
+        Addr:          getEnv("ADDR", ":8080"),
+        DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
+        Env:           getEnv("ENV", "dev"),
+        OIDCIssuer:    getEnv("OIDC_ISSUER", ""),
+        JWKSURL:       getEnv("OIDC_JWKS_URL", ""),
+        MinIOEndpoint: getEnv("MINIO_ENDPOINT", ""),
+        MinIOAccess:   getEnv("MINIO_ACCESS_KEY", ""),
+        MinIOSecret:   getEnv("MINIO_SECRET_KEY", ""),
+        MinIOBucket:   getEnv("MINIO_BUCKET", ""),
+        MinIOUseSSL:   getEnv("MINIO_USE_SSL", "false") == "true",
+        TestBypassAuth: getEnv("TEST_BYPASS_AUTH", "false") == "true",
+    }
+    return cfg
 }
 
 func getEnv(key, def string) string {
@@ -67,19 +73,41 @@ func getEnv(key, def string) string {
 	return def
 }
 
+// DB is a minimal interface to allow mocking in tests.
+type DB interface {
+    Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+    QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+    Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+}
+
+// ObjectStore wraps the subset of MinIO we need for tests.
+type ObjectStore interface {
+    PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+    RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+}
+
 type App struct {
-	cfg  Config
-	db   *pgxpool.Pool
-	r    *gin.Engine
-	jwks *keyfunc.JWKS
-	m    *minio.Client
+    cfg  Config
+    db   DB
+    r    *gin.Engine
+    keyf jwt.Keyfunc
+    m    ObjectStore
+}
+
+// NewApp constructs an App with injected dependencies and registers routes.
+func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore) *App {
+    a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store}
+    a.r.Use(gin.Recovery())
+    a.r.Use(gin.Logger())
+    a.routes()
+    return a
 }
 
 func main() {
-	cfg := getConfig()
-	if cfg.Env == "dev" {
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
-		gin.SetMode(gin.DebugMode)
+    cfg := getConfig()
+    if cfg.Env == "dev" {
+        log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
+        gin.SetMode(gin.DebugMode)
 	} else {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -92,29 +120,69 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Migrate (embedded goose)
-	goose.SetBaseFS(migrationsFS)
-	if err := goose.SetDialect("postgres"); err != nil {
-		log.Fatal().Err(err).Msg("goose dialect")
-	}
-	// goose wants a *sql.DB normally; use pgx stdlib is more complex.
-	// Simpler: run migrations via goose with connection string (driver name, DSN).
-	if err := goose.UpContext(ctx, nil, "migrations",
-		goose.WithAllowMissing(), goose.WithNoVersioning(), goose.WithRequireDB(false),
-		goose.WithDriver("postgres", cfg.DatabaseURL)); err != nil {
-		log.Fatal().Err(err).Msg("migrate up")
-	}
+    // Migrate (embedded goose) using pgx stdlib driver
+    goose.SetBaseFS(migrationsFS)
+    if err := goose.SetDialect("postgres"); err != nil {
+        log.Fatal().Err(err).Msg("goose dialect")
+    }
+    sqldb, err := sql.Open("pgx", cfg.DatabaseURL)
+    if err != nil {
+        log.Fatal().Err(err).Msg("sql open for goose")
+    }
+    defer sqldb.Close()
+    if err := goose.UpContext(ctx, sqldb, "migrations"); err != nil {
+        log.Fatal().Err(err).Msg("migrate up")
+    }
 
-	var jwks *keyfunc.JWKS
-	if cfg.JWKSURL != "" {
-		jwks, err = keyfunc.Get(cfg.JWKSURL, keyfunc.Options{})
-		if err != nil {
-			log.Fatal().Err(err).Msg("load jwks")
-		}
-	}
+    // JWKS-backed Keyfunc
+    var keyf jwt.Keyfunc
+    if cfg.JWKSURL != "" {
+        // Fetch JWKS on startup and refresh periodically
+        httpClient := &http.Client{Timeout: 10 * time.Second}
+        set, err := jwk.Fetch(ctx, cfg.JWKSURL, jwk.WithHTTPClient(httpClient))
+        if err != nil {
+            log.Fatal().Err(err).Str("jwks_url", cfg.JWKSURL).Msg("fetch jwks")
+        }
+        // simple periodic refresh
+        setPtr := &set
+        go func() {
+            ticker := time.NewTicker(10 * time.Minute)
+            defer ticker.Stop()
+            for range ticker.C {
+                if newSet, err := jwk.Fetch(context.Background(), cfg.JWKSURL, jwk.WithHTTPClient(httpClient)); err == nil {
+                    *setPtr = newSet
+                }
+            }
+        }()
+        keyf = func(t *jwt.Token) (interface{}, error) {
+            kid, _ := t.Header["kid"].(string)
+            if kid != "" {
+                if key, ok := (*setPtr).LookupKeyID(kid); ok {
+                    var pub any
+                    if err := key.Raw(&pub); err != nil {
+                        return nil, err
+                    }
+                    return pub, nil
+                }
+            }
+            // fallback: use the first key in the set
+            it := (*setPtr).Iterate(context.Background())
+            if it.Next(context.Background()) {
+                pair := it.Pair()
+                if key, ok := pair.Value.(jwk.Key); ok {
+                    var pub any
+                    if err := key.Raw(&pub); err != nil {
+                        return nil, err
+                    }
+                    return pub, nil
+                }
+            }
+            return nil, fmt.Errorf("no jwk for kid: %s", kid)
+        }
+    }
 
-	var mc *minio.Client
-	if cfg.MinIOEndpoint != "" {
+    var mc *minio.Client
+    if cfg.MinIOEndpoint != "" {
 		mc, err = minio.New(cfg.MinIOEndpoint, &minio.Options{
 			Creds:  credentials.NewStaticV4(cfg.MinIOAccess, cfg.MinIOSecret, ""),
 			Secure: cfg.MinIOUseSSL,
@@ -124,15 +192,12 @@ func main() {
 		}
 	}
 
-	a := &App{cfg: cfg, db: pool, r: gin.New(), jwks: jwks, m: mc}
-	a.r.Use(gin.Recovery())
-	a.r.Use(gin.Logger())
-	a.routes()
+    a := NewApp(cfg, pool, keyf, mc)
 
-	srv := &http.Server{
-		Addr:           cfg.Addr,
-		Handler:        a.r,
-		ReadTimeout:    15 * time.Second,
+    srv := &http.Server{
+        Addr:           cfg.Addr,
+        Handler:        a.r,
+        ReadTimeout:    15 * time.Second,
 		WriteTimeout:   15 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
@@ -143,7 +208,7 @@ func main() {
 }
 
 func (a *App) routes() {
-	a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+    a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 
 	auth := a.r.Group("/")
 	auth.Use(a.authMiddleware())
@@ -172,18 +237,31 @@ type AuthUser struct {
 }
 
 func (a *App) authMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if a.jwks == nil {
-			c.AbortWithStatusJSON(500, gin.H{"error": "jwks not configured"})
-			return
-		}
-		auth := c.GetHeader("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") {
+    return func(c *gin.Context) {
+        // Testing bypass: allow unit tests to inject a user without JWKS/token.
+        if a.cfg.TestBypassAuth {
+            c.Set("user", AuthUser{
+                ID:          "test-user",
+                ExternalID:  "test",
+                Email:       "test@example.com",
+                DisplayName: "Test User",
+                Roles:       []string{"agent"},
+            })
+            c.Next()
+            return
+        }
+
+        if a.keyf == nil {
+            c.AbortWithStatusJSON(500, gin.H{"error": "jwks not configured"})
+            return
+        }
+        auth := c.GetHeader("Authorization")
+        if !strings.HasPrefix(auth, "Bearer ") {
 			c.AbortWithStatusJSON(401, gin.H{"error": "missing bearer token"})
 			return
 		}
 		tokenStr := strings.TrimPrefix(auth, "Bearer ")
-		token, err := jwt.Parse(tokenStr, a.jwks.Keyfunc)
+        token, err := jwt.Parse(tokenStr, a.keyf)
 		if err != nil || !token.Valid {
 			c.AbortWithStatusJSON(401, gin.H{"error": "invalid token"})
 			return
