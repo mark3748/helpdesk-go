@@ -15,10 +15,10 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
    ```
 2. Build API:
    ```bash
-   cd api/cmd/api
+   cd cmd/api
    go mod tidy
-   go build -o ../../../bin/api
-   ../../../bin/api
+   go build -o ../../bin/api
+   ../../bin/api
    ```
 3. Hit health:
    ```
@@ -49,3 +49,4 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
 ### Testing
 - Unit tests can bypass JWT validation by setting `TEST_BYPASS_AUTH=true`. This injects a synthetic user with the `agent` role so auth-protected routes can be exercised without a JWKS.
 - Handlers depend on a database interface and an object storage interface, enabling mocks/fakes in tests without external services.
+- Run all tests from repo root: `go test ./...`

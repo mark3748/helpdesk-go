@@ -28,6 +28,25 @@ env:
   # External services (set to your endpoints)
   DATABASE_URL: "postgres://user:pass@postgres:5432/helpdesk?sslmode=disable"
   REDIS_ADDR: "redis:6379"
+  # API auth (optional)
+  OIDC_ISSUER: ""
+  OIDC_JWKS_URL: ""
+  # Object storage (optional)
+  MINIO_ENDPOINT: ""
+  MINIO_ACCESS_KEY: ""
+  MINIO_SECRET_KEY: ""
+  MINIO_BUCKET: ""
+  MINIO_USE_SSL: "false"
+  # Worker email/IMAP (optional)
+  SMTP_HOST: ""
+  SMTP_PORT: "25"
+  SMTP_USER: ""
+  SMTP_PASS: ""
+  SMTP_FROM: ""
+  IMAP_HOST: ""
+  IMAP_USER: ""
+  IMAP_PASS: ""
+  IMAP_FOLDER: "INBOX"
 
 resources: {}
 

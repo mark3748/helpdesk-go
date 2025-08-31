@@ -20,9 +20,9 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+    "github.com/rs/zerolog/log"
 
-	"example.com/yourrepo/worker/sla"
+    "github.com/mark3748/helpdesk-go/internal/sla"
 )
 
 type Config struct {
