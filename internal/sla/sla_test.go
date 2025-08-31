@@ -44,3 +44,4 @@ func TestBusinessDurationHoliday(t *testing.T) {
 		t.Fatalf("expected 2h got %v", d)
 	}
 }
+
