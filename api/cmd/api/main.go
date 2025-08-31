@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -13,9 +16,12 @@ import (
 	"github.com/MicahParks/keyfunc"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/pressly/goose/v3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -25,21 +31,31 @@ import (
 var migrationsFS embed.FS
 
 type Config struct {
-	Addr        string
-	DatabaseURL string
-	Env         string
-	OIDCIssuer  string
-	JWKSURL     string
+	Addr          string
+	DatabaseURL   string
+	Env           string
+	OIDCIssuer    string
+	JWKSURL       string
+	MinIOEndpoint string
+	MinIOAccess   string
+	MinIOSecret   string
+	MinIOBucket   string
+	MinIOUseSSL   bool
 }
 
 func getConfig() Config {
 	_ = godotenv.Load()
 	cfg := Config{
-		Addr:        getEnv("ADDR", ":8080"),
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
-		Env:         getEnv("ENV", "dev"),
-		OIDCIssuer:  getEnv("OIDC_ISSUER", ""),
-		JWKSURL:     getEnv("OIDC_JWKS_URL", ""),
+		Addr:          getEnv("ADDR", ":8080"),
+		DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
+		Env:           getEnv("ENV", "dev"),
+		OIDCIssuer:    getEnv("OIDC_ISSUER", ""),
+		JWKSURL:       getEnv("OIDC_JWKS_URL", ""),
+		MinIOEndpoint: getEnv("MINIO_ENDPOINT", ""),
+		MinIOAccess:   getEnv("MINIO_ACCESS_KEY", ""),
+		MinIOSecret:   getEnv("MINIO_SECRET_KEY", ""),
+		MinIOBucket:   getEnv("MINIO_BUCKET", ""),
+		MinIOUseSSL:   getEnv("MINIO_USE_SSL", "false") == "true",
 	}
 	return cfg
 }
@@ -56,6 +72,7 @@ type App struct {
 	db   *pgxpool.Pool
 	r    *gin.Engine
 	jwks *keyfunc.JWKS
+	m    *minio.Client
 }
 
 func main() {
@@ -96,7 +113,18 @@ func main() {
 		}
 	}
 
-	a := &App{cfg: cfg, db: pool, r: gin.New(), jwks: jwks}
+	var mc *minio.Client
+	if cfg.MinIOEndpoint != "" {
+		mc, err = minio.New(cfg.MinIOEndpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(cfg.MinIOAccess, cfg.MinIOSecret, ""),
+			Secure: cfg.MinIOUseSSL,
+		})
+		if err != nil {
+			log.Fatal().Err(err).Msg("minio init")
+		}
+	}
+
+	a := &App{cfg: cfg, db: pool, r: gin.New(), jwks: jwks, m: mc}
 	a.r.Use(gin.Recovery())
 	a.r.Use(gin.Logger())
 	a.routes()
@@ -127,6 +155,12 @@ func (a *App) routes() {
 	auth.GET("/tickets/:id", a.getTicket)
 	auth.PATCH("/tickets/:id", a.requireRole("agent"), a.updateTicket)
 	auth.POST("/tickets/:id/comments", a.addComment)
+	auth.GET("/tickets/:id/attachments", a.listAttachments)
+	auth.POST("/tickets/:id/attachments", a.uploadAttachment)
+	auth.DELETE("/tickets/:id/attachments/:attID", a.deleteAttachment)
+	auth.GET("/tickets/:id/watchers", a.listWatchers)
+	auth.POST("/tickets/:id/watchers", a.addWatcher)
+	auth.DELETE("/tickets/:id/watchers/:userID", a.removeWatcher)
 }
 
 type AuthUser struct {
@@ -307,6 +341,7 @@ func (a *App) createTicket(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
+	u := c.MustGet("user").(AuthUser)
 	ctx := c.Request.Context()
 	var id, number, status string
 	status = "New"
@@ -319,6 +354,8 @@ func (a *App) createTicket(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
+	a.addStatusHistory(ctx, id, "", status, u.ID)
+	a.audit(c, "user", u.ID, "ticket", id, "create", gin.H{"title": in.Title, "requester_id": in.RequesterID})
 	c.JSON(201, gin.H{"id": id, "number": number, "status": status})
 }
 
@@ -329,6 +366,33 @@ func toJSON(v interface{}) *string {
 	b, _ := json.Marshal(v)
 	s := string(b)
 	return &s
+}
+
+func (a *App) audit(c *gin.Context, actorType, actorID, entityType, entityID, action string, diff interface{}) {
+	ctx := c.Request.Context()
+	var prevHash *string
+	_ = a.db.QueryRow(ctx, "select hash from audit_events order by at desc limit 1").Scan(&prevHash)
+	diffJSON, _ := json.Marshal(diff)
+	data := append([]byte{}, diffJSON...)
+	if prevHash != nil {
+		data = append(data, []byte(*prevHash)...)
+	}
+	h := sha256.Sum256(data)
+	hash := fmt.Sprintf("%x", h[:])
+	_, _ = a.db.Exec(ctx, `insert into audit_events (actor_type, actor_id, entity_type, entity_id, action, diff_json, ip, ua, hash, prev_hash)
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		actorType, actorID, entityType, entityID, action, diffJSON, c.ClientIP(), c.Request.UserAgent(), hash, prevHash)
+}
+
+func (a *App) addStatusHistory(ctx context.Context, ticketID, from, to, actorID string) {
+	_, _ = a.db.Exec(ctx, `insert into ticket_status_history (ticket_id, from_status, to_status, actor_id) values ($1,$2,$3,$4)`, ticketID, nullable(from), to, nullable(actorID))
+}
+
+func nullable(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func (a *App) getTicket(c *gin.Context) {
@@ -367,8 +431,11 @@ func (a *App) updateTicket(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
+	u := c.MustGet("user").(AuthUser)
 	ctx := c.Request.Context()
-	// Simple patch (set coalesce to current values)
+	var oldStatus string
+	_ = a.db.QueryRow(ctx, "select status from tickets where id=$1", id).Scan(&oldStatus)
+
 	_, err := a.db.Exec(ctx, `
         update tickets set
             status = coalesce($1, status),
@@ -385,6 +452,32 @@ func (a *App) updateTicket(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
+	if in.Status != nil && oldStatus != *in.Status {
+		a.addStatusHistory(ctx, id, oldStatus, *in.Status, u.ID)
+	}
+	diff := gin.H{}
+	if in.Status != nil {
+		diff["status"] = *in.Status
+	}
+	if in.AssigneeID != nil {
+		diff["assignee_id"] = *in.AssigneeID
+	}
+	if in.Priority != nil {
+		diff["priority"] = *in.Priority
+	}
+	if in.Urgency != nil {
+		diff["urgency"] = *in.Urgency
+	}
+	if in.ScheduledAt != nil {
+		diff["scheduled_at"] = in.ScheduledAt
+	}
+	if in.DueAt != nil {
+		diff["due_at"] = in.DueAt
+	}
+	if in.CustomJSON != nil {
+		diff["custom_json"] = in.CustomJSON
+	}
+	a.audit(c, "user", u.ID, "ticket", id, "update", diff)
 	c.JSON(200, gin.H{"ok": true})
 }
 
@@ -401,14 +494,156 @@ func (a *App) addComment(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
+	u := c.MustGet("user").(AuthUser)
 	ctx := c.Request.Context()
-	_, err := a.db.Exec(ctx, `
+	var cid string
+	err := a.db.QueryRow(ctx, `
         insert into ticket_comments (id, ticket_id, author_id, body_md, is_internal)
-        values (gen_random_uuid(), $1, $2, $3, $4)
-    `, id, in.AuthorID, in.BodyMD, in.IsInternal)
+        values (gen_random_uuid(), $1, $2, $3, $4) returning id
+    `, id, in.AuthorID, in.BodyMD, in.IsInternal).Scan(&cid)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
+	a.audit(c, "user", u.ID, "ticket", id, "comment_add", gin.H{"comment_id": cid, "author_id": in.AuthorID})
+	c.JSON(201, gin.H{"id": cid})
+}
+
+// ===== Attachments =====
+func (a *App) uploadAttachment(c *gin.Context) {
+	if a.m == nil {
+		c.JSON(500, gin.H{"error": "minio not configured"})
+		return
+	}
+	ticketID := c.Param("id")
+	u := c.MustGet("user").(AuthUser)
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	defer file.Close()
+	objectKey := uuid.New().String()
+	_, err = a.m.PutObject(c.Request.Context(), a.cfg.MinIOBucket, objectKey, file, header.Size, minio.PutObjectOptions{ContentType: header.Header.Get("Content-Type")})
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	ctx := c.Request.Context()
+	var id string
+	err = a.db.QueryRow(ctx, `insert into attachments (id, ticket_id, uploader_id, object_key, filename, bytes, mime) values ($1,$2,$3,$4,$5,$6,$7) returning id`,
+		objectKey, ticketID, u.ID, objectKey, header.Filename, header.Size, header.Header.Get("Content-Type")).Scan(&id)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	a.audit(c, "user", u.ID, "ticket", ticketID, "attachment_add", gin.H{"attachment_id": id})
+	c.JSON(201, gin.H{"id": id})
+}
+
+func (a *App) listAttachments(c *gin.Context) {
+	ticketID := c.Param("id")
+	ctx := c.Request.Context()
+	rows, err := a.db.Query(ctx, "select id, filename, bytes, mime, created_at from attachments where ticket_id=$1", ticketID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	type Att struct {
+		ID       string    `json:"id"`
+		Filename string    `json:"filename"`
+		Bytes    int64     `json:"bytes"`
+		Mime     *string   `json:"mime"`
+		Created  time.Time `json:"created_at"`
+	}
+	out := []Att{}
+	for rows.Next() {
+		var a Att
+		if err := rows.Scan(&a.ID, &a.Filename, &a.Bytes, &a.Mime, &a.Created); err == nil {
+			out = append(out, a)
+		}
+	}
+	c.JSON(200, out)
+}
+
+func (a *App) deleteAttachment(c *gin.Context) {
+	if a.m == nil {
+		c.JSON(500, gin.H{"error": "minio not configured"})
+		return
+	}
+	ticketID := c.Param("id")
+	attID := c.Param("attID")
+	u := c.MustGet("user").(AuthUser)
+	ctx := c.Request.Context()
+	var objectKey string
+	err := a.db.QueryRow(ctx, "select object_key from attachments where id=$1 and ticket_id=$2", attID, ticketID).Scan(&objectKey)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	_ = a.m.RemoveObject(ctx, a.cfg.MinIOBucket, objectKey, minio.RemoveObjectOptions{})
+	_, err = a.db.Exec(ctx, "delete from attachments where id=$1", attID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	a.audit(c, "user", u.ID, "ticket", ticketID, "attachment_delete", gin.H{"attachment_id": attID})
+	c.JSON(200, gin.H{"ok": true})
+}
+
+// ===== Watchers =====
+type watcherReq struct {
+	UserID string `json:"user_id" binding:"required"`
+}
+
+func (a *App) listWatchers(c *gin.Context) {
+	ticketID := c.Param("id")
+	ctx := c.Request.Context()
+	rows, err := a.db.Query(ctx, "select user_id from ticket_watchers where ticket_id=$1", ticketID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var uid string
+		if err := rows.Scan(&uid); err == nil {
+			out = append(out, uid)
+		}
+	}
+	c.JSON(200, out)
+}
+
+func (a *App) addWatcher(c *gin.Context) {
+	ticketID := c.Param("id")
+	var in watcherReq
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	u := c.MustGet("user").(AuthUser)
+	ctx := c.Request.Context()
+	_, err := a.db.Exec(ctx, "insert into ticket_watchers (ticket_id, user_id) values ($1,$2) on conflict do nothing", ticketID, in.UserID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	a.audit(c, "user", u.ID, "ticket", ticketID, "watcher_add", gin.H{"user_id": in.UserID})
 	c.JSON(201, gin.H{"ok": true})
+}
+
+func (a *App) removeWatcher(c *gin.Context) {
+	ticketID := c.Param("id")
+	watcherID := c.Param("userID")
+	u := c.MustGet("user").(AuthUser)
+	ctx := c.Request.Context()
+	_, err := a.db.Exec(ctx, "delete from ticket_watchers where ticket_id=$1 and user_id=$2", ticketID, watcherID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	a.audit(c, "user", u.ID, "ticket", ticketID, "watcher_remove", gin.H{"user_id": watcherID})
+	c.JSON(200, gin.H{"ok": true})
 }
