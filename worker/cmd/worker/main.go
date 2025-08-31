@@ -15,20 +15,31 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 type Config struct {
-	DatabaseURL string
-	RedisAddr   string
-	Env         string
-	SMTPHost    string
-	SMTPPort    string
-	SMTPUser    string
-	SMTPPass    string
-	SMTPFrom    string
+	DatabaseURL   string
+	RedisAddr     string
+	Env           string
+	SMTPHost      string
+	SMTPPort      string
+	SMTPUser      string
+	SMTPPass      string
+	SMTPFrom      string
+	IMAPHost      string
+	IMAPUser      string
+	IMAPPass      string
+	IMAPFolder    string
+	MinIOEndpoint string
+	MinIOAccess   string
+	MinIOSecret   string
+	MinIOBucket   string
+	MinIOUseSSL   bool
 }
 
 func getEnv(key, def string) string {
@@ -41,14 +52,23 @@ func getEnv(key, def string) string {
 func cfg() Config {
 	_ = godotenv.Load()
 	return Config{
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
-		RedisAddr:   getEnv("REDIS_ADDR", "localhost:6379"),
-		Env:         getEnv("ENV", "dev"),
-		SMTPHost:    getEnv("SMTP_HOST", ""),
-		SMTPPort:    getEnv("SMTP_PORT", "25"),
-		SMTPUser:    getEnv("SMTP_USER", ""),
-		SMTPPass:    getEnv("SMTP_PASS", ""),
-		SMTPFrom:    getEnv("SMTP_FROM", ""),
+		DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
+		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
+		Env:           getEnv("ENV", "dev"),
+		SMTPHost:      getEnv("SMTP_HOST", ""),
+		SMTPPort:      getEnv("SMTP_PORT", "25"),
+		SMTPUser:      getEnv("SMTP_USER", ""),
+		SMTPPass:      getEnv("SMTP_PASS", ""),
+		SMTPFrom:      getEnv("SMTP_FROM", ""),
+		IMAPHost:      getEnv("IMAP_HOST", ""),
+		IMAPUser:      getEnv("IMAP_USER", ""),
+		IMAPPass:      getEnv("IMAP_PASS", ""),
+		IMAPFolder:    getEnv("IMAP_FOLDER", "INBOX"),
+		MinIOEndpoint: getEnv("MINIO_ENDPOINT", ""),
+		MinIOAccess:   getEnv("MINIO_ACCESS_KEY", ""),
+		MinIOSecret:   getEnv("MINIO_SECRET_KEY", ""),
+		MinIOBucket:   getEnv("MINIO_BUCKET", ""),
+		MinIOUseSSL:   getEnv("MINIO_USE_SSL", "false") == "true",
 	}
 }
 
@@ -106,7 +126,7 @@ func sendEmail(c Config, j EmailJob) error {
 	if err != nil {
 		return fmt.Errorf("invalid To address: %w", err)
 	}
-	
+
 	sanitizedFrom, err := sanitizeAndValidateEmail(c.SMTPFrom)
 	if err != nil {
 		return fmt.Errorf("invalid From address: %w", err)
@@ -119,10 +139,10 @@ func sendEmail(c Config, j EmailJob) error {
 	if err := mailTemplates.ExecuteTemplate(&bodyBuf, j.Template+"_body", j.Data); err != nil {
 		return err
 	}
-	
+
 	// Sanitize the subject to prevent header injection
 	sanitizedSubject := sanitizeEmailHeader(subjBuf.String())
-	
+
 	msg := bytes.Buffer{}
 	msg.WriteString("From: " + sanitizedFrom + "\r\n")
 	msg.WriteString("To: " + sanitizedTo + "\r\n")
@@ -153,6 +173,28 @@ func main() {
 		log.Error().Err(err).Msg("redis ping failed (queue not active yet)")
 	}
 	defer rdb.Close()
+
+	var mc *minio.Client
+	if c.MinIOEndpoint != "" {
+		mc, err = minio.New(c.MinIOEndpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(c.MinIOAccess, c.MinIOSecret, ""),
+			Secure: c.MinIOUseSSL,
+		})
+		if err != nil {
+			log.Error().Err(err).Msg("minio init")
+		}
+	}
+
+	if c.IMAPHost != "" {
+		go func() {
+			for {
+				if err := pollIMAP(ctx, c, db, mc); err != nil {
+					log.Error().Err(err).Msg("poll imap")
+				}
+				time.Sleep(time.Minute)
+			}
+		}()
+	}
 
 	log.Info().Msg("worker started")
 	for {
