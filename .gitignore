@@ -20,4 +20,5 @@ node_modules/
 dist/
 .next/
 out/
-api
+worker/cmd/worker/worker
+api/cmd/api/api
