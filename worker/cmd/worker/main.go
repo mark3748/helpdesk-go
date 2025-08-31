@@ -5,8 +5,11 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"net/smtp"
 	"os"
+	"regexp"
+	"strings"
 	"text/template"
 	"time"
 
@@ -65,7 +68,50 @@ type EmailJob struct {
 	Data     interface{} `json:"data"`
 }
 
+// Email address validation regex based on RFC 5322 simplified pattern
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+// sanitizeEmailHeader removes CRLF characters that could be used for header injection
+func sanitizeEmailHeader(input string) string {
+	// Remove carriage return and line feed characters
+	sanitized := strings.ReplaceAll(input, "\r", "")
+	sanitized = strings.ReplaceAll(sanitized, "\n", "")
+	return strings.TrimSpace(sanitized)
+}
+
+// validateEmailAddress checks if an email address is valid
+func validateEmailAddress(email string) error {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return fmt.Errorf("email address cannot be empty")
+	}
+	if !emailRegex.MatchString(email) {
+		return fmt.Errorf("invalid email address format: %s", email)
+	}
+	return nil
+}
+
+// sanitizeAndValidateEmail sanitizes and validates an email address
+func sanitizeAndValidateEmail(email string) (string, error) {
+	sanitized := sanitizeEmailHeader(email)
+	if err := validateEmailAddress(sanitized); err != nil {
+		return "", err
+	}
+	return sanitized, nil
+}
+
 func sendEmail(c Config, j EmailJob) error {
+	// Sanitize and validate email addresses
+	sanitizedTo, err := sanitizeAndValidateEmail(j.To)
+	if err != nil {
+		return fmt.Errorf("invalid To address: %w", err)
+	}
+	
+	sanitizedFrom, err := sanitizeAndValidateEmail(c.SMTPFrom)
+	if err != nil {
+		return fmt.Errorf("invalid From address: %w", err)
+	}
+
 	var subjBuf, bodyBuf bytes.Buffer
 	if err := mailTemplates.ExecuteTemplate(&subjBuf, j.Template+"_subject", j.Data); err != nil {
 		return err
@@ -73,17 +119,21 @@ func sendEmail(c Config, j EmailJob) error {
 	if err := mailTemplates.ExecuteTemplate(&bodyBuf, j.Template+"_body", j.Data); err != nil {
 		return err
 	}
+	
+	// Sanitize the subject to prevent header injection
+	sanitizedSubject := sanitizeEmailHeader(subjBuf.String())
+	
 	msg := bytes.Buffer{}
-	msg.WriteString("From: " + c.SMTPFrom + "\r\n")
-	msg.WriteString("To: " + j.To + "\r\n")
-	msg.WriteString("Subject: " + subjBuf.String() + "\r\n\r\n")
+	msg.WriteString("From: " + sanitizedFrom + "\r\n")
+	msg.WriteString("To: " + sanitizedTo + "\r\n")
+	msg.WriteString("Subject: " + sanitizedSubject + "\r\n\r\n")
 	msg.Write(bodyBuf.Bytes())
 	addr := c.SMTPHost + ":" + c.SMTPPort
 	var auth smtp.Auth
 	if c.SMTPUser != "" {
 		auth = smtp.PlainAuth("", c.SMTPUser, c.SMTPPass, c.SMTPHost)
 	}
-	return smtp.SendMail(addr, auth, c.SMTPFrom, []string{j.To}, msg.Bytes())
+	return smtp.SendMail(addr, auth, sanitizedFrom, []string{sanitizedTo}, msg.Bytes())
 }
 
 func main() {
