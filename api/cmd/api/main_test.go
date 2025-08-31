@@ -1,15 +1,17 @@
 package main
 
 import (
+    "context"
     "encoding/json"
     "net/http"
     "net/http/httptest"
     "testing"
+    "math"
 )
 
 func TestHealthz(t *testing.T) {
     cfg := Config{Env: "test"}
-    app := NewApp(cfg, nil, nil, nil)
+    app := NewApp(cfg, nil, nil, nil, nil)
 
     rr := httptest.NewRecorder()
     req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -29,7 +31,7 @@ func TestHealthz(t *testing.T) {
 
 func TestMe_BypassAuth(t *testing.T) {
     cfg := Config{Env: "test", TestBypassAuth: true}
-    app := NewApp(cfg, nil, nil, nil)
+    app := NewApp(cfg, nil, nil, nil, nil)
 
     rr := httptest.NewRecorder()
     req := httptest.NewRequest(http.MethodGet, "/me", nil)
@@ -60,7 +62,7 @@ func TestMe_BypassAuth(t *testing.T) {
 
 func TestMe_NoBypass_NoJWKS(t *testing.T) {
     cfg := Config{Env: "test", TestBypassAuth: false}
-    app := NewApp(cfg, nil, nil, nil)
+    app := NewApp(cfg, nil, nil, nil, nil)
 
     rr := httptest.NewRecorder()
     req := httptest.NewRequest(http.MethodGet, "/me", nil)
@@ -69,5 +71,34 @@ func TestMe_NoBypass_NoJWKS(t *testing.T) {
     if rr.Code != http.StatusInternalServerError {
         t.Fatalf("expected 500 due to missing JWKS, got %d", rr.Code)
     }
+}
+
+func TestEnqueueEmail_JSONMarshalError(t *testing.T) {
+    // Create a minimal app instance without Redis (enqueueEmail will return early if q is nil)
+    app := &App{}
+    
+    // Test that the function handles marshal errors gracefully
+    // Use data that cannot be marshaled to JSON (e.g., a function or channel)
+    ctx := context.Background()
+    unmarshalableData := map[string]interface{}{
+        "invalid": func() {}, // functions cannot be marshaled to JSON
+    }
+    
+    // This should not panic, even with unmarshalable data and nil Redis client
+    app.enqueueEmail(ctx, "test@example.com", "test_template", unmarshalableData)
+}
+
+func TestEnqueueEmail_InfinityError(t *testing.T) {
+    // Another test with data that can't be marshaled (Infinity/NaN)
+    app := &App{}
+    ctx := context.Background()
+    
+    unmarshalableData := map[string]interface{}{
+        "infinity": math.Inf(1),
+        "nan":      math.NaN(),
+    }
+    
+    // This should not panic and should handle the marshal error gracefully
+    app.enqueueEmail(ctx, "test@example.com", "test_template", unmarshalableData)
 }
 
