@@ -238,3 +238,65 @@ func TestSendEmailSecurityValidation(t *testing.T) {
 		t.Error("Email validation should have passed for clean email address")
 	}
 }
+
+func TestEmailHeaderSanitizationInProcessing(t *testing.T) {
+	tests := []struct {
+		name           string
+		inputSubject   string
+		inputFrom      string
+		expectedSubject string
+		expectedFrom   string
+	}{
+		{
+			name:           "Normal headers",
+			inputSubject:   "Normal ticket subject",
+			inputFrom:      "user@example.com",
+			expectedSubject: "Normal ticket subject",
+			expectedFrom:   "user@example.com",
+		},
+		{
+			name:           "Subject with CRLF injection",
+			inputSubject:   "Ticket Subject\r\nBcc: attacker@evil.com",
+			inputFrom:      "user@example.com",
+			expectedSubject: "Ticket SubjectBcc: attacker@evil.com",
+			expectedFrom:   "user@example.com",
+		},
+		{
+			name:           "From with CRLF injection",
+			inputSubject:   "Normal Subject",
+			inputFrom:      "user@example.com\r\nX-Spam: true",
+			expectedSubject: "Normal Subject",
+			expectedFrom:   "user@example.comX-Spam: true",
+		},
+		{
+			name:           "Both headers with injection attempts",
+			inputSubject:   "Subject\nwith\rCRLF",
+			inputFrom:      "from@example.com\r\nBcc: evil@bad.com",
+			expectedSubject: "SubjectwithCRLF",
+			expectedFrom:   "from@example.comBcc: evil@bad.com",
+		},
+		{
+			name:           "Headers with HTML/Script tags",
+			inputSubject:   "<script>alert('xss')</script>Ticket",
+			inputFrom:      "<script>evil()</script>user@example.com",
+			expectedSubject: "<script>alert('xss')</script>Ticket",
+			expectedFrom:   "<script>evil()</script>user@example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test the sanitization functions directly as they would be called in imap.go
+			sanitizedSubject := sanitizeEmailHeader(tt.inputSubject)
+			sanitizedFrom := sanitizeEmailHeader(tt.inputFrom)
+
+			if sanitizedSubject != tt.expectedSubject {
+				t.Errorf("sanitizeEmailHeader(subject %q) = %q, want %q", tt.inputSubject, sanitizedSubject, tt.expectedSubject)
+			}
+
+			if sanitizedFrom != tt.expectedFrom {
+				t.Errorf("sanitizeEmailHeader(from %q) = %q, want %q", tt.inputFrom, sanitizedFrom, tt.expectedFrom)
+			}
+		})
+	}
+}
