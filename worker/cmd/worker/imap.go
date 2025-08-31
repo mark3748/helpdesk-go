@@ -84,7 +84,11 @@ func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client)
 		}
 		subject := m.Header.Get("Subject")
 		from := m.Header.Get("From")
-		body, _ := io.ReadAll(m.Body)
+		body, err := io.ReadAll(m.Body)
+		if err != nil {
+			log.Error().Err(err).Msg("read message body")
+			continue
+		}
 		cleanBody := sanitizeEmailBody(body)
 
 		var ticketID int64
