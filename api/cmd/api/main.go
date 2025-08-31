@@ -23,6 +23,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/pressly/goose/v3"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -34,6 +35,7 @@ type Config struct {
 	Addr          string
 	DatabaseURL   string
 	Env           string
+	RedisAddr     string
 	OIDCIssuer    string
 	JWKSURL       string
 	MinIOEndpoint string
@@ -49,6 +51,7 @@ func getConfig() Config {
 		Addr:          getEnv("ADDR", ":8080"),
 		DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
 		Env:           getEnv("ENV", "dev"),
+		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
 		OIDCIssuer:    getEnv("OIDC_ISSUER", ""),
 		JWKSURL:       getEnv("OIDC_JWKS_URL", ""),
 		MinIOEndpoint: getEnv("MINIO_ENDPOINT", ""),
@@ -73,6 +76,7 @@ type App struct {
 	r    *gin.Engine
 	jwks *keyfunc.JWKS
 	m    *minio.Client
+	q    *redis.Client
 }
 
 func main() {
@@ -124,7 +128,12 @@ func main() {
 		}
 	}
 
-	a := &App{cfg: cfg, db: pool, r: gin.New(), jwks: jwks, m: mc}
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Error().Err(err).Msg("redis ping")
+	}
+
+	a := &App{cfg: cfg, db: pool, r: gin.New(), jwks: jwks, m: mc, q: rdb}
 	a.r.Use(gin.Recovery())
 	a.r.Use(gin.Logger())
 	a.routes()
@@ -356,6 +365,11 @@ func (a *App) createTicket(c *gin.Context) {
 	}
 	a.addStatusHistory(ctx, id, "", status, u.ID)
 	a.audit(c, "user", u.ID, "ticket", id, "create", gin.H{"title": in.Title, "requester_id": in.RequesterID})
+	var requesterEmail string
+	_ = a.db.QueryRow(ctx, "select coalesce(email,'') from users where id=$1", in.RequesterID).Scan(&requesterEmail)
+	if requesterEmail != "" {
+		a.enqueueEmail(ctx, requesterEmail, "ticket_created", gin.H{"Number": number})
+	}
 	c.JSON(201, gin.H{"id": id, "number": number, "status": status})
 }
 
@@ -382,6 +396,27 @@ func (a *App) audit(c *gin.Context, actorType, actorID, entityType, entityID, ac
 	_, _ = a.db.Exec(ctx, `insert into audit_events (actor_type, actor_id, entity_type, entity_id, action, diff_json, ip, ua, hash, prev_hash)
         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
 		actorType, actorID, entityType, entityID, action, diffJSON, c.ClientIP(), c.Request.UserAgent(), hash, prevHash)
+}
+
+func (a *App) enqueueEmail(ctx context.Context, to, template string, data interface{}) {
+	if a.q == nil {
+		return
+	}
+	job := struct {
+		Type string      `json:"type"`
+		Data interface{} `json:"data"`
+	}{
+		Type: "send_email",
+		Data: struct {
+			To       string      `json:"to"`
+			Template string      `json:"template"`
+			Data     interface{} `json:"data"`
+		}{to, template, data},
+	}
+	b, _ := json.Marshal(job)
+	if err := a.q.RPush(ctx, "jobs", b).Err(); err != nil {
+		log.Error().Err(err).Msg("enqueue job")
+	}
 }
 
 func (a *App) addStatusHistory(ctx context.Context, ticketID, from, to, actorID string) {
@@ -433,8 +468,8 @@ func (a *App) updateTicket(c *gin.Context) {
 	}
 	u := c.MustGet("user").(AuthUser)
 	ctx := c.Request.Context()
-	var oldStatus string
-	_ = a.db.QueryRow(ctx, "select status from tickets where id=$1", id).Scan(&oldStatus)
+	var oldStatus, number, requesterEmail string
+	_ = a.db.QueryRow(ctx, "select status, number, (select coalesce(email,'') from users where id=requester_id) from tickets where id=$1", id).Scan(&oldStatus, &number, &requesterEmail)
 
 	_, err := a.db.Exec(ctx, `
         update tickets set
@@ -478,6 +513,9 @@ func (a *App) updateTicket(c *gin.Context) {
 		diff["custom_json"] = in.CustomJSON
 	}
 	a.audit(c, "user", u.ID, "ticket", id, "update", diff)
+	if requesterEmail != "" {
+		a.enqueueEmail(ctx, requesterEmail, "ticket_updated", gin.H{"Number": number})
+	}
 	c.JSON(200, gin.H{"ok": true})
 }
 
