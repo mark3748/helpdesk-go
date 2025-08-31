@@ -496,7 +496,11 @@ func (a *App) enqueueEmail(ctx context.Context, to, template string, data interf
 			Data     interface{} `json:"data"`
 		}{to, template, data},
 	}
-	b, _ := json.Marshal(job)
+	b, err := json.Marshal(job)
+	if err != nil {
+		log.Error().Err(err).Msg("marshal email job")
+		return
+	}
 	if err := a.q.RPush(ctx, "jobs", b).Err(); err != nil {
 		log.Error().Err(err).Msg("enqueue job")
 	}
