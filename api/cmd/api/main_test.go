@@ -9,7 +9,7 @@ import (
 
 func TestHealthz(t *testing.T) {
     cfg := Config{Env: "test"}
-    app := NewApp(cfg, nil, nil, nil)
+    app := NewApp(cfg, nil, nil, nil, nil)
 
     rr := httptest.NewRecorder()
     req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -29,7 +29,7 @@ func TestHealthz(t *testing.T) {
 
 func TestMe_BypassAuth(t *testing.T) {
     cfg := Config{Env: "test", TestBypassAuth: true}
-    app := NewApp(cfg, nil, nil, nil)
+    app := NewApp(cfg, nil, nil, nil, nil)
 
     rr := httptest.NewRecorder()
     req := httptest.NewRequest(http.MethodGet, "/me", nil)
@@ -60,7 +60,7 @@ func TestMe_BypassAuth(t *testing.T) {
 
 func TestMe_NoBypass_NoJWKS(t *testing.T) {
     cfg := Config{Env: "test", TestBypassAuth: false}
-    app := NewApp(cfg, nil, nil, nil)
+    app := NewApp(cfg, nil, nil, nil, nil)
 
     rr := httptest.NewRecorder()
     req := httptest.NewRequest(http.MethodGet, "/me", nil)

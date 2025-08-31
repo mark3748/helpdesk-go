@@ -123,7 +123,7 @@ func TestAuth_WithJWKS_ValidToken(t *testing.T) {
     if err != nil { t.Fatalf("sign token: %v", err) }
 
     cfg := Config{Env: "test", OIDCIssuer: "https://issuer.example"}
-    app := NewApp(cfg, &fakeDB{}, keyf, nil)
+    app := NewApp(cfg, &fakeDB{}, keyf, nil, nil)
 
     rr := httptest.NewRecorder()
     req := httptest.NewRequest(http.MethodGet, "/me", nil)
