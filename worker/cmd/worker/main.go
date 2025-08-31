@@ -271,6 +271,7 @@ func updateSLAClocks(ctx context.Context, db *pgxpool.Pool) error {
 		var lastStarted time.Time
 		var respTarget, resTarget int
 		if err := rows.Scan(&ticketID, &calID, &respMS, &resMS, &lastStarted, &respTarget, &resTarget); err != nil {
+			log.Error().Err(err).Msg("failed to scan row in updateSLAClocks")
 			continue
 		}
 		if calID == "" {
