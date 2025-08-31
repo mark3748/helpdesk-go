@@ -7,8 +7,8 @@ dist/
 *.dylib
 
 # Go
-**/go.sum
-!worker/cmd/worker/go.sum
+# Track root go.sum for the mono‑module layout
+go.sum
 **/.idea/
 **/.vscode/
 **/.DS_Store
@@ -21,5 +21,5 @@ node_modules/
 dist/
 .next/
 out/
-worker/cmd/worker/worker
-api/cmd/api/api
+cmd/worker/worker
+cmd/api/api

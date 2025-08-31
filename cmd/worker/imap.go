@@ -136,3 +136,4 @@ func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client)
 	}
 	return <-done
 }
+

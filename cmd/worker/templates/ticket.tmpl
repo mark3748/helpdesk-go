@@ -1,0 +1,9 @@
+{{ define "ticket_created_subject" }}[{{ .Number }}] Ticket created{{ end }}
+{{ define "ticket_created_body" }}
+Hello,
+
+Your ticket {{ .Number }} has been created.
+
+Thanks,
+Helpdesk
+{{ end }}
