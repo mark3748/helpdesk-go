@@ -21,6 +21,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/you/helpdesk/worker/sla"
 )
 
 type Config struct {
@@ -205,6 +207,16 @@ func main() {
 		}()
 	}
 
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := updateSLAClocks(ctx, db); err != nil {
+				log.Error().Err(err).Msg("sla update")
+			}
+		}
+	}()
+
 	log.Info().Msg("worker started")
 	for {
 		res, err := rdb.BLPop(ctx, 0, "jobs").Result()
@@ -234,4 +246,58 @@ func main() {
 			log.Warn().Str("type", job.Type).Msg("unknown job type")
 		}
 	}
+}
+
+func updateSLAClocks(ctx context.Context, db *pgxpool.Pool) error {
+	rows, err := db.Query(ctx, `
+       select t.id, coalesce(tm.calendar_id, r.calendar_id), sc.response_elapsed_ms,
+              sc.resolution_elapsed_ms, sc.last_started_at,
+              sp.response_target_mins, sp.resolution_target_mins
+       from ticket_sla_clocks sc
+       join tickets t on t.id = sc.ticket_id
+       left join teams tm on t.team_id = tm.id
+       left join regions r on tm.region_id = r.id
+       join sla_policies sp on sp.id = sc.policy_id
+       where not sc.paused and sc.last_started_at is not null`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	now := time.Now()
+	calendars := map[string]*sla.Calendar{}
+	for rows.Next() {
+		var ticketID, calID string
+		var respMS, resMS int64
+		var lastStarted time.Time
+		var respTarget, resTarget int
+		if err := rows.Scan(&ticketID, &calID, &respMS, &resMS, &lastStarted, &respTarget, &resTarget); err != nil {
+			continue
+		}
+		if calID == "" {
+			continue
+		}
+		cal, ok := calendars[calID]
+		if !ok {
+			cal, err = sla.LoadCalendar(ctx, db, calID)
+			if err != nil {
+				log.Error().Err(err).Str("calendar", calID).Msg("load calendar")
+				continue
+			}
+			calendars[calID] = cal
+		}
+		dur := cal.BusinessDuration(lastStarted, now)
+		respMS += int64(dur / time.Millisecond)
+		resMS += int64(dur / time.Millisecond)
+		_, err = db.Exec(ctx, `update ticket_sla_clocks set response_elapsed_ms=$1, resolution_elapsed_ms=$2, last_started_at=$3 where ticket_id=$4`, respMS, resMS, now, ticketID)
+		if err != nil {
+			log.Error().Err(err).Str("ticket", ticketID).Msg("update sla")
+		}
+		if respTarget > 0 && respMS > int64(respTarget)*60*1000 {
+			log.Warn().Str("ticket", ticketID).Msg("response SLA breached")
+		}
+		if resTarget > 0 && resMS > int64(resTarget)*60*1000 {
+			log.Warn().Str("ticket", ticketID).Msg("resolution SLA breached")
+		}
+	}
+	return rows.Err()
 }
