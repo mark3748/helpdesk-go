@@ -45,3 +45,7 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
 - Auth uses OIDC JWTs with role checks (agents required for ticket updates).
 - Worker service is scaffolded but not wired to a queue yet.
 - This is a starter kit—intended to be iterated on.
+
+### Testing
+- Unit tests can bypass JWT validation by setting `TEST_BYPASS_AUTH=true`. This injects a synthetic user with the `agent` role so auth-protected routes can be exercised without a JWKS.
+- Handlers depend on a database interface and an object storage interface, enabling mocks/fakes in tests without external services.
