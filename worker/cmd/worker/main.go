@@ -186,14 +186,18 @@ func main() {
 	}
 
 	if c.IMAPHost != "" {
-		go func() {
-			for {
-				if err := pollIMAP(ctx, c, db, mc); err != nil {
-					log.Error().Err(err).Msg("poll imap")
+		if mc == nil {
+			log.Error().Msg("IMAP polling requires MinIO, but MinIO client failed to initialize; IMAP polling will not start")
+		} else {
+			go func() {
+				for {
+					if err := pollIMAP(ctx, c, db, mc); err != nil {
+						log.Error().Err(err).Msg("poll imap")
+					}
+					time.Sleep(time.Minute)
 				}
-				time.Sleep(time.Minute)
-			}
-		}()
+			}()
+		}
 	}
 
 	log.Info().Msg("worker started")
