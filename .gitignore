@@ -1,0 +1,22 @@
+# Binaries
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+**/go.sum
+**/.idea/
+**/.vscode/
+**/.DS_Store
+**/.env
+coverage.out
+
+# Node (if/when web gets added)
+node_modules/
+.parcel-cache/
+dist/
+.next/
+out/

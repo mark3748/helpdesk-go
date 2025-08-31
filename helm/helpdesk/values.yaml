@@ -1,0 +1,36 @@
+image:
+  repository: your-registry/helpdesk-api
+  tag: latest
+  pullPolicy: IfNotPresent
+
+workerImage:
+  repository: your-registry/helpdesk-worker
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: helpdesk.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+env:
+  ENV: "prod"
+  ADDR: ":8080"
+  # External services (set to your endpoints)
+  DATABASE_URL: "postgres://user:pass@postgres:5432/helpdesk?sslmode=disable"
+  REDIS_ADDR: "redis:6379"
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
