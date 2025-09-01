@@ -14,10 +14,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
-      - name: Tidy modules
-        run: go mod tidy
       - name: Run API tests
-        run: cd cmd/api && TEST_BYPASS_AUTH=true go test -v .
+        run: |
+          cd cmd/api
+          go mod tidy
+          TEST_BYPASS_AUTH=true go test -v .
       - name: Build API image
         run: docker build -f Dockerfile.api -t helpdesk-api .
       - name: Build worker image
