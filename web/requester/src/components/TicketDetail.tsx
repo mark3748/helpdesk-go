@@ -40,18 +40,30 @@ export default function TicketDetail() {
   if (!ticket) return <p>Loading...</p>;
 
   return (
-    <div>
-      <h2>{ticket.title}</h2>
+    <div className="mx-auto max-w-2xl space-y-4 p-4">
+      <h2 className="text-2xl font-semibold">{ticket.title}</h2>
       <p>{ticket.description}</p>
-      <h3>Comments</h3>
-      <ul>
+      <h3 className="text-xl font-semibold">Comments</h3>
+      <ul className="space-y-2">
         {comments.map(c => (
-          <li key={c.id}>{c.body_md}</li>
+          <li key={c.id} className="rounded border p-2">
+            {c.body_md}
+          </li>
         ))}
       </ul>
-      <form onSubmit={submit}>
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} required />
-        <button type="submit">Add Comment</button>
+      <form onSubmit={submit} className="space-y-2">
+        <textarea
+          className="w-full rounded border p-2"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          required
+        />
+        <button
+          className="rounded bg-blue-600 px-4 py-2 font-medium text-white"
+          type="submit"
+        >
+          Add Comment
+        </button>
       </form>
     </div>
   );
