@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from 'react-oidc-context';
-import { addComment, getTicket, listComments } from '../api';
+import { addComment, getTicket, listComments, uploadAttachment } from '../api';
 import type { Comment, Ticket } from '../api';
 
 export default function TicketDetail() {
@@ -10,6 +10,8 @@ export default function TicketDetail() {
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [body, setBody] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const auth = useAuth();
 
   useEffect(() => {
@@ -37,6 +39,23 @@ export default function TicketDetail() {
     }
   }
 
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files || !e.target.files[0] || !id || !auth.user) return;
+    setUploading(true);
+    try {
+      await uploadAttachment(id, e.target.files[0], auth.user.access_token, {
+        onProgress: (evt) => setProgress(evt.percent),
+      });
+      alert('Uploaded');
+    } catch {
+      alert('Upload failed');
+    } finally {
+      setUploading(false);
+      setProgress(0);
+      e.target.value = '';
+    }
+  }
+
   if (!ticket) return <p>Loading...</p>;
 
   return (
@@ -44,6 +63,8 @@ export default function TicketDetail() {
       <h2 className="text-2xl font-semibold">{ticket.title}</h2>
       <p>{ticket.description}</p>
       <h3 className="text-xl font-semibold">Comments</h3>
+      <input type="file" onChange={handleUpload} />
+      {uploading && <progress value={progress} max={100} className="w-full" />}
       <ul className="space-y-2">
         {comments.map(c => (
           <li key={c.id} className="rounded border p-2">
