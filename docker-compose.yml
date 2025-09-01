@@ -1,0 +1,99 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: helpdesk
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      ADDR: ":8080"
+      ENV: "dev"
+      TEST_BYPASS_AUTH: "false"
+      AUTH_MODE: "local"
+      AUTH_LOCAL_SECRET: "changeme-dev-secret"
+      DATABASE_URL: "postgres://postgres:postgres@db:5432/helpdesk?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+      FILESTORE_PATH: "/data"
+      MINIO_BUCKET: "attachments"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    environment:
+      VITE_API_TARGET: "http://api:8080"
+      # Speeds up installs in CI/containers
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_AUDIT: "false"
+    volumes:
+      - ./web/agent:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "5173:5173"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      ENV: "dev"
+      DATABASE_URL: "postgres://postgres:postgres@db:5432/helpdesk?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+      # Optional email/imap/minio configs can be added here as needed
+      # SMTP_HOST: ""
+      # SMTP_PORT: "25"
+      # SMTP_USER: ""
+      # SMTP_PASS: ""
+      # SMTP_FROM: ""
+      # IMAP_HOST: ""
+      # IMAP_USER: ""
+      # IMAP_PASS: ""
+      # IMAP_FOLDER: "INBOX"
+      # MINIO_ENDPOINT: ""
+      # MINIO_ACCESS_KEY: ""
+      # MINIO_SECRET_KEY: ""
+      # MINIO_BUCKET: ""
+      # MINIO_USE_SSL: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata: {}

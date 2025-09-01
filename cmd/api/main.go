@@ -34,6 +34,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/crypto/bcrypt"
 )
 
 //go:embed migrations/*.sql
@@ -53,23 +54,31 @@ type Config struct {
 	MinIOUseSSL   bool
 	// Testing helpers
 	TestBypassAuth bool
+	// Local auth
+	AuthMode        string // "oidc" or "local"
+	AuthLocalSecret string
+	// Filesystem object store for dev/local
+	FileStorePath string
 }
 
 func getConfig() Config {
 	_ = godotenv.Load()
 	cfg := Config{
-		Addr:           getEnv("ADDR", ":8080"),
-		DatabaseURL:    getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
-		Env:            getEnv("ENV", "dev"),
-		RedisAddr:      getEnv("REDIS_ADDR", "localhost:6379"),
-		OIDCIssuer:     getEnv("OIDC_ISSUER", ""),
-		JWKSURL:        getEnv("OIDC_JWKS_URL", ""),
-		MinIOEndpoint:  getEnv("MINIO_ENDPOINT", ""),
-		MinIOAccess:    getEnv("MINIO_ACCESS_KEY", ""),
-		MinIOSecret:    getEnv("MINIO_SECRET_KEY", ""),
-		MinIOBucket:    getEnv("MINIO_BUCKET", ""),
-		MinIOUseSSL:    getEnv("MINIO_USE_SSL", "false") == "true",
-		TestBypassAuth: getEnv("TEST_BYPASS_AUTH", "false") == "true",
+		Addr:            getEnv("ADDR", ":8080"),
+		DatabaseURL:     getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
+		Env:             getEnv("ENV", "dev"),
+		RedisAddr:       getEnv("REDIS_ADDR", "localhost:6379"),
+		OIDCIssuer:      getEnv("OIDC_ISSUER", ""),
+		JWKSURL:         getEnv("OIDC_JWKS_URL", ""),
+		MinIOEndpoint:   getEnv("MINIO_ENDPOINT", ""),
+		MinIOAccess:     getEnv("MINIO_ACCESS_KEY", ""),
+		MinIOSecret:     getEnv("MINIO_SECRET_KEY", ""),
+		MinIOBucket:     getEnv("MINIO_BUCKET", "attachments"),
+		MinIOUseSSL:     getEnv("MINIO_USE_SSL", "false") == "true",
+		TestBypassAuth:  getEnv("TEST_BYPASS_AUTH", "false") == "true",
+		AuthMode:        getEnv("AUTH_MODE", "oidc"),
+		AuthLocalSecret: getEnv("AUTH_LOCAL_SECRET", ""),
+		FileStorePath:   getEnv("FILESTORE_PATH", ""),
 	}
 	return cfg
 }
@@ -92,6 +101,48 @@ type DB interface {
 type ObjectStore interface {
 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
 	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+}
+
+// fsObjectStore implements ObjectStore on the local filesystem for development/testing.
+type fsObjectStore struct {
+	base string
+}
+
+func (f *fsObjectStore) PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
+	_ = ctx
+	dir := f.base
+	if bucketName != "" {
+		dir = dir + string(os.PathSeparator) + bucketName
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return minio.UploadInfo{}, err
+	}
+	fp := dir + string(os.PathSeparator) + objectName
+	tmp := fp + ".tmp"
+	out, err := os.Create(tmp)
+	if err != nil {
+		return minio.UploadInfo{}, err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, reader); err != nil {
+		_ = os.Remove(tmp)
+		return minio.UploadInfo{}, err
+	}
+	if err := os.Rename(tmp, fp); err != nil {
+		return minio.UploadInfo{}, err
+	}
+	return minio.UploadInfo{Bucket: bucketName, Key: objectName, Size: objectSize}, nil
+}
+
+func (f *fsObjectStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
+	_ = ctx
+	_ = opts
+	dir := f.base
+	if bucketName != "" {
+		dir = dir + string(os.PathSeparator) + bucketName
+	}
+	fp := dir + string(os.PathSeparator) + objectName
+	return os.Remove(fp)
 }
 
 type App struct {
@@ -211,7 +262,24 @@ func main() {
 		defer rdb.Close()
 	}
 
-	a := NewApp(cfg, pool, keyf, mc, rdb)
+	var store ObjectStore
+	if mc != nil {
+		store = mc
+	} else if cfg.FileStorePath != "" {
+		if err := os.MkdirAll(cfg.FileStorePath, 0o755); err != nil {
+			log.Fatal().Err(err).Str("path", cfg.FileStorePath).Msg("create filestore path")
+		}
+		store = &fsObjectStore{base: cfg.FileStorePath}
+	}
+
+	// Seed a dev admin for local auth
+	if cfg.AuthMode == "local" && cfg.Env == "dev" {
+		if err := seedLocalAdmin(context.Background(), pool); err != nil {
+			log.Error().Err(err).Msg("seed local admin")
+		}
+	}
+
+	a := NewApp(cfg, pool, keyf, store, rdb)
 
 	srv := &http.Server{
 		Addr:           cfg.Addr,
@@ -229,6 +297,12 @@ func main() {
 func (a *App) routes() {
 	a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 	a.r.GET("/csat/:token", a.submitCSAT)
+  
+	// Local auth endpoints
+	if a.cfg.AuthMode == "local" {
+		a.r.POST("/login", a.login)
+		a.r.POST("/logout", a.logout)
+	}
 
 	auth := a.r.Group("/")
 	auth.Use(a.authMiddleware())
@@ -272,6 +346,53 @@ func (a *App) authMiddleware() gin.HandlerFunc {
 				DisplayName: "Test User",
 				Roles:       []string{"agent"},
 			})
+			c.Next()
+			return
+		}
+
+		if a.cfg.AuthMode == "local" {
+			tokenStr, err := c.Cookie("auth")
+			if err != nil || tokenStr == "" {
+				c.AbortWithStatusJSON(401, gin.H{"error": "missing auth cookie"})
+				return
+			}
+			token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("unexpected signing method")
+				}
+				return []byte(a.cfg.AuthLocalSecret), nil
+			})
+			if err != nil || !token.Valid {
+				c.AbortWithStatusJSON(401, gin.H{"error": "invalid token"})
+				return
+			}
+			claims, ok := token.Claims.(jwt.MapClaims)
+			if !ok {
+				c.AbortWithStatusJSON(401, gin.H{"error": "invalid claims"})
+				return
+			}
+			uid, _ := claims["sub"].(string)
+			ctx := c.Request.Context()
+			var userID, mail, displayName string
+			if err := a.db.QueryRow(ctx, "select id, coalesce(email,''), coalesce(display_name,'') from users where id=$1", uid).Scan(&userID, &mail, &displayName); err != nil {
+				c.AbortWithStatusJSON(401, gin.H{"error": "unknown user"})
+				return
+			}
+			rows, err := a.db.Query(ctx, "select r.name from user_roles ur join roles r on ur.role_id=r.id where ur.user_id=$1", userID)
+			if err != nil {
+				c.AbortWithStatusJSON(500, gin.H{"error": "role lookup"})
+				return
+			}
+			defer rows.Close()
+			roles := []string{}
+			for rows.Next() {
+				var role string
+				if err := rows.Scan(&role); err == nil {
+					roles = append(roles, role)
+				}
+			}
+			authUser := AuthUser{ID: userID, ExternalID: "", Email: mail, DisplayName: displayName, Roles: roles}
+			c.Set("user", authUser)
 			c.Next()
 			return
 		}
@@ -338,6 +459,92 @@ func (a *App) authMiddleware() gin.HandlerFunc {
 		c.Set("user", authUser)
 		c.Next()
 	}
+}
+
+func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
+	var exists bool
+	if err := db.QueryRow(ctx, "select exists(select 1 from users where lower(username)='admin')").Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	pw := os.Getenv("ADMIN_PASSWORD")
+	if pw == "" {
+		// Generate a secure random password if not set
+		const pwLen = 16
+		b := make([]byte, pwLen)
+		if _, err := rand.Read(b); err != nil {
+			return fmt.Errorf("failed to generate random admin password: %w", err)
+		}
+		pw = hex.EncodeToString(b)
+		log.Warn().Str("username", "admin").Str("password", pw).Msg("No ADMIN_PASSWORD set, generated random admin password (dev only)")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	var uid string
+	if err := db.QueryRow(ctx, "insert into users (id, username, email, display_name, password_hash) values (gen_random_uuid(), 'admin', 'admin@example.com', 'Admin', $1) returning id", string(hash)).Scan(&uid); err != nil {
+		return err
+	}
+	// Grant agent role
+	_, _ = db.Exec(ctx, `insert into user_roles (user_id, role_id)
+      select $1, r.id from roles r where r.name='agent' on conflict do nothing`, uid)
+	log.Info().Str("username", "admin").Msg("seeded local admin user (dev)")
+	return nil
+}
+
+type loginReq struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+func (a *App) login(c *gin.Context) {
+	if a.cfg.AuthMode != "local" {
+		c.JSON(400, gin.H{"error": "login disabled"})
+		return
+	}
+	var in loginReq
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	ctx := c.Request.Context()
+	var id, hash, email, displayName string
+	err := a.db.QueryRow(ctx, "select id, coalesce(password_hash,''), coalesce(email,''), coalesce(display_name,'') from users where lower(username)=lower($1)", in.Username).Scan(&id, &hash, &email, &displayName)
+	if err != nil || id == "" || hash == "" {
+		c.JSON(401, gin.H{"error": "invalid credentials"})
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Password)) != nil {
+		c.JSON(401, gin.H{"error": "invalid credentials"})
+		return
+	}
+	// issue token
+	claims := jwt.MapClaims{
+		"sub":   id,
+		"name":  displayName,
+		"email": email,
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(24 * time.Hour).Unix(),
+		"mode":  "local",
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	s, err := token.SignedString([]byte(a.cfg.AuthLocalSecret))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "token"})
+		return
+	}
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("auth", s, 86400, "/", "", false, true)
+	c.JSON(200, gin.H{"ok": true})
+}
+
+func (a *App) logout(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("auth", "", -1, "/", "", false, true)
+	c.JSON(200, gin.H{"ok": true})
 }
 
 func (a *App) requireRole(role string) gin.HandlerFunc {
