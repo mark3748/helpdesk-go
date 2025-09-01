@@ -35,6 +35,7 @@ services:
       TEST_BYPASS_AUTH: "false"
       AUTH_MODE: "local"
       AUTH_LOCAL_SECRET: "changeme-dev-secret"
+      ADMIN_PASSWORD: "admin"
       DATABASE_URL: "postgres://postgres:postgres@db:5432/helpdesk?sslmode=disable"
       REDIS_ADDR: "redis:6379"
       FILESTORE_PATH: "/data"
@@ -47,19 +48,22 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/data
+      - ./data:/data:Z
 
   web:
-    image: node:20-alpine
+    image: node:20
     working_dir: /app
     environment:
       VITE_API_TARGET: "http://api:8080"
       # Speeds up installs in CI/containers
       NPM_CONFIG_FUND: "false"
       NPM_CONFIG_AUDIT: "false"
+      # Work around npm ERR_INVALID_ARG_TYPE when HOME/cache resolve null in some environments
+      HOME: "/root"
+      NPM_CONFIG_CACHE: "/root/.npm"
     volumes:
-      - ./web/agent:/app
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+      - ./web/agent:/app:Z
+    command: sh -lc "node -v && npm -v && npm install --no-fund --no-audit && npm run dev -- --host 0.0.0.0 --port 5173"
     depends_on:
       api:
         condition: service_started
