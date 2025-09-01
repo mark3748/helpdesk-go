@@ -39,7 +39,7 @@ export async function fetchTickets(): Promise<Ticket[]> {
   }));
 }
 
-// No GET comments endpoint exists yet; return empty for now
+// Fetch comments for a ticket
 export async function fetchComments(ticketId: string): Promise<Comment[]> {
   const res = await fetch(`${API_BASE}/tickets/${ticketId}/comments`, {
     credentials: 'include',
@@ -55,7 +55,7 @@ export async function fetchComments(ticketId: string): Promise<Comment[]> {
   const data = await res.json();
   return (data as Array<Record<string, unknown>>).map((c) => ({
     id: String(c.id),
-    body: String(c.body),
+    body: String(c.body_md),
   }));
 }
 
