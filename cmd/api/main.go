@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"embed"
 	"encoding/csv"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -226,6 +228,7 @@ func main() {
 
 func (a *App) routes() {
 	a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+	a.r.GET("/csat/:token", a.submitCSAT)
 
 	auth := a.r.Group("/")
 	auth.Use(a.authMiddleware())
@@ -722,7 +725,41 @@ func (a *App) updateTicket(c *gin.Context) {
 	}
 	a.audit(c, "user", u.ID, "ticket", id, "update", diff)
 	if requesterEmail != "" {
-		a.enqueueEmail(ctx, requesterEmail, "ticket_updated", gin.H{"Number": number})
+		if in.Status != nil && *in.Status == "Resolved" && oldStatus != *in.Status {
+			b := make([]byte, 16)
+			if _, err := rand.Read(b); err == nil {
+				token := hex.EncodeToString(b)
+				_, _ = a.db.Exec(ctx, `update tickets set csat_token=$1, csat_score=null where id=$2`, token, id)
+				data := gin.H{
+					"Number":  number,
+					"GoodURL": fmt.Sprintf("/csat/%s?score=good", token),
+					"BadURL":  fmt.Sprintf("/csat/%s?score=bad", token),
+				}
+				a.enqueueEmail(ctx, requesterEmail, "ticket_resolved", data)
+			}
+		} else {
+			a.enqueueEmail(ctx, requesterEmail, "ticket_updated", gin.H{"Number": number})
+		}
+	}
+	c.JSON(200, gin.H{"ok": true})
+}
+
+func (a *App) submitCSAT(c *gin.Context) {
+	token := c.Param("token")
+	score := c.Query("score")
+	if score != "good" && score != "bad" {
+		c.JSON(400, gin.H{"error": "invalid score"})
+		return
+	}
+	ctx := c.Request.Context()
+	res, err := a.db.Exec(ctx, `update tickets set csat_score=$1, csat_token=null where csat_token=$2 and csat_score is null`, score, token)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if res.RowsAffected() == 0 {
+		c.JSON(404, gin.H{"error": "invalid token"})
+		return
 	}
 	c.JSON(200, gin.H{"ok": true})
 }
