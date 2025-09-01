@@ -15,18 +15,23 @@ const articles: Article[] = [
 export default function KnowledgeBase() {
   const [selected, setSelected] = useState<Article | null>(null);
   return (
-    <div>
-      <h2>Knowledge Base</h2>
-      <ul>
+    <div className="mx-auto max-w-2xl space-y-4 p-4">
+      <h2 className="text-2xl font-semibold">Knowledge Base</h2>
+      <ul className="space-y-2">
         {articles.map(a => (
           <li key={a.id}>
-            <button onClick={() => setSelected(a)}>{a.title}</button>
+            <button
+              className="text-left text-blue-600 hover:underline"
+              onClick={() => setSelected(a)}
+            >
+              {a.title}
+            </button>
           </li>
         ))}
       </ul>
       {selected && (
-        <article>
-          <h3>{selected.title}</h3>
+        <article className="space-y-2 rounded border p-4">
+          <h3 className="text-xl font-semibold">{selected.title}</h3>
           <p>{selected.body}</p>
         </article>
       )}

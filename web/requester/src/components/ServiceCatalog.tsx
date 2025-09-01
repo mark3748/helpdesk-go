@@ -20,12 +20,15 @@ export default function ServiceCatalog() {
       <Route
         path=""
         element={
-          <div>
-            <h2>Service Catalog</h2>
-            <ul>
+          <div className="mx-auto max-w-2xl space-y-4 p-4">
+            <h2 className="text-2xl font-semibold">Service Catalog</h2>
+            <ul className="space-y-2">
               {services.map(s => (
-                <li key={s.id}>
-                  <Link to={s.id}>{s.title}</Link> - {s.description}
+                <li key={s.id} className="border-b pb-2 last:border-b-0">
+                  <Link className="text-blue-600 hover:underline" to={s.id}>
+                    {s.title}
+                  </Link>{' '}
+                  - {s.description}
                 </li>
               ))}
             </ul>

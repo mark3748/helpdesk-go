@@ -15,12 +15,14 @@ export default function TicketList() {
   }, [auth.user]);
 
   return (
-    <div>
-      <h2>My Tickets</h2>
-      <ul>
+    <div className="mx-auto max-w-2xl space-y-4 p-4">
+      <h2 className="text-2xl font-semibold">My Tickets</h2>
+      <ul className="space-y-2">
         {tickets.map(t => (
-          <li key={t.id}>
-            <Link to={`/tickets/${t.id}`}>{t.title}</Link>
+          <li key={t.id} className="border-b pb-2 last:border-b-0">
+            <Link className="text-blue-600 hover:underline" to={`/tickets/${t.id}`}>
+              {t.title}
+            </Link>
           </li>
         ))}
       </ul>

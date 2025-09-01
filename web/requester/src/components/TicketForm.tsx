@@ -44,50 +44,89 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
   }
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} className="mx-auto max-w-2xl space-y-4 p-4">
       {!hideTitle && (
-        <div>
-          <label>Title</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium">Title</label>
+          <input
+            className="rounded border p-2"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+          />
         </div>
       )}
-      <div>
-        <label>Description</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} required />
+      <div className="flex flex-col">
+        <label className="mb-1 font-medium">Description</label>
+        <textarea
+          className="rounded border p-2"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          required
+        />
       </div>
-      {!hideCategory && (
-        <div>
-          <label>Category</label>
-          <input value={category} onChange={(e) => setCategory(e.target.value)} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {!hideCategory && (
+          <div className="flex flex-col">
+            <label className="mb-1 font-medium">Category</label>
+            <input
+              className="rounded border p-2"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            />
+          </div>
+        )}
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium">Subcategory</label>
+          <input
+            className="rounded border p-2"
+            value={subcategory}
+            onChange={(e) => setSubcategory(e.target.value)}
+          />
         </div>
-      )}
-      <div>
-        <label>Subcategory</label>
-        <input value={subcategory} onChange={(e) => setSubcategory(e.target.value)} />
       </div>
-      <div>
-        <label>Priority</label>
-        <select value={priority} onChange={(e) => setPriority(Number(e.target.value))}>
-          <option value={1}>1 - Critical</option>
-          <option value={2}>2 - High</option>
-          <option value={3}>3 - Medium</option>
-          <option value={4}>4 - Low</option>
-        </select>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium">Priority</label>
+          <select
+            className="rounded border p-2"
+            value={priority}
+            onChange={(e) => setPriority(Number(e.target.value))}
+          >
+            <option value={1}>1 - Critical</option>
+            <option value={2}>2 - High</option>
+            <option value={3}>3 - Medium</option>
+            <option value={4}>4 - Low</option>
+          </select>
+        </div>
+        <div className="flex flex-col">
+          <label className="mb-1 font-medium">Urgency</label>
+          <select
+            className="rounded border p-2"
+            value={urgency}
+            onChange={(e) => setUrgency(Number(e.target.value))}
+          >
+            <option value={1}>1 - Critical</option>
+            <option value={2}>2 - High</option>
+            <option value={3}>3 - Medium</option>
+            <option value={4}>4 - Low</option>
+          </select>
+        </div>
       </div>
-      <div>
-        <label>Urgency</label>
-        <select value={urgency} onChange={(e) => setUrgency(Number(e.target.value))}>
-          <option value={1}>1 - Critical</option>
-          <option value={2}>2 - High</option>
-          <option value={3}>3 - Medium</option>
-          <option value={4}>4 - Low</option>
-        </select>
+      <div className="flex flex-col">
+        <label className="mb-1 font-medium">Attachment</label>
+        <input
+          className="rounded border p-2"
+          type="file"
+          onChange={(e) => setAttachment(e.target.files?.[0] || null)}
+        />
       </div>
-      <div>
-        <label>Attachment</label>
-        <input type="file" onChange={(e) => setAttachment(e.target.files?.[0] || null)} />
-      </div>
-      <button type="submit">Submit</button>
+      <button
+        className="rounded bg-blue-600 px-4 py-2 font-medium text-white"
+        type="submit"
+      >
+        Submit
+      </button>
     </form>
   );
 }
