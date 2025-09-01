@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -242,6 +244,7 @@ func (a *App) routes() {
 	auth.GET("/tickets/:id/watchers", a.listWatchers)
 	auth.POST("/tickets/:id/watchers", a.addWatcher)
 	auth.DELETE("/tickets/:id/watchers/:userID", a.removeWatcher)
+	auth.POST("/exports/tickets", a.requireRole("agent"), a.exportTickets)
 }
 
 type AuthUser struct {
@@ -919,4 +922,60 @@ func (a *App) removeWatcher(c *gin.Context) {
 	}
 	a.audit(c, "user", u.ID, "ticket", ticketID, "watcher_remove", gin.H{"user_id": watcherID})
 	c.JSON(200, gin.H{"ok": true})
+}
+
+// ===== Exports =====
+type exportTicketsReq struct {
+	IDs []string `json:"ids" binding:"required"`
+}
+
+func (a *App) exportTickets(c *gin.Context) {
+	if a.m == nil {
+		c.JSON(500, gin.H{"error": "minio not configured"})
+		return
+	}
+	var in exportTicketsReq
+	if err := c.ShouldBindJSON(&in); err != nil || len(in.IDs) == 0 {
+		c.JSON(400, gin.H{"error": "ids required"})
+		return
+	}
+	ctx := c.Request.Context()
+	placeholders := make([]string, len(in.IDs))
+	args := make([]any, len(in.IDs))
+	for i, id := range in.IDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	q := fmt.Sprintf("select id, number, title, status, priority from tickets where id in (%s)", strings.Join(placeholders, ","))
+	rows, err := a.db.Query(ctx, q, args...)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	buf := &bytes.Buffer{}
+	w := csv.NewWriter(buf)
+	_ = w.Write([]string{"id", "number", "title", "status", "priority"})
+	for rows.Next() {
+		var id, number, title, status string
+		var priority int16
+		if err := rows.Scan(&id, &number, &title, &status, &priority); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		_ = w.Write([]string{id, number, title, status, strconv.Itoa(int(priority))})
+	}
+	w.Flush()
+	objectKey := uuid.New().String() + ".csv"
+	_, err = a.m.PutObject(ctx, a.cfg.MinIOBucket, objectKey, bytes.NewReader(buf.Bytes()), int64(buf.Len()), minio.PutObjectOptions{ContentType: "text/csv"})
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	scheme := "http"
+	if a.cfg.MinIOUseSSL {
+		scheme = "https"
+	}
+	url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, objectKey)
+	c.JSON(200, gin.H{"url": url})
 }
