@@ -17,3 +17,17 @@ Your ticket {{ .Number }} has been updated.
 Thanks,
 Helpdesk
 {{ end }}
+
+{{ define "ticket_resolved_subject" }}[{{ .Number }}] Ticket resolved{{ end }}
+{{ define "ticket_resolved_body" }}
+Hello,
+
+Your ticket {{ .Number }} has been resolved.
+Please rate our support:
+
+Good: {{ .GoodURL }}
+Bad: {{ .BadURL }}
+
+Thanks,
+Helpdesk
+{{ end }}
