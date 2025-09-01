@@ -67,8 +67,8 @@ export default function TicketDetail() {
     }
   }
 
-  if (ticketQuery.isLoading) return <p>Loading...</p>;
-  const ticket = ticketQuery.data!;
+  if (ticketQuery.isLoading || !ticketQuery.data) return <p>Loading...</p>;
+  const ticket = ticketQuery.data;
   const comments = commentsQuery.data || [];
   const commentsLoading = commentsQuery.isLoading;
 
