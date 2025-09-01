@@ -1022,38 +1022,6 @@ func (a *App) addComment(c *gin.Context) {
 	c.JSON(201, gin.H{"id": cid})
 }
 
-func (a *App) listComments(c *gin.Context) {
-	ticketID := c.Param("id")
-	ctx := c.Request.Context()
-	rows, err := a.db.Query(ctx, `
-        select id, author_id, body_md, is_internal, created_at
-        from ticket_comments
-        where ticket_id=$1
-        order by created_at asc`, ticketID)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	defer rows.Close()
-	type Comment struct {
-		ID         string    `json:"id"`
-		AuthorID   string    `json:"author_id"`
-		Body       string    `json:"body"`
-		IsInternal bool      `json:"is_internal"`
-		CreatedAt  time.Time `json:"created_at"`
-	}
-	out := []Comment{}
-	for rows.Next() {
-		var cmt Comment
-		var bodyMD string
-		if err := rows.Scan(&cmt.ID, &cmt.AuthorID, &bodyMD, &cmt.IsInternal, &cmt.CreatedAt); err == nil {
-			cmt.Body = bodyMD
-			out = append(out, cmt)
-		}
-	}
-	c.JSON(200, out)
-}
-
 // ===== Attachments =====
 func (a *App) uploadAttachment(c *gin.Context) {
 	if a.m == nil {
