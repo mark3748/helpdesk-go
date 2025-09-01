@@ -29,12 +29,13 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
 
 - Build binaries:
   ```bash
-  cd cmd/api && go build -o ../../bin/api
-  cd cmd/worker && go build -o ../../bin/worker
+  cd cmd/api && go mod tidy && go build -o ../../bin/api
+  cd cmd/worker && go mod tidy && go build -o ../../bin/worker
   ```
 - Run unit tests:
   ```bash
-  TEST_BYPASS_AUTH=true go test -cover ./...
+  go mod tidy
+  cd cmd/api && TEST_BYPASS_AUTH=true go test -v .
   ```
 - Build Docker images:
   ```bash
