@@ -132,7 +132,7 @@ func TestSubmitCSAT(t *testing.T) {
 	app := NewApp(cfg, db, nil, nil, nil)
 
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/csat/token123?score=good", nil)
+	req := httptest.NewRequest(http.MethodGet, "/csat/token123?score=good", nil)
 	app.r.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
