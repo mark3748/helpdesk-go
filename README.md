@@ -29,12 +29,12 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
 
 - Build binaries:
   ```bash
-  cd cmd/api && go build -o ../../bin/api
-  cd cmd/worker && go build -o ../../bin/worker
+  cd cmd/api && go mod tidy && go build -o ../../bin/api
+  cd cmd/worker && go mod tidy && go build -o ../../bin/worker
   ```
-- Run unit tests:
+- Run unit tests (API only):
   ```bash
-  TEST_BYPASS_AUTH=true go test -cover ./...
+  cd cmd/api && go mod tidy && TEST_BYPASS_AUTH=true go test -v .
   ```
 - Build Docker images:
   ```bash
@@ -75,4 +75,4 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
 
 ## Continuous Integration
 
-GitHub Actions builds the API and worker images, runs `TEST_BYPASS_AUTH=true go test -cover ./...`, and lints and packages the Helm chart on every push and pull request.
+GitHub Actions builds the API and worker images, runs `cd cmd/api && go mod tidy && TEST_BYPASS_AUTH=true go test -v .`, and lints and packages the Helm chart on every push and pull request.
