@@ -40,6 +40,23 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+//go:embed ../../docs/openapi.yaml
+var openapiYAML []byte
+
+var redocHTML = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Helpdesk API Docs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>body { margin: 0; padding: 0; } </style>
+    <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+  </head>
+  <body>
+    <redoc spec-url="/openapi.yaml"></redoc>
+  </body>
+  </html>`
+
 type Config struct {
 	Addr          string
 	DatabaseURL   string
@@ -297,6 +314,9 @@ func main() {
 func (a *App) routes() {
 	a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 	a.r.GET("/csat/:token", a.submitCSAT)
+    // API docs UI and spec
+    a.r.GET("/docs", a.docsUI)
+    a.r.GET("/openapi.yaml", a.openapiSpec)
   
 	// Local auth endpoints
 	if a.cfg.AuthMode == "local" {
@@ -325,6 +345,18 @@ func (a *App) routes() {
 	auth.GET("/metrics/resolution", a.requireRole("agent"), a.metricsResolution)
 	auth.GET("/metrics/tickets", a.requireRole("agent"), a.metricsTicketVolume)
 	auth.POST("/exports/tickets", a.requireRole("agent"), a.exportTickets)
+}
+
+func (a *App) docsUI(c *gin.Context) {
+    c.Data(200, "text/html; charset=utf-8", []byte(redocHTML))
+}
+
+func (a *App) openapiSpec(c *gin.Context) {
+    if len(openapiYAML) == 0 {
+        c.JSON(404, gin.H{"error": "spec not embedded"})
+        return
+    }
+    c.Data(200, "application/yaml", openapiYAML)
 }
 
 type AuthUser struct {

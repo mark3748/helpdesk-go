@@ -70,7 +70,7 @@ Notes:
 - CSAT: `GET /csat/:token?score=good|bad` (public)
 - Metrics (agent role): `GET /metrics/sla`, `GET /metrics/resolution`, `GET /metrics/tickets`
 
-See `docs/api.md` for detailed status codes, request/response bodies, and models. For tooling and client generation, use the OpenAPI spec at `docs/openapi.yaml`. For metrics visualization guidance, see `docs/grafana.md`.
+See `docs/api.md` for detailed status codes, request/response bodies, and models. For tooling and client generation, use `docs/openapi.yaml`. A live documentation UI is served at `/docs` when the API is running. For metrics visualization guidance, see `docs/grafana.md`.
 
 ## Helm (Kubernetes)
 1. Set values in `helm/helpdesk/values.yaml` (hostnames, secrets, external DB/Redis/MinIO).
