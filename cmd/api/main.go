@@ -247,6 +247,9 @@ func (a *App) routes() {
 	auth.GET("/tickets/:id/watchers", a.listWatchers)
 	auth.POST("/tickets/:id/watchers", a.addWatcher)
 	auth.DELETE("/tickets/:id/watchers/:userID", a.removeWatcher)
+	auth.GET("/metrics/sla", a.requireRole("agent"), a.metricsSLA)
+	auth.GET("/metrics/resolution", a.requireRole("agent"), a.metricsResolution)
+	auth.GET("/metrics/tickets", a.requireRole("agent"), a.metricsTicketVolume)
 	auth.POST("/exports/tickets", a.requireRole("agent"), a.exportTickets)
 }
 
@@ -959,6 +962,78 @@ func (a *App) removeWatcher(c *gin.Context) {
 	}
 	a.audit(c, "user", u.ID, "ticket", ticketID, "watcher_remove", gin.H{"user_id": watcherID})
 	c.JSON(200, gin.H{"ok": true})
+}
+
+// ===== Metrics =====
+
+// metricsSLA returns SLA attainment statistics.
+func (a *App) metricsSLA(c *gin.Context) {
+	ctx := c.Request.Context()
+	var met, total int
+	err := a.db.QueryRow(ctx, `
+               select
+                       count(*) filter (where tsc.resolution_elapsed_ms <= sp.resolution_target_mins * 60000) as met,
+                       count(*) as total
+               from ticket_sla_clocks tsc
+               join tickets t on t.id = tsc.ticket_id
+               join sla_policies sp on sp.id = tsc.policy_id
+               where t.status = 'Resolved'
+       `).Scan(&met, &total)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "sla query"})
+		return
+	}
+	attainment := 0.0
+	if total > 0 {
+		attainment = float64(met) / float64(total)
+	}
+	c.JSON(200, gin.H{"total": total, "met": met, "sla_attainment": attainment})
+}
+
+// metricsResolution returns average resolution time in milliseconds.
+func (a *App) metricsResolution(c *gin.Context) {
+	ctx := c.Request.Context()
+	var avg sql.NullFloat64
+	err := a.db.QueryRow(ctx, `
+               select avg(tsc.resolution_elapsed_ms)
+               from ticket_sla_clocks tsc
+               join tickets t on t.id = tsc.ticket_id
+               where t.status = 'Resolved' and tsc.resolution_elapsed_ms > 0
+       `).Scan(&avg)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "resolution query"})
+		return
+	}
+	c.JSON(200, gin.H{"avg_resolution_ms": avg.Float64})
+}
+
+// metricsTicketVolume returns ticket counts per day for the last 30 days.
+func (a *App) metricsTicketVolume(c *gin.Context) {
+	ctx := c.Request.Context()
+	rows, err := a.db.Query(ctx, `
+               select date_trunc('day', created_at)::date as day, count(*)
+               from tickets
+               group by day
+               order by day desc
+               limit 30
+       `)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "volume query"})
+		return
+	}
+	defer rows.Close()
+	type dayCount struct {
+		Day   time.Time `json:"day"`
+		Count int       `json:"count"`
+	}
+	out := []dayCount{}
+	for rows.Next() {
+		var dc dayCount
+		if err := rows.Scan(&dc.Day, &dc.Count); err == nil {
+			out = append(out, dc)
+		}
+	}
+	c.JSON(200, gin.H{"daily": out})
 }
 
 // ===== Exports =====
