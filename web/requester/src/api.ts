@@ -5,8 +5,10 @@ export interface Ticket {
   status: string;
   requester_id?: string;
   priority?: number;
+  urgency?: number;
   created_at?: string;
   category?: string;
+  subcategory?: string;
 }
 
 export interface Comment {
@@ -63,4 +65,10 @@ export async function addComment(id: string, data: CommentInput, token: string):
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   }, token);
+}
+
+export async function uploadAttachment(id: string, file: File, token: string): Promise<void> {
+  const form = new FormData();
+  form.append('file', file);
+  await apiFetch(`/tickets/${id}/attachments`, { method: 'POST', body: form }, token);
 }
