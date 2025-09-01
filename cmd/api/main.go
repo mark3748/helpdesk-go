@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -392,16 +393,55 @@ type SLAStatus struct {
 // ===== Handlers =====
 func (a *App) listTickets(c *gin.Context) {
 	ctx := c.Request.Context()
-	rows, err := a.db.Query(ctx, `
+
+	base := `
        select t.id, t.number, t.title, coalesce(t.description,''), t.requester_id, t.assignee_id, t.team_id, t.priority,
               t.urgency, t.category, t.subcategory, t.status, t.scheduled_at, t.due_at, t.source, t.custom_json, t.created_at, t.updated_at,
               sc.policy_id, sc.response_elapsed_ms, sc.resolution_elapsed_ms, sc.paused, sc.reason,
               sp.response_target_mins, sp.resolution_target_mins
        from tickets t
        left join ticket_sla_clocks sc on sc.ticket_id = t.id
-       left join sla_policies sp on sp.id = sc.policy_id
-       order by t.created_at desc
-       limit 200`)
+       left join sla_policies sp on sp.id = sc.policy_id`
+
+	where := []string{}
+	args := []any{}
+	i := 1
+
+	if v := c.Query("status"); v != "" {
+		where = append(where, fmt.Sprintf("t.status = $%d", i))
+		args = append(args, v)
+		i++
+	}
+	if v := c.Query("priority"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil {
+			where = append(where, fmt.Sprintf("t.priority = $%d", i))
+			args = append(args, p)
+			i++
+		}
+	}
+	if v := c.Query("team"); v != "" {
+		where = append(where, fmt.Sprintf("t.team_id = $%d", i))
+		args = append(args, v)
+		i++
+	}
+	if v := c.Query("assignee"); v != "" {
+		where = append(where, fmt.Sprintf("t.assignee_id = $%d", i))
+		args = append(args, v)
+		i++
+	}
+	if v := strings.TrimSpace(c.Query("search")); v != "" {
+		where = append(where, fmt.Sprintf("to_tsvector('english', coalesce(t.title,'') || ' ' || coalesce(t.description,'')) @@ websearch_to_tsquery('english', $%d)", i))
+		args = append(args, v)
+		i++
+	}
+
+	if len(where) > 0 {
+		base += "\n       where " + strings.Join(where, " and ")
+	}
+
+	base += "\n       order by t.created_at desc\n       limit 200"
+
+	rows, err := a.db.Query(ctx, base, args...)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

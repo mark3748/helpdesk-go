@@ -6,7 +6,11 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestHealthz(t *testing.T) {
@@ -99,4 +103,86 @@ func TestEnqueueEmail_InfinityError(t *testing.T) {
 
 	// This should not panic and should handle the marshal error gracefully
 	app.enqueueEmail(ctx, "test@example.com", "test_template", unmarshalableData)
+}
+
+type recordDB struct {
+	sql  string
+	args []any
+}
+
+func (db *recordDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	db.sql = sql
+	db.args = args
+	return &fakeRows{}, nil
+}
+
+func (db *recordDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return nil
+}
+
+func (db *recordDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func TestListTickets(t *testing.T) {
+	cases := []struct {
+		name         string
+		url          string
+		wantSQLParts []string
+		wantArgs     []any
+	}{
+		{
+			name: "filtering and search",
+			url:  "/tickets?status=open&priority=2&team=team1&assignee=user1&search=foo+++bar",
+			wantSQLParts: []string{
+				"t.status = $1",
+				"t.priority = $2",
+				"t.team_id = $3",
+				"t.assignee_id = $4",
+				"to_tsquery('english', $5)",
+			},
+			wantArgs: []any{"open", 2, "team1", "user1", "foo & bar"},
+		},
+		{
+			name:         "search only",
+			url:          "/tickets?search=hello+++world",
+			wantSQLParts: []string{"to_tsquery('english', $1)"},
+			wantArgs:     []any{"hello & world"},
+		},
+		{
+			name:         "filters only",
+			url:          "/tickets?status=open&priority=1",
+			wantSQLParts: []string{"t.status = $1", "t.priority = $2"},
+			wantArgs:     []any{"open", 1},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := &recordDB{}
+			cfg := Config{Env: "test", TestBypassAuth: true}
+			app := NewApp(cfg, db, nil, nil, nil)
+
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			app.r.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", rr.Code)
+			}
+			for _, part := range tc.wantSQLParts {
+				if !strings.Contains(db.sql, part) {
+					t.Fatalf("missing sql part %q in %s", part, db.sql)
+				}
+			}
+			if len(db.args) != len(tc.wantArgs) {
+				t.Fatalf("expected %d args, got %d", len(tc.wantArgs), len(db.args))
+			}
+			for i, v := range tc.wantArgs {
+				if db.args[i] != v {
+					t.Fatalf("arg %d = %#v, want %#v", i, db.args[i], v)
+				}
+			}
+		})
+	}
 }
