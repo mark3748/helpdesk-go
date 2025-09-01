@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -105,6 +106,46 @@ func TestEnqueueEmail_InfinityError(t *testing.T) {
 	app.enqueueEmail(ctx, "test@example.com", "test_template", unmarshalableData)
 }
 
+type csatTestDB struct {
+	lastSQL  string
+	lastArgs []any
+	rows     int64
+}
+
+func (db *csatTestDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
+
+func (db *csatTestDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return nil
+}
+
+func (db *csatTestDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	db.lastSQL = sql
+	db.lastArgs = args
+	return pgconn.NewCommandTag(fmt.Sprintf("UPDATE %d", db.rows)), nil
+}
+
+func TestSubmitCSAT(t *testing.T) {
+	db := &csatTestDB{rows: 1}
+	cfg := Config{Env: "test"}
+	app := NewApp(cfg, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/csat/token123?score=good", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if db.lastSQL == "" || len(db.lastArgs) != 2 {
+		t.Fatalf("exec not called properly: %s %v", db.lastSQL, db.lastArgs)
+	}
+	if db.lastArgs[0] != "good" || db.lastArgs[1] != "token123" {
+		t.Fatalf("unexpected args: %v", db.lastArgs)
+	}
+}
+
 type recordDB struct {
 	sql  string
 	args []any
@@ -139,15 +180,15 @@ func TestListTickets(t *testing.T) {
 				"t.priority = $2",
 				"t.team_id = $3",
 				"t.assignee_id = $4",
-				"to_tsquery('english', $5)",
+				"websearch_to_tsquery('english', $5)",
 			},
-			wantArgs: []any{"open", 2, "team1", "user1", "foo & bar"},
+			wantArgs: []any{"open", 2, "team1", "user1", "foo   bar"},
 		},
 		{
 			name:         "search only",
 			url:          "/tickets?search=hello+++world",
-			wantSQLParts: []string{"to_tsquery('english', $1)"},
-			wantArgs:     []any{"hello & world"},
+			wantSQLParts: []string{"websearch_to_tsquery('english', $1)"},
+			wantArgs:     []any{"hello   world"},
 		},
 		{
 			name:         "filters only",
