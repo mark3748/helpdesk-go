@@ -70,7 +70,7 @@ Notes:
 - CSAT: `GET /csat/:token?score=good|bad` (public)
 - Metrics (agent role): `GET /metrics/sla`, `GET /metrics/resolution`, `GET /metrics/tickets`
 
-See `docs/api.md` for detailed status codes, request/response bodies, and models. For tooling and client generation, use the OpenAPI spec at `docs/openapi.yaml`. For metrics visualization guidance, see `docs/grafana.md`.
+See `docs/api.md` for detailed status codes, request/response bodies, and models. For tooling and client generation, use `docs/openapi.yaml`. A live documentation UI is served at `/docs` when the API is running; the spec is served at `/openapi.yaml` and is packaged in the Docker image. For metrics visualization guidance, see `docs/grafana.md`.
 
 ## Helm (Kubernetes)
 1. Set values in `helm/helpdesk/values.yaml` (hostnames, secrets, external DB/Redis/MinIO).
@@ -121,6 +121,7 @@ API (cmd/api):
 - `FILESTORE_PATH`: local path for attachments (filesystem store).
 - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`: S3/MinIO settings.
 - `TEST_BYPASS_AUTH`: set `true` in tests to bypass JWT and inject a test user.
+- `OPENAPI_SPEC_PATH`: optional path to the OpenAPI spec for serving `/openapi.yaml` in local dev (default packaged in Docker at `/opt/helpdesk/docs/openapi.yaml`).
 
 Worker (cmd/worker):
 - `DATABASE_URL`, `REDIS_ADDR`, `ENV`.
