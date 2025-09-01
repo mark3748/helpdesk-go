@@ -1,18 +1,18 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from 'react-oidc-context';
+import { useQuery } from '@tanstack/react-query';
 import { listTickets } from '../api';
 import type { Ticket } from '../api';
 
 export default function TicketList() {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
   const auth = useAuth();
+  const { data: tickets = [], isLoading } = useQuery<Ticket[]>({
+    queryKey: ['tickets'],
+    queryFn: () => listTickets(auth.user!.access_token),
+    enabled: !!auth.user,
+  });
 
-  useEffect(() => {
-    if (auth.user) {
-      listTickets(auth.user.access_token).then(setTickets).catch(console.error);
-    }
-  }, [auth.user]);
+  if (isLoading) return <p>Loading...</p>;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4">

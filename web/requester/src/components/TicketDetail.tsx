@@ -1,41 +1,52 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from 'react-oidc-context';
 import { addComment, getTicket, listComments, uploadAttachment } from '../api';
 import type { Comment, Ticket } from '../api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
-  const [ticket, setTicket] = useState<Ticket | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
   const [body, setBody] = useState('');
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const auth = useAuth();
+  const qc = useQueryClient();
 
-  useEffect(() => {
-    if (id && auth.user) {
-      getTicket(id, auth.user.access_token).then(setTicket).catch(console.error);
-      listComments(id, auth.user.access_token).then(setComments).catch(console.error);
-    }
-  }, [id, auth.user]);
+  const ticketQuery = useQuery<Ticket>({
+    queryKey: ['ticket', id],
+    queryFn: () => getTicket(id!, auth.user!.access_token),
+    enabled: !!id && !!auth.user,
+  });
+
+  const commentsQuery = useQuery<Comment[]>({
+    queryKey: ['comments', id],
+    queryFn: () => listComments(id!, auth.user!.access_token),
+    enabled: !!id && !!auth.user,
+  });
+
+  const addCommentMutation = useMutation({
+    mutationFn: (content: string) =>
+      addComment(
+        id!,
+        {
+          body_md: content,
+          author_id: auth.user?.profile.sub || '',
+          is_internal: false,
+        },
+        auth.user!.access_token,
+      ),
+    onSuccess: () => {
+      setBody('');
+      qc.invalidateQueries({ queryKey: ['comments', id] });
+    },
+  });
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (id && auth.user) {
-      await addComment(
-        id,
-        {
-          body_md: body,
-          author_id: auth.user.profile.sub || '',
-          is_internal: false,
-        },
-        auth.user.access_token,
-      );
-      setBody('');
-      const c = await listComments(id, auth.user.access_token);
-      setComments(c);
+      addCommentMutation.mutate(body);
     }
   }
 
@@ -56,7 +67,10 @@ export default function TicketDetail() {
     }
   }
 
-  if (!ticket) return <p>Loading...</p>;
+  if (ticketQuery.isLoading || !ticketQuery.data) return <p>Loading...</p>;
+  const ticket = ticketQuery.data;
+  const comments = commentsQuery.data || [];
+  const commentsLoading = commentsQuery.isLoading;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4">
@@ -65,13 +79,17 @@ export default function TicketDetail() {
       <h3 className="text-xl font-semibold">Comments</h3>
       <input type="file" onChange={handleUpload} />
       {uploading && <progress value={progress} max={100} className="w-full" />}
-      <ul className="space-y-2">
-        {comments.map(c => (
-          <li key={c.id} className="rounded border p-2">
-            {c.body_md}
-          </li>
-        ))}
-      </ul>
+      {commentsLoading ? (
+        <p>Loading...</p>
+      ) : (
+        <ul className="space-y-2">
+          {comments.map(c => (
+            <li key={c.id} className="rounded border p-2">
+              {c.body_md}
+            </li>
+          ))}
+        </ul>
+      )}
       <form onSubmit={submit} className="space-y-2">
         <textarea
           className="w-full rounded border p-2"
@@ -82,8 +100,9 @@ export default function TicketDetail() {
         <button
           className="rounded bg-blue-600 px-4 py-2 font-medium text-white"
           type="submit"
+          disabled={addCommentMutation.isPending}
         >
-          Add Comment
+          {addCommentMutation.isPending ? 'Adding…' : 'Add Comment'}
         </button>
       </form>
     </div>

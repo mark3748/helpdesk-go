@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'react-oidc-context';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createTicket, uploadAttachment } from '../api';
 import type { Ticket } from '../api';
 
@@ -19,14 +20,12 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
   const [priority, setPriority] = useState(initial.priority ?? 3);
   const [urgency, setUrgency] = useState(initial.urgency ?? 3);
   const [attachment, setAttachment] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
   const nav = useNavigate();
   const auth = useAuth();
+  const qc = useQueryClient();
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    try {
+  const createMutation = useMutation({
+    mutationFn: async () => {
       const t = await createTicket(
         {
           title,
@@ -47,6 +46,9 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
           alert('Failed to upload attachment');
         }
       }
+      return t;
+    },
+    onSuccess: (t) => {
       alert('Ticket submitted');
       setTitle('');
       setDescription('');
@@ -55,12 +57,17 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
       setPriority(3);
       setUrgency(3);
       setAttachment(null);
+      qc.invalidateQueries({ queryKey: ['tickets'] });
       nav(`/tickets/${t.id}`);
-    } catch {
+    },
+    onError: () => {
       alert('Failed to create ticket');
-    } finally {
-      setLoading(false);
-    }
+    },
+  });
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    createMutation.mutate();
   }
 
   return (
@@ -144,9 +151,9 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
       <button
         className="rounded bg-blue-600 px-4 py-2 font-medium text-white"
         type="submit"
-        disabled={loading}
+        disabled={createMutation.isPending}
       >
-        {loading ? 'Submitting…' : 'Submit'}
+        {createMutation.isPending ? 'Submitting…' : 'Submit'}
       </button>
     </form>
   );
