@@ -36,9 +36,7 @@ export default function TicketWorkspace() {
     setShowNew(true);
   }
 
-  async function onCreateTicket(values: { title: string; description?: string; priority: number }) {
-    if (!me) {
-      message.error('User not loaded');
+      message.error('Authentication required. Please refresh the page and try again.');
       return;
     }
     setCreating(true);
@@ -142,8 +140,7 @@ function TicketDetail({ ticket, onClose }: { ticket: Ticket; onClose?: () => voi
         onFinish={async (values: { body: string }) => {
           setAdding(true);
           // We need current user id; fetch from /me
-          const me = await getMe();
-          if (!me) { message.error('Not authenticated'); setAdding(false); return; }
+          if (!me) { message.error('Session expired. Please log in again.'); setAdding(false); return; }
           const ok = await addComment(ticket.id, me.id, values.body || '');
           setAdding(false);
           if (ok) {
