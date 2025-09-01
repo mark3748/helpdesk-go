@@ -25,6 +25,28 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
    curl http://localhost:8080/healthz
    ```
 
+## Local Development
+
+- Build binaries:
+  ```bash
+  cd cmd/api && go build -o ../../bin/api
+  cd cmd/worker && go build -o ../../bin/worker
+  ```
+- Run unit tests:
+  ```bash
+  TEST_BYPASS_AUTH=true go test -cover ./...
+  ```
+- Build Docker images:
+  ```bash
+  docker build -f Dockerfile.api -t helpdesk-api .
+  docker build -f Dockerfile.worker -t helpdesk-worker .
+  ```
+- Helm chart checks:
+  ```bash
+  helm lint helm/helpdesk
+  helm package helm/helpdesk
+  ```
+
 ## API (MVP)
 - `GET /healthz`
 - `GET /me` (authenticated user info and roles)
@@ -50,3 +72,7 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
 - Unit tests can bypass JWT validation by setting `TEST_BYPASS_AUTH=true`. This injects a synthetic user with the `agent` role so auth-protected routes can be exercised without a JWKS.
 - Handlers depend on a database interface and an object storage interface, enabling mocks/fakes in tests without external services.
 - Run all tests from repo root: `go test ./...`
+
+## Continuous Integration
+
+GitHub Actions builds the API and worker images, runs `TEST_BYPASS_AUTH=true go test -cover ./...`, and lints and packages the Helm chart on every push and pull request.
