@@ -228,7 +228,7 @@ func main() {
 
 func (a *App) routes() {
 	a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
-	a.r.POST("/csat/:token", a.submitCSAT)
+	a.r.GET("/csat/:token", a.submitCSAT)
 
 	auth := a.r.Group("/")
 	auth.Use(a.authMiddleware())
