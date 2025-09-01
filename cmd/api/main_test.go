@@ -106,6 +106,53 @@ func TestEnqueueEmail_InfinityError(t *testing.T) {
 	app.enqueueEmail(ctx, "test@example.com", "test_template", unmarshalableData)
 }
 
+func TestCreateTicketValidationErrors(t *testing.T) {
+	cfg := Config{Env: "test", TestBypassAuth: true}
+	app := NewApp(cfg, nil, nil, nil, nil)
+
+	t.Run("invalid urgency", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		body := `{"title":"abc","requester_id":"00000000-0000-0000-0000-000000000000","priority":1,"urgency":5,"custom_json":{}}`
+		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		app.r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+		var resp struct {
+			Errors map[string]string `json:"errors"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid json: %v", err)
+		}
+		if resp.Errors["urgency"] == "" {
+			t.Fatalf("expected urgency error, got %v", resp.Errors)
+		}
+	})
+
+	t.Run("invalid custom_json", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		body := `{"title":"abc","requester_id":"00000000-0000-0000-0000-000000000000","priority":1,"custom_json":[]}`
+		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		app.r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+		var resp struct {
+			Errors map[string]string `json:"errors"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid json: %v", err)
+		}
+		if resp.Errors["custom_json"] == "" {
+			t.Fatalf("expected custom_json error, got %v", resp.Errors)
+		}
+	})
+}
+
 type csatTestDB struct {
 	lastSQL  string
 	lastArgs []any
