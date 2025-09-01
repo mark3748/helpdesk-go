@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Ticket } from '../api';
 import { fetchTickets, bulkUpdate } from '../api';
+import { Table, Button, Space, Tag } from 'antd';
 
 interface Props {
   onOpen(ticket: Ticket): void;
@@ -9,65 +10,78 @@ interface Props {
 
 export default function TicketQueue({ onOpen, onNewTicket }: Props) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [checked, setChecked] = useState<Record<number, boolean>>({});
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
-  useEffect(() => {
-    fetchTickets().then(setTickets).catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    function handler(e: KeyboardEvent) {
-      if (e.key === 'j') {
-        setSelectedIndex((i) => Math.min(i + 1, tickets.length - 1));
-      }
-      if (e.key === 'k') {
-        setSelectedIndex((i) => Math.max(i - 1, 0));
-      }
-      if (e.key === 'n') {
-        onNewTicket();
-      }
-      if (e.key === 'Enter') {
-        const t = tickets[selectedIndex];
-        if (t) onOpen(t);
-      }
-    }
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [tickets, selectedIndex, onNewTicket, onOpen]);
-
-  function toggleCheck(id: number) {
-    setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
+  async function load() {
+    const data = await fetchTickets();
+    setTickets(data);
   }
 
+  useEffect(() => {
+    load().catch(console.error);
+  }, []);
+
+  const columns = [
+    {
+      title: 'Number',
+      dataIndex: 'number',
+      key: 'number',
+      width: 140,
+    },
+    {
+      title: 'Subject',
+      dataIndex: 'subject',
+      key: 'subject',
+      render: (_: any, record: Ticket) => (
+        <Button type="link" onClick={() => onOpen(record)}>{record.subject}</Button>
+      ),
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      width: 140,
+      render: (v?: string) => v ? <Tag>{v}</Tag> : null,
+    },
+    {
+      title: 'Priority',
+      dataIndex: 'priority',
+      key: 'priority',
+      width: 120,
+      render: (p?: number) => {
+        const map: Record<number, { text: string; color: string }> = {
+          1: { text: 'Critical', color: 'red' },
+          2: { text: 'High', color: 'volcano' },
+          3: { text: 'Medium', color: 'gold' },
+          4: { text: 'Low', color: 'green' },
+        };
+        const m = p ? map[p] : undefined;
+        return m ? <Tag color={m.color}>{m.text}</Tag> : null;
+      },
+      sorter: (a: Ticket, b: Ticket) => (a.priority || 0) - (b.priority || 0),
+    },
+  ];
+
   async function handleBulkEdit() {
-    const ids = Object.keys(checked)
-      .filter((id) => checked[Number(id)])
-      .map(Number);
-    if (ids.length) {
-      await bulkUpdate(ids, { status: 'open' });
-    }
+    if (selectedRowKeys.length === 0) return;
+    await bulkUpdate(selectedRowKeys as string[], { status: 'open' });
   }
 
   return (
-    <div>
-      <h3>Tickets</h3>
-      <button onClick={handleBulkEdit}>Bulk Edit</button>
-      <ul>
-        {tickets.map((t, idx) => (
-          <li
-            key={t.id}
-            style={{ background: idx === selectedIndex ? '#eee' : 'transparent' }}
-          >
-            <input
-              type="checkbox"
-              checked={!!checked[t.id]}
-              onChange={() => toggleCheck(t.id)}
-            />
-            <span onClick={() => onOpen(t)}>{t.subject}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <Space direction="vertical" style={{ width: '100%' }}>
+      <Space>
+        <Button type="primary" onClick={onNewTicket}>New Ticket</Button>
+        <Button onClick={handleBulkEdit} disabled={!selectedRowKeys.length}>Bulk Edit</Button>
+        <Button onClick={load}>Refresh</Button>
+      </Space>
+      <Table
+        rowKey={(r) => r.id}
+        columns={columns as any}
+        dataSource={tickets}
+        pagination={{ pageSize: 10 }}
+        rowSelection={{ selectedRowKeys, onChange: setSelectedRowKeys }}
+        style={{ background: '#fff' }}
+      />
+    </Space>
   );
 }
