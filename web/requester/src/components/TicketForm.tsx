@@ -19,28 +19,48 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
   const [priority, setPriority] = useState(initial.priority ?? 3);
   const [urgency, setUrgency] = useState(initial.urgency ?? 3);
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
   const nav = useNavigate();
   const auth = useAuth();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const t = await createTicket(
-      {
-        title,
-        description,
-        status: 'New',
-        category,
-        subcategory,
-        requester_id: auth.user?.profile.sub || '',
-        priority,
-        urgency,
-      },
-      auth.user?.access_token || '',
-    );
-    if (attachment) {
-      await uploadAttachment(t.id, attachment, auth.user?.access_token || '');
+    setLoading(true);
+    try {
+      const t = await createTicket(
+        {
+          title,
+          description,
+          status: 'New',
+          category,
+          subcategory,
+          requester_id: auth.user?.profile.sub || '',
+          priority,
+          urgency,
+        },
+        auth.user?.access_token || '',
+      );
+      if (attachment) {
+        try {
+          await uploadAttachment(t.id, attachment, auth.user?.access_token || '');
+        } catch {
+          alert('Failed to upload attachment');
+        }
+      }
+      alert('Ticket submitted');
+      setTitle('');
+      setDescription('');
+      setCategory('');
+      setSubcategory('');
+      setPriority(3);
+      setUrgency(3);
+      setAttachment(null);
+      nav(`/tickets/${t.id}`);
+    } catch {
+      alert('Failed to create ticket');
+    } finally {
+      setLoading(false);
     }
-    nav(`/tickets/${t.id}`);
   }
 
   return (
@@ -124,8 +144,9 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
       <button
         className="rounded bg-blue-600 px-4 py-2 font-medium text-white"
         type="submit"
+        disabled={loading}
       >
-        Submit
+        {loading ? 'Submitting…' : 'Submit'}
       </button>
     </form>
   );
