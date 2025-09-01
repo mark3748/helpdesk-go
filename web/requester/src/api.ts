@@ -67,8 +67,40 @@ export async function addComment(id: string, data: CommentInput, token: string):
   }, token);
 }
 
-export async function uploadAttachment(id: string, file: File, token: string): Promise<void> {
-  const form = new FormData();
-  form.append('file', file);
-  await apiFetch(`/tickets/${id}/attachments`, { method: 'POST', body: form }, token);
+export interface UploadOptions {
+  onProgress?: (evt: { percent: number }) => void;
+}
+
+export function uploadAttachment(
+  id: string,
+  file: File,
+  token: string,
+  opts: UploadOptions = {},
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_BASE}/tickets/${id}/attachments`);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        opts.onProgress?.({ percent: (e.loaded / e.total) * 100 });
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(xhr.responseText || `failed to upload attachment: ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('failed to upload attachment'));
+
+    xhr.send(form);
+  });
 }
