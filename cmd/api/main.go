@@ -40,6 +40,22 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+// openapi.yaml is served from disk to avoid cross-package embed limitations.
+
+var redocHTML = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Helpdesk API Docs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>body { margin: 0; padding: 0; } </style>
+    <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+  </head>
+  <body>
+    <redoc spec-url="/openapi.yaml"></redoc>
+  </body>
+  </html>`
+
 type Config struct {
 	Addr          string
 	DatabaseURL   string
@@ -58,7 +74,8 @@ type Config struct {
 	AuthMode        string // "oidc" or "local"
 	AuthLocalSecret string
 	// Filesystem object store for dev/local
-	FileStorePath string
+    FileStorePath   string
+    OpenAPISpecPath string
 }
 
 func getConfig() Config {
@@ -78,9 +95,10 @@ func getConfig() Config {
 		TestBypassAuth:  getEnv("TEST_BYPASS_AUTH", "false") == "true",
 		AuthMode:        getEnv("AUTH_MODE", "oidc"),
 		AuthLocalSecret: getEnv("AUTH_LOCAL_SECRET", ""),
-		FileStorePath:   getEnv("FILESTORE_PATH", ""),
-	}
-	return cfg
+        FileStorePath:   getEnv("FILESTORE_PATH", ""),
+        OpenAPISpecPath: getEnv("OPENAPI_SPEC_PATH", ""),
+    }
+    return cfg
 }
 
 func getEnv(key, def string) string {
@@ -297,6 +315,9 @@ func main() {
 func (a *App) routes() {
 	a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 	a.r.GET("/csat/:token", a.submitCSAT)
+    // API docs UI and spec
+    a.r.GET("/docs", a.docsUI)
+    a.r.GET("/openapi.yaml", a.openapiSpec)
   
 	// Local auth endpoints
 	if a.cfg.AuthMode == "local" {
@@ -325,6 +346,27 @@ func (a *App) routes() {
 	auth.GET("/metrics/resolution", a.requireRole("agent"), a.metricsResolution)
 	auth.GET("/metrics/tickets", a.requireRole("agent"), a.metricsTicketVolume)
 	auth.POST("/exports/tickets", a.requireRole("agent"), a.exportTickets)
+}
+
+func (a *App) docsUI(c *gin.Context) {
+    c.Data(200, "text/html; charset=utf-8", []byte(redocHTML))
+}
+
+func (a *App) openapiSpec(c *gin.Context) {
+    candidates := []string{}
+    if a.cfg.OpenAPISpecPath != "" {
+        candidates = append(candidates, a.cfg.OpenAPISpecPath)
+    }
+    // Common defaults for dev and container images
+    candidates = append(candidates, "docs/openapi.yaml", "/opt/helpdesk/docs/openapi.yaml")
+    for _, p := range candidates {
+        b, err := os.ReadFile(p)
+        if err == nil {
+            c.Data(200, "application/yaml", b)
+            return
+        }
+    }
+    c.JSON(404, gin.H{"error": "openapi spec not found"})
 }
 
 type AuthUser struct {

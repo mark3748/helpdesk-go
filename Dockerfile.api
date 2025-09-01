@@ -7,6 +7,7 @@ RUN go mod tidy && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/api
 # Run
 FROM gcr.io/distroless/static:nonroot
 COPY --from=build /out/api /api
+COPY --from=build /src/docs/openapi.yaml /opt/helpdesk/docs/openapi.yaml
 EXPOSE 8080
 USER nonroot:nonroot
 ENTRYPOINT ["/api"]
