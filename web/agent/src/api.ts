@@ -30,7 +30,7 @@ export async function fetchTickets(): Promise<Ticket[]> {
   const res = await fetch(`${API_BASE}/tickets`, { credentials: 'include' });
   if (!res.ok) throw new Error('failed to load tickets');
   const data = await res.json();
-  return (data as Array<any>).map((t) => ({
+  return (data as Array<Record<string, unknown>>).map((t) => ({
     id: t.id,
     subject: t.title ?? t.number ?? 'Ticket',
     number: t.number,
@@ -39,7 +39,11 @@ export async function fetchTickets(): Promise<Ticket[]> {
   }));
 }
 
-// No GET comments endpoint exists yet; return empty for now
+// Fetch comments for a ticket
+export async function fetchComments(ticketId: string): Promise<Comment[]> {
+  const res = await fetch(`${API_BASE}/tickets/${ticketId}/comments`, {
+    credentials: 'include',
+  });
   if (!res.ok) {
     if (res.status === 404) {
       // Endpoint or comments not found; treat as no comments
@@ -49,28 +53,69 @@ export async function fetchTickets(): Promise<Ticket[]> {
     throw new Error(`failed to load comments: ${res.status} ${txt}`);
   }
   const data = await res.json();
-  return (data as Array<any>).map((c) => ({ id: c.id, body: c.body }));
+  return (data as Array<Record<string, unknown>>).map((c) => ({
+    id: String(c.id),
+    body: String(c.body_md),
+  }));
 }
 
-export async function uploadAttachment(ticketId: string, file: File): Promise<void> {
-  const form = new FormData();
-  form.append('file', file);
-  const res = await fetch(`${API_BASE}/tickets/${ticketId}/attachments`, {
-    method: 'POST',
-    credentials: 'include',
-    body: form,
+export interface UploadCallbacks {
+  onProgress?: (evt: { percent: number }) => void;
+  onSuccess?: () => void;
+  onError?: (err: Error) => void;
+}
+
+export function uploadAttachment(
+  ticketId: string,
+  file: File,
+  cb: UploadCallbacks = {},
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_BASE}/tickets/${ticketId}/attachments`);
+    xhr.withCredentials = true;
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        cb.onProgress?.({ percent: (e.loaded / e.total) * 100 });
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        cb.onSuccess?.();
+        resolve();
+      } else {
+        const err = new Error(
+          `failed to upload attachment: ${xhr.status} ${xhr.responseText}`,
+        );
+        cb.onError?.(err);
+        reject(err);
+      }
+    };
+
+    xhr.onerror = () => {
+      const err = new Error('failed to upload attachment');
+      cb.onError?.(err);
+      reject(err);
+    };
+
+    xhr.send(form);
   });
-  if (!res.ok) {
-    // Likely MinIO not configured in dev; surface a readable error
-    const txt = await res.text().catch(() => '');
-    throw new Error(`failed to upload attachment: ${res.status} ${txt}`);
-  }
 }
 
 // Bulk update endpoint not implemented server-side; noop for now
-export async function bulkUpdate(_ticketIds: string[], _data: Record<string, unknown>): Promise<void> {
+/* eslint-disable @typescript-eslint/no-unused-vars */
+export async function bulkUpdate(
+  _ticketIds: string[],
+  _data: Record<string, unknown>,
+): Promise<void> {
   return;
 }
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 export interface Me {
   id: string;

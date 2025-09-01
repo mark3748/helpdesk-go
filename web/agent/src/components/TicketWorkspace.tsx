@@ -2,7 +2,19 @@ import { useEffect, useState } from 'react';
 import TicketQueue from './TicketQueue';
 import type { Ticket, Comment } from '../api';
 import { fetchComments, uploadAttachment, getMe, createTicket, addComment, logout } from '../api';
-import { Layout, Button, Modal, Form, Input, Select, Typography, message } from 'antd';
+import {
+  Layout,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Select,
+  Typography,
+  message,
+  Upload,
+  UploadProps,
+  Progress,
+} from 'antd';
 
 export default function TicketWorkspace() {
   const [tabs, setTabs] = useState<Ticket[]>([]);
@@ -32,29 +44,35 @@ export default function TicketWorkspace() {
     }
   }
 
-  function newTicket() {
-    setShowNew(true);
-  }
+    function newTicket() {
+      setShowNew(true);
+    }
 
-      message.error('Authentication required. Please refresh the page and try again.');
-      return;
+    async function onCreateTicket(values: {
+      title: string;
+      description?: string;
+      priority: number;
+    }) {
+      if (!me) {
+        message.error('Authentication required. Please refresh the page and try again.');
+        return;
+      }
+      setCreating(true);
+      const res = await createTicket({
+        title: values.title,
+        description: values.description || '',
+        priority: values.priority,
+        requesterId: me.id,
+      });
+      setCreating(false);
+      if (res) {
+        message.success(`Ticket ${res.number} created`);
+        setShowNew(false);
+        form.resetFields();
+      } else {
+        message.error('Failed to create ticket');
+      }
     }
-    setCreating(true);
-    const res = await createTicket({
-      title: values.title,
-      description: values.description || '',
-      priority: values.priority,
-      requesterId: me.id,
-    });
-    setCreating(false);
-    if (res) {
-      message.success(`Ticket ${res.number} created`);
-      setShowNew(false);
-      form.resetFields();
-    } else {
-      message.error('Failed to create ticket');
-    }
-  }
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -110,17 +128,33 @@ export default function TicketWorkspace() {
 function TicketDetail({ ticket, onClose }: { ticket: Ticket; onClose?: () => void }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [adding, setAdding] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState(0);
   const [form] = Form.useForm();
   useEffect(() => {
     fetchComments(ticket.id).then(setComments).catch(console.error);
   }, [ticket.id]);
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files && e.target.files[0]) {
-      await uploadAttachment(ticket.id, e.target.files[0]);
-      message.success('Uploaded');
-    }
-  }
+  const uploadProps: UploadProps = {
+    showUploadList: false,
+    customRequest: ({ file, onProgress, onSuccess, onError }) => {
+      uploadAttachment(ticket.id, file as File, {
+        onProgress: (evt) => {
+          setUploadPercent(evt.percent);
+          onProgress?.(evt);
+        },
+        onSuccess: () => {
+          setUploadPercent(0);
+          message.success('Uploaded');
+          onSuccess?.({});
+        },
+        onError: (err) => {
+          setUploadPercent(0);
+          message.error('Upload failed');
+          onError?.(err);
+        },
+      });
+    },
+  };
 
   return (
     <div style={{ border: '1px solid #eee', padding: 16, borderRadius: 8 }}>
@@ -128,7 +162,10 @@ function TicketDetail({ ticket, onClose }: { ticket: Ticket; onClose?: () => voi
         <Typography.Title level={5} style={{ margin: 0 }}>{ticket.subject}</Typography.Title>
         {onClose && <Button onClick={onClose}>Close</Button>}
       </div>
-      <input type="file" onChange={handleUpload} />
+      <Upload {...uploadProps}>
+        <Button>Upload Attachment</Button>
+      </Upload>
+      {uploadPercent > 0 && <Progress percent={uploadPercent} />}
       <ul>
         {comments.map((c) => (
           <li key={c.id}>{c.body}</li>
