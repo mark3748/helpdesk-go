@@ -43,9 +43,10 @@ export async function uploadAttachment(ticketId: number, file: File): Promise<vo
 }
 
 export async function bulkUpdate(ticketIds: number[], data: Record<string, unknown>): Promise<void> {
-  await fetch(`${API_BASE}/tickets/bulk`, {
+  const res = await fetch(`${API_BASE}/tickets/bulk`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids: ticketIds, data })
   });
+  if (!res.ok) throw new Error('failed to bulk update tickets');
 }
