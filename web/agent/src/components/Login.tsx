@@ -1,45 +1,46 @@
 import { useState } from 'react';
 import { login } from '../api';
+import { Button, Card, Form, Input, Typography, message } from 'antd';
 
 interface Props {
   onLoggedIn(): void;
 }
 
 export default function Login({ onLoggedIn }: Props) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [form] = Form.useForm();
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const ok = await login(username, password);
+  async function onFinish(values: { username: string; password: string }) {
+    setLoading(true);
+    const ok = await login(values.username, values.password);
+    setLoading(false);
     if (ok) {
       onLoggedIn();
     } else {
-      setError('Login failed');
+      message.error('Login failed');
     }
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <h2>Agent Login</h2>
-      {error && <p>{error}</p>}
-      <div>
-        <input
-          placeholder="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
-      </div>
-      <div>
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </div>
-      <button type="submit">Login</button>
-    </form>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Card style={{ width: 360 }}>
+        <Typography.Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>
+          Helpdesk Agent
+        </Typography.Title>
+        <Form form={form} layout="vertical" onFinish={onFinish}>
+          <Form.Item name="username" label="Username" rules={[{ required: true }]}> 
+            <Input autoFocus placeholder="admin" />
+          </Form.Item>
+          <Form.Item name="password" label="Password" rules={[{ required: true }]}> 
+            <Input.Password placeholder="admin" />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>
+              Sign in
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
+    </div>
   );
 }
