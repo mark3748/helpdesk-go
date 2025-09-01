@@ -20,7 +20,17 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const t = await createTicket({ title, description, status: 'New', category }, auth.user?.access_token || '');
+    const t = await createTicket(
+      {
+        title,
+        description,
+        status: 'New',
+        category,
+        requester_id: auth.user?.profile.sub || '',
+        priority: 3,
+      },
+      auth.user?.access_token || '',
+    );
     nav(`/tickets/${t.id}`);
   }
 
