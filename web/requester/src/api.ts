@@ -3,6 +3,8 @@ export interface Ticket {
   title: string;
   description: string;
   status: string;
+  requester_id?: string;
+  priority?: number;
   created_at?: string;
   category?: string;
 }
