@@ -40,11 +40,14 @@ export async function fetchTickets(): Promise<Ticket[]> {
 }
 
 // No GET comments endpoint exists yet; return empty for now
-export async function fetchComments(_ticketId: string): Promise<Comment[]> {
-  const res = await fetch(`${API_BASE}/tickets/${_ticketId}/comments`, {
-    credentials: 'include',
-  });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    if (res.status === 404) {
+      // Endpoint or comments not found; treat as no comments
+      return [];
+    }
+    const txt = await res.text().catch(() => '');
+    throw new Error(`failed to load comments: ${res.status} ${txt}`);
+  }
   const data = await res.json();
   return (data as Array<any>).map((c) => ({ id: c.id, body: c.body }));
 }

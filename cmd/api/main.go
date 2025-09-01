@@ -469,7 +469,17 @@ func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
 	if exists {
 		return nil
 	}
-	pw := "admin"
+	pw := os.Getenv("ADMIN_PASSWORD")
+	if pw == "" {
+		// Generate a secure random password if not set
+		const pwLen = 16
+		b := make([]byte, pwLen)
+		if _, err := rand.Read(b); err != nil {
+			return fmt.Errorf("failed to generate random admin password: %w", err)
+		}
+		pw = hex.EncodeToString(b)
+		log.Warn().Str("username", "admin").Str("password", pw).Msg("No ADMIN_PASSWORD set, generated random admin password (dev only)")
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -481,7 +491,7 @@ func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
 	// Grant agent role
 	_, _ = db.Exec(ctx, `insert into user_roles (user_id, role_id)
       select $1, r.id from roles r where r.name='agent' on conflict do nothing`, uid)
-	log.Info().Str("username", "admin").Str("password", pw).Msg("seeded local admin user (dev)")
+	log.Info().Str("username", "admin").Msg("seeded local admin user (dev)")
 	return nil
 }
 
