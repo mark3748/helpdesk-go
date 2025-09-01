@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Run tests
+        run: TEST_BYPASS_AUTH=true go test -cover ./...
+      - name: Build API image
+        run: docker build -f Dockerfile.api -t helpdesk-api .
+      - name: Build worker image
+        run: docker build -f Dockerfile.worker -t helpdesk-worker .
+      - uses: azure/setup-helm@v3
+        with:
+          version: v3.13.3
+      - name: Lint Helm chart
+        run: helm lint helm/helpdesk
+      - name: Package Helm chart
+        run: helm package helm/helpdesk
