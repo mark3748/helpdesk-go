@@ -15,11 +15,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -74,8 +76,8 @@ type Config struct {
 	AuthMode        string // "oidc" or "local"
 	AuthLocalSecret string
 	// Filesystem object store for dev/local
-    FileStorePath   string
-    OpenAPISpecPath string
+	FileStorePath   string
+	OpenAPISpecPath string
 }
 
 func getConfig() Config {
@@ -95,10 +97,10 @@ func getConfig() Config {
 		TestBypassAuth:  getEnv("TEST_BYPASS_AUTH", "false") == "true",
 		AuthMode:        getEnv("AUTH_MODE", "oidc"),
 		AuthLocalSecret: getEnv("AUTH_LOCAL_SECRET", ""),
-        FileStorePath:   getEnv("FILESTORE_PATH", ""),
-        OpenAPISpecPath: getEnv("OPENAPI_SPEC_PATH", ""),
-    }
-    return cfg
+		FileStorePath:   getEnv("FILESTORE_PATH", ""),
+		OpenAPISpecPath: getEnv("OPENAPI_SPEC_PATH", ""),
+	}
+	return cfg
 }
 
 func getEnv(key, def string) string {
@@ -315,10 +317,10 @@ func main() {
 func (a *App) routes() {
 	a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 	a.r.GET("/csat/:token", a.submitCSAT)
-    // API docs UI and spec
-    a.r.GET("/docs", a.docsUI)
-    a.r.GET("/openapi.yaml", a.openapiSpec)
-  
+	// API docs UI and spec
+	a.r.GET("/docs", a.docsUI)
+	a.r.GET("/openapi.yaml", a.openapiSpec)
+
 	// Local auth endpoints
 	if a.cfg.AuthMode == "local" {
 		a.r.POST("/login", a.login)
@@ -349,24 +351,24 @@ func (a *App) routes() {
 }
 
 func (a *App) docsUI(c *gin.Context) {
-    c.Data(200, "text/html; charset=utf-8", []byte(redocHTML))
+	c.Data(200, "text/html; charset=utf-8", []byte(redocHTML))
 }
 
 func (a *App) openapiSpec(c *gin.Context) {
-    candidates := []string{}
-    if a.cfg.OpenAPISpecPath != "" {
-        candidates = append(candidates, a.cfg.OpenAPISpecPath)
-    }
-    // Common defaults for dev and container images
-    candidates = append(candidates, "docs/openapi.yaml", "/opt/helpdesk/docs/openapi.yaml")
-    for _, p := range candidates {
-        b, err := os.ReadFile(p)
-        if err == nil {
-            c.Data(200, "application/yaml", b)
-            return
-        }
-    }
-    c.JSON(404, gin.H{"error": "openapi spec not found"})
+	candidates := []string{}
+	if a.cfg.OpenAPISpecPath != "" {
+		candidates = append(candidates, a.cfg.OpenAPISpecPath)
+	}
+	// Common defaults for dev and container images
+	candidates = append(candidates, "docs/openapi.yaml", "/opt/helpdesk/docs/openapi.yaml")
+	for _, p := range candidates {
+		b, err := os.ReadFile(p)
+		if err == nil {
+			c.Data(200, "application/yaml", b)
+			return
+		}
+	}
+	c.JSON(404, gin.H{"error": "openapi spec not found"})
 }
 
 type AuthUser struct {
@@ -771,19 +773,39 @@ func derefInt32(p *int32) int32 {
 }
 
 type createTicketReq struct {
-	Title       string      `json:"title" binding:"required,min=3"`
-	Description string      `json:"description"`
-	RequesterID string      `json:"requester_id" binding:"required"`
-	Priority    int16       `json:"priority" binding:"required"`
-	Urgency     *int16      `json:"urgency"`
-	Category    *string     `json:"category"`
-	Subcategory *string     `json:"subcategory"`
-	CustomJSON  interface{} `json:"custom_json"`
+	Title       string         `json:"title" binding:"required,min=3"`
+	Description string         `json:"description"`
+	RequesterID string         `json:"requester_id" binding:"required"`
+	Priority    int16          `json:"priority" binding:"required,min=1,max=4"`
+	Urgency     *int16         `json:"urgency" binding:"omitempty,min=1,max=4"`
+	Category    *string        `json:"category"`
+	Subcategory *string        `json:"subcategory" binding:"omitempty,min=1"`
+	CustomJSON  map[string]any `json:"custom_json"`
 }
 
 func (a *App) createTicket(c *gin.Context) {
 	var in createTicketReq
 	if err := c.ShouldBindJSON(&in); err != nil {
+		var ve validator.ValidationErrors
+		if errors.As(err, &ve) {
+			errs := make(map[string]string)
+			typ := reflect.TypeOf(in)
+			for _, fe := range ve {
+				field, _ := typ.FieldByName(fe.StructField())
+				name := strings.Split(field.Tag.Get("json"), ",")[0]
+				if name == "" {
+					name = strings.ToLower(fe.StructField())
+				}
+				errs[name] = fe.Error()
+			}
+			c.JSON(400, gin.H{"errors": errs})
+			return
+		}
+		var ute *json.UnmarshalTypeError
+		if errors.As(err, &ute) {
+			c.JSON(400, gin.H{"errors": gin.H{ute.Field: ute.Error()}})
+			return
+		}
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}

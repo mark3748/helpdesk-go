@@ -130,6 +130,13 @@ components:
         ids:
           type: array
           items: { type: string, format: uuid }
+    ValidationError:
+      type: object
+      properties:
+        errors:
+          type: object
+          additionalProperties:
+            type: string
 paths:
   /healthz:
     get:
@@ -239,7 +246,11 @@ paths:
                   id: { type: string, format: uuid }
                   number: { type: string }
                   status: { type: string }
-        '400': { description: Bad Request }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
         '500': { description: Server Error }
       security:
         - bearerAuth: []

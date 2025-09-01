@@ -13,7 +13,7 @@ Base URL examples:
 ## Conventions
 - Content type: JSON unless specified.
 - Time format: RFC3339.
-- Errors: `{ "error": "message" }`.
+- Errors: `{ "error": "message" }` or validation errors `{ "errors": { "field": "message" } }`.
 
 ## Endpoints
 
@@ -30,6 +30,8 @@ User
 Tickets
 - GET `/tickets` query `status,priority,team,assignee,search` → 200 `[Ticket]` | 500
 - POST `/tickets` body `{ title, description, requester_id, priority, urgency?, category?, subcategory?, custom_json? }` → 201 `{ id, number, status }` | 400 | 500
+  - `urgency` 1-4
+  - `custom_json` object of additional fields
 - GET `/tickets/:id` → 200 `Ticket` | 404
 - PATCH `/tickets/:id` (agent role) body partial `{ status?, assignee_id?, priority?, urgency?, scheduled_at?, due_at?, custom_json? }` → 200 `{ ok:true }` | 400 | 500
 
