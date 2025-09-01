@@ -7,3 +7,13 @@ Your ticket {{ .Number }} has been created.
 Thanks,
 Helpdesk
 {{ end }}
+
+{{ define "ticket_updated_subject" }}[{{ .Number }}] Ticket updated{{ end }}
+{{ define "ticket_updated_body" }}
+Hello,
+
+Your ticket {{ .Number }} has been updated.
+
+Thanks,
+Helpdesk
+{{ end }}
