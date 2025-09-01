@@ -1,0 +1,575 @@
+openapi: 3.0.3
+info:
+  title: Helpdesk API
+  version: 0.1.0
+  description: >-
+    Minimal ticketing API. Uses OIDC bearer JWTs in production, or HttpOnly cookie auth in local mode.
+servers:
+  - url: http://localhost:8080
+    description: Local API
+tags:
+  - name: Health
+  - name: Auth
+  - name: Users
+  - name: Tickets
+  - name: Comments
+  - name: Attachments
+  - name: Watchers
+  - name: CSAT
+  - name: Metrics
+  - name: Exports
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: auth
+  schemas:
+    AuthUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        external_id: { type: string }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        roles:
+          type: array
+          items: { type: string }
+    Ticket:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string }
+        title: { type: string }
+        description: { type: string }
+        requester_id: { type: string, format: uuid }
+        assignee_id: { type: string, format: uuid, nullable: true }
+        team_id: { type: string, format: uuid, nullable: true }
+        priority: { type: integer, minimum: 1, maximum: 4 }
+        urgency: { type: integer, minimum: 1, maximum: 4, nullable: true }
+        category: { type: string, nullable: true }
+        subcategory: { type: string, nullable: true }
+        status: { type: string }
+        scheduled_at: { type: string, format: date-time, nullable: true }
+        due_at: { type: string, format: date-time, nullable: true }
+        source: { type: string }
+        custom_json: { type: object }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        sla:
+          $ref: '#/components/schemas/SLAStatus'
+    SLAStatus:
+      type: object
+      properties:
+        policy_id: { type: string, format: uuid }
+        response_elapsed_ms: { type: integer }
+        resolution_elapsed_ms: { type: integer }
+        response_target_mins: { type: integer }
+        resolution_target_mins: { type: integer }
+        paused: { type: boolean }
+        reason: { type: string, nullable: true }
+    Comment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        ticket_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        body_md: { type: string }
+        is_internal: { type: boolean }
+        created_at: { type: string, format: date-time }
+    Attachment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        filename: { type: string }
+        bytes: { type: integer, format: int64 }
+        mime: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    CreateTicketRequest:
+      type: object
+      required: [title, requester_id, priority]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        requester_id: { type: string, format: uuid }
+        priority: { type: integer, minimum: 1, maximum: 4 }
+        urgency: { type: integer, minimum: 1, maximum: 4 }
+        category: { type: string }
+        subcategory: { type: string }
+        custom_json: { type: object }
+    UpdateTicketRequest:
+      type: object
+      properties:
+        status: { type: string }
+        assignee_id: { type: string, format: uuid }
+        priority: { type: integer, minimum: 1, maximum: 4 }
+        urgency: { type: integer, minimum: 1, maximum: 4 }
+        scheduled_at: { type: string, format: date-time }
+        due_at: { type: string, format: date-time }
+        custom_json: { type: object }
+    CommentRequest:
+      type: object
+      required: [body_md, author_id]
+      properties:
+        body_md: { type: string }
+        is_internal: { type: boolean }
+        author_id: { type: string, format: uuid }
+    WatcherRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id: { type: string, format: uuid }
+    ExportTicketsRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items: { type: string, format: uuid }
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+  /login:
+    post:
+      tags: [Auth]
+      summary: Login (local mode)
+      description: Enabled only when `AUTH_MODE=local`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: OK }
+        '400': { description: Bad Request }
+        '401': { description: Unauthorized }
+        '500': { description: Server Error }
+  /logout:
+    post:
+      tags: [Auth]
+      summary: Logout (local mode)
+      security: []
+      responses:
+        '200': { description: OK }
+  /me:
+    get:
+      tags: [Users]
+      summary: Current user
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUser'
+        '401': { description: Unauthorized }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /tickets:
+    get:
+      tags: [Tickets]
+      summary: List tickets
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: priority
+          schema: { type: integer }
+        - in: query
+          name: team
+          schema: { type: string, format: uuid }
+        - in: query
+          name: assignee
+          schema: { type: string, format: uuid }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Ticket' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    post:
+      tags: [Tickets]
+      summary: Create ticket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTicketRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  number: { type: string }
+                  status: { type: string }
+        '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /tickets/{id}:
+    get:
+      tags: [Tickets]
+      summary: Get ticket
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ticket' }
+        '404': { description: Not Found }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    patch:
+      tags: [Tickets]
+      summary: Update ticket
+      description: Requires `agent` role.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTicketRequest' }
+      responses:
+        '200': { description: OK }
+        '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /tickets/{id}/comments:
+    get:
+      tags: [Comments]
+      summary: List public comments
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Comment' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    post:
+      tags: [Comments]
+      summary: Add comment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommentRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+        '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /tickets/{id}/attachments:
+    get:
+      tags: [Attachments]
+      summary: List attachments
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Attachment' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    post:
+      tags: [Attachments]
+      summary: Upload attachment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+        '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /tickets/{id}/attachments/{attID}:
+    delete:
+      tags: [Attachments]
+      summary: Delete attachment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: attID
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /tickets/{id}/watchers:
+    get:
+      tags: [Watchers]
+      summary: List watcher user IDs
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: string, format: uuid }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    post:
+      tags: [Watchers]
+      summary: Add watcher
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WatcherRequest' }
+      responses:
+        '201': { description: Created }
+        '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /tickets/{id}/watchers/{userID}:
+    delete:
+      tags: [Watchers]
+      summary: Remove watcher
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: userID
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /csat/{token}:
+    get:
+      tags: [CSAT]
+      summary: Submit CSAT score
+      description: Public endpoint embedded in emails.
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+        - in: query
+          name: score
+          required: true
+          schema:
+            type: string
+            enum: [good, bad]
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid score }
+        '404': { description: Invalid token }
+        '500': { description: Server Error }
+  /metrics/sla:
+    get:
+      tags: [Metrics]
+      summary: SLA attainment
+      description: Requires `agent` role.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  met: { type: integer }
+                  sla_attainment: { type: number }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /metrics/resolution:
+    get:
+      tags: [Metrics]
+      summary: Average resolution time
+      description: Requires `agent` role.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  avg_resolution_ms: { type: number }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /metrics/tickets:
+    get:
+      tags: [Metrics]
+      summary: Ticket volume per day (30)
+      description: Requires `agent` role.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  daily:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day: { type: string, format: date }
+                        count: { type: integer }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /exports/tickets:
+    post:
+      tags: [Exports]
+      summary: Export tickets to CSV
+      description: Requires object store configuration. Requires `agent` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExportTicketsRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string, format: uri }
+        '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
