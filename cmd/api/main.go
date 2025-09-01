@@ -40,8 +40,7 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-//go:embed ../../docs/openapi.yaml
-var openapiYAML []byte
+// openapi.yaml is served from disk to avoid cross-package embed limitations.
 
 var redocHTML = `<!DOCTYPE html>
 <html>
@@ -75,7 +74,8 @@ type Config struct {
 	AuthMode        string // "oidc" or "local"
 	AuthLocalSecret string
 	// Filesystem object store for dev/local
-	FileStorePath string
+    FileStorePath   string
+    OpenAPISpecPath string
 }
 
 func getConfig() Config {
@@ -95,9 +95,10 @@ func getConfig() Config {
 		TestBypassAuth:  getEnv("TEST_BYPASS_AUTH", "false") == "true",
 		AuthMode:        getEnv("AUTH_MODE", "oidc"),
 		AuthLocalSecret: getEnv("AUTH_LOCAL_SECRET", ""),
-		FileStorePath:   getEnv("FILESTORE_PATH", ""),
-	}
-	return cfg
+        FileStorePath:   getEnv("FILESTORE_PATH", ""),
+        OpenAPISpecPath: getEnv("OPENAPI_SPEC_PATH", ""),
+    }
+    return cfg
 }
 
 func getEnv(key, def string) string {
@@ -352,11 +353,20 @@ func (a *App) docsUI(c *gin.Context) {
 }
 
 func (a *App) openapiSpec(c *gin.Context) {
-    if len(openapiYAML) == 0 {
-        c.JSON(404, gin.H{"error": "spec not embedded"})
-        return
+    candidates := []string{}
+    if a.cfg.OpenAPISpecPath != "" {
+        candidates = append(candidates, a.cfg.OpenAPISpecPath)
     }
-    c.Data(200, "application/yaml", openapiYAML)
+    // Common defaults for dev and container images
+    candidates = append(candidates, "docs/openapi.yaml", "/opt/helpdesk/docs/openapi.yaml")
+    for _, p := range candidates {
+        b, err := os.ReadFile(p)
+        if err == nil {
+            c.Data(200, "application/yaml", b)
+            return
+        }
+    }
+    c.JSON(404, gin.H{"error": "openapi spec not found"})
 }
 
 type AuthUser struct {
