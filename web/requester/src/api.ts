@@ -15,6 +15,7 @@ export interface Comment {
   author_id?: string;
   body_md: string;
   created_at?: string;
+  is_internal?: boolean;
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
@@ -50,10 +51,16 @@ export async function listComments(id: string, token: string): Promise<Comment[]
   return apiFetch(`/tickets/${id}/comments`, {}, token);
 }
 
-export async function addComment(id: string, body_md: string, token: string): Promise<Comment> {
+export interface CommentInput {
+  body_md: string;
+  author_id: string;
+  is_internal: boolean;
+}
+
+export async function addComment(id: string, data: CommentInput, token: string): Promise<Comment> {
   return apiFetch(`/tickets/${id}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ body_md }),
+    body: JSON.stringify(data),
   }, token);
 }
