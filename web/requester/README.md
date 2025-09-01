@@ -35,3 +35,13 @@ npm run build
 - `VITE_OIDC_CLIENT_ID` – OIDC client ID.
 
 The app supports ticket creation, listing, commenting, a basic knowledge base, and service catalog forms.
+
+## Data Fetching
+
+This portal uses [`@tanstack/react-query`](https://tanstack.com/query) for all
+API interactions. Use `useQuery` for reads and `useMutation` for writes.
+
+- Give queries stable `queryKey` values (e.g. `['tickets']`, `['ticket', id]`).
+- After mutations, invalidate related queries with
+  `useQueryClient().invalidateQueries` so cached data refreshes.
+- Display loading states via `isLoading`/`isPending` to keep UX consistent.
