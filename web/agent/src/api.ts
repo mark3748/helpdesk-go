@@ -1,52 +1,118 @@
+// Frontend-facing shapes simplified for UI
 export interface Ticket {
-  id: number;
-  subject: string;
+  id: string; // UUID from API
+  subject: string; // maps to API 'title'
+  number?: string;
+  status?: string;
+  priority?: number;
 }
 
 export interface Comment {
-  id: number;
-  ticketId: number;
+  id: string;
   body: string;
 }
 
 const API_BASE = '/api';
 
+// Local auth with HttpOnly cookie via /login
 export async function login(username: string, password: string): Promise<boolean> {
   const res = await fetch(`${API_BASE}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
+    credentials: 'include',
+    body: JSON.stringify({ username, password }),
   });
   return res.ok;
 }
 
+// API returns rich ticket objects; map down to the UI shape
 export async function fetchTickets(): Promise<Ticket[]> {
-  const res = await fetch(`${API_BASE}/tickets`);
+  const res = await fetch(`${API_BASE}/tickets`, { credentials: 'include' });
   if (!res.ok) throw new Error('failed to load tickets');
-  return res.json();
+  const data = await res.json();
+  return (data as Array<any>).map((t) => ({
+    id: t.id,
+    subject: t.title ?? t.number ?? 'Ticket',
+    number: t.number,
+    status: t.status,
+    priority: t.priority,
+  }));
 }
 
-export async function fetchComments(ticketId: number): Promise<Comment[]> {
-  const res = await fetch(`${API_BASE}/tickets/${ticketId}/comments`);
-  if (!res.ok) throw new Error('failed to load comments');
-  return res.json();
+// No GET comments endpoint exists yet; return empty for now
+export async function fetchComments(_ticketId: string): Promise<Comment[]> {
+  const res = await fetch(`${API_BASE}/tickets/${_ticketId}/comments`, {
+    credentials: 'include',
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data as Array<any>).map((c) => ({ id: c.id, body: c.body }));
 }
 
-export async function uploadAttachment(ticketId: number, file: File): Promise<void> {
+export async function uploadAttachment(ticketId: string, file: File): Promise<void> {
   const form = new FormData();
   form.append('file', file);
   const res = await fetch(`${API_BASE}/tickets/${ticketId}/attachments`, {
     method: 'POST',
-    body: form
+    credentials: 'include',
+    body: form,
   });
-  if (!res.ok) throw new Error('failed to upload attachment');
+  if (!res.ok) {
+    // Likely MinIO not configured in dev; surface a readable error
+    const txt = await res.text().catch(() => '');
+    throw new Error(`failed to upload attachment: ${res.status} ${txt}`);
+  }
 }
 
-export async function bulkUpdate(ticketIds: number[], data: Record<string, unknown>): Promise<void> {
-  const res = await fetch(`${API_BASE}/tickets/bulk`, {
-    method: 'PATCH',
+// Bulk update endpoint not implemented server-side; noop for now
+export async function bulkUpdate(_ticketIds: string[], _data: Record<string, unknown>): Promise<void> {
+  return;
+}
+
+export interface Me {
+  id: string;
+  email?: string;
+  display_name?: string;
+  roles?: string[];
+}
+
+export async function getMe(): Promise<Me | null> {
+  const res = await fetch(`${API_BASE}/me`, { credentials: 'include' });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function createTicket(params: {
+  title: string;
+  description?: string;
+  requesterId: string;
+  priority: number;
+}): Promise<{ id: string; number: string } | null> {
+  const res = await fetch(`${API_BASE}/tickets`, {
+    method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids: ticketIds, data })
+    body: JSON.stringify({
+      title: params.title,
+      description: params.description || '',
+      requester_id: params.requesterId,
+      priority: params.priority,
+    }),
   });
-  if (!res.ok) throw new Error('failed to bulk update tickets');
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function addComment(ticketId: string, authorId: string, body: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/tickets/${ticketId}/comments`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body_md: body, is_internal: false, author_id: authorId }),
+  });
+  return res.ok;
+}
+
+export async function logout(): Promise<void> {
+  await fetch(`${API_BASE}/logout`, { method: 'POST', credentials: 'include' });
 }
