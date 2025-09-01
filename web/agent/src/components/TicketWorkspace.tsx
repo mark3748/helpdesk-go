@@ -58,19 +58,24 @@ export default function TicketWorkspace() {
         return;
       }
       setCreating(true);
-      const res = await createTicket({
-        title: values.title,
-        description: values.description || '',
-        priority: values.priority,
-        requesterId: me.id,
-      });
-      setCreating(false);
-      if (res) {
-        message.success(`Ticket ${res.number} created`);
-        setShowNew(false);
-        form.resetFields();
-      } else {
+      try {
+        const res = await createTicket({
+          title: values.title,
+          description: values.description || '',
+          priority: values.priority,
+          requesterId: me.id,
+        });
+        if (res) {
+          message.success(`Ticket ${res.number} created`);
+          setShowNew(false);
+          form.resetFields();
+        } else {
+          message.error('Failed to create ticket');
+        }
+      } catch {
         message.error('Failed to create ticket');
+      } finally {
+        setCreating(false);
       }
     }
 
@@ -100,7 +105,7 @@ export default function TicketWorkspace() {
         onCancel={() => setShowNew(false)}
         onOk={() => form.submit()}
         confirmLoading={creating}
-        okText="Create"
+        okText={creating ? 'Creating…' : 'Create'}
       >
         <Form layout="vertical" form={form} onFinish={onCreateTicket}>
           <Form.Item name="title" label="Title" rules={[{ required: true, min: 3 }]}> 
@@ -136,23 +141,22 @@ function TicketDetail({ ticket, onClose }: { ticket: Ticket; onClose?: () => voi
 
   const uploadProps: UploadProps = {
     showUploadList: false,
-    customRequest: ({ file, onProgress, onSuccess, onError }) => {
-      uploadAttachment(ticket.id, file as File, {
-        onProgress: (evt) => {
-          setUploadPercent(evt.percent);
-          onProgress?.(evt);
-        },
-        onSuccess: () => {
-          setUploadPercent(0);
-          message.success('Uploaded');
-          onSuccess?.({});
-        },
-        onError: (err) => {
-          setUploadPercent(0);
-          message.error('Upload failed');
-          onError?.(err);
-        },
-      });
+    customRequest: async ({ file, onProgress, onSuccess, onError }) => {
+      try {
+        await uploadAttachment(ticket.id, file as File, {
+          onProgress: (evt) => {
+            setUploadPercent(evt.percent);
+            onProgress?.(evt);
+          },
+        });
+        message.success('Uploaded');
+        onSuccess?.({});
+      } catch (err) {
+        message.error('Upload failed');
+        onError?.(err as Error);
+      } finally {
+        setUploadPercent(0);
+      }
     },
   };
 
