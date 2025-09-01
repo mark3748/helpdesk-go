@@ -12,9 +12,9 @@ import {
   Typography,
   message,
   Upload,
-  UploadProps,
   Progress,
 } from 'antd';
+import type { UploadProps } from 'antd';
 
 export default function TicketWorkspace() {
   const [tabs, setTabs] = useState<Ticket[]>([]);
