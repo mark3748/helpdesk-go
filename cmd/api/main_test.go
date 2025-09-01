@@ -6,7 +6,11 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestHealthz(t *testing.T) {
@@ -99,4 +103,68 @@ func TestEnqueueEmail_InfinityError(t *testing.T) {
 
 	// This should not panic and should handle the marshal error gracefully
 	app.enqueueEmail(ctx, "test@example.com", "test_template", unmarshalableData)
+}
+
+type recordDB struct {
+	sql  string
+	args []any
+}
+
+func (db *recordDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	db.sql = sql
+	db.args = args
+	return &fakeRows{}, nil
+}
+
+func (db *recordDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return nil
+}
+
+func (db *recordDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func TestListTickets_FilteringAndSearch(t *testing.T) {
+	db := &recordDB{}
+	cfg := Config{Env: "test", TestBypassAuth: true}
+	app := NewApp(cfg, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/tickets?status=open&priority=2&team=team1&assignee=user1&search=foo+bar", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(db.sql, "t.status = $1") || !strings.Contains(db.sql, "t.priority = $2") ||
+		!strings.Contains(db.sql, "t.team_id = $3") || !strings.Contains(db.sql, "t.assignee_id = $4") ||
+		!strings.Contains(db.sql, "to_tsquery('english', $5)") {
+		t.Fatalf("unexpected sql: %s", db.sql)
+	}
+	if len(db.args) != 5 {
+		t.Fatalf("expected 5 args, got %d", len(db.args))
+	}
+	if db.args[0] != "open" || db.args[1] != 2 || db.args[2] != "team1" || db.args[3] != "user1" || db.args[4] != "foo & bar" {
+		t.Fatalf("unexpected args: %#v", db.args)
+	}
+}
+
+func TestListTickets_SearchOnly(t *testing.T) {
+	db := &recordDB{}
+	cfg := Config{Env: "test", TestBypassAuth: true}
+	app := NewApp(cfg, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/tickets?search=hello+world", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(db.sql, "to_tsquery('english', $1)") {
+		t.Fatalf("expected to_tsquery in sql: %s", db.sql)
+	}
+	if len(db.args) != 1 || db.args[0] != "hello & world" {
+		t.Fatalf("unexpected args: %#v", db.args)
+	}
 }
