@@ -7,8 +7,9 @@ dist/
 *.dylib
 
 # Go
-# Track root go.sum for the mono‑module layout
-go.sum
+# Ignore all nested go.sum files but keep the root one tracked
+**/go.sum
+!go.sum
 **/.idea/
 **/.vscode/
 **/.DS_Store
