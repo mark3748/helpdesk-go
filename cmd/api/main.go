@@ -234,6 +234,7 @@ func (a *App) routes() {
 	auth.POST("/tickets", a.createTicket)
 	auth.GET("/tickets/:id", a.getTicket)
 	auth.PATCH("/tickets/:id", a.requireRole("agent"), a.updateTicket)
+	auth.GET("/tickets/:id/comments", a.listComments)
 	auth.POST("/tickets/:id/comments", a.addComment)
 	auth.GET("/tickets/:id/attachments", a.listAttachments)
 	auth.POST("/tickets/:id/attachments", a.uploadAttachment)
@@ -388,6 +389,15 @@ type SLAStatus struct {
 	ResolutionTargetMins int     `json:"resolution_target_mins"`
 	Paused               bool    `json:"paused"`
 	Reason               *string `json:"reason,omitempty"`
+}
+
+type Comment struct {
+	ID         string    `json:"id"`
+	TicketID   string    `json:"ticket_id"`
+	AuthorID   string    `json:"author_id"`
+	BodyMD     string    `json:"body_md"`
+	IsInternal bool      `json:"is_internal"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // ===== Handlers =====
@@ -718,6 +728,36 @@ type commentReq struct {
 	BodyMD     string `json:"body_md" binding:"required"`
 	IsInternal bool   `json:"is_internal"`
 	AuthorID   string `json:"author_id" binding:"required"`
+}
+
+func (a *App) listComments(c *gin.Context) {
+	id := c.Param("id")
+	ctx := c.Request.Context()
+	rows, err := a.db.Query(ctx, `
+       select id, ticket_id, author_id, body_md, is_internal, created_at
+       from ticket_comments
+       where ticket_id=$1 and is_internal=false
+       order by created_at
+    `, id)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	var cs []Comment
+	for rows.Next() {
+		var cm Comment
+		if err := rows.Scan(&cm.ID, &cm.TicketID, &cm.AuthorID, &cm.BodyMD, &cm.IsInternal, &cm.CreatedAt); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		cs = append(cs, cm)
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, cs)
 }
 
 func (a *App) addComment(c *gin.Context) {
