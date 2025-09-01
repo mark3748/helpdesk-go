@@ -430,9 +430,13 @@ func (a *App) listTickets(c *gin.Context) {
 		i++
 	}
 	if v := strings.TrimSpace(c.Query("search")); v != "" {
-		where = append(where, fmt.Sprintf("to_tsvector('english', coalesce(t.title,'') || ' ' || coalesce(t.description,'')) @@ websearch_to_tsquery('english', $%d)", i))
-		args = append(args, v)
-		i++
+		terms := strings.Fields(v)
+		if len(terms) > 0 {
+			q := strings.Join(terms, " & ")
+			where = append(where, fmt.Sprintf("to_tsvector('english', coalesce(t.title,'') || ' ' || coalesce(t.description,'')) @@ to_tsquery('english', $%d)", i))
+			args = append(args, q)
+			i++
+		}
 	}
 
 	if len(where) > 0 {
