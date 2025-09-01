@@ -201,7 +201,7 @@
 - `POST /search` (advanced)
 - `GET /me` | `GET /teams` | `GET /slas` | `GET /kb?query`
 - `POST /exports/tickets` (CSV async → download URL)
-- `POST /csat/{token}` (public)
+- `GET /csat/{token}` (public)
 - `POST /webhooks/email-inbound` (if using SMTP hook)
 
 **WebSockets:** presence, ticket updates, queue counters, typing, notifications.
