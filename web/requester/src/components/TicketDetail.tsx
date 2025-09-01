@@ -21,10 +21,18 @@ export default function TicketDetail() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (id) {
-      await addComment(id, body, auth.user?.access_token || '');
+    if (id && auth.user) {
+      await addComment(
+        id,
+        {
+          body_md: body,
+          author_id: auth.user.profile.sub || '',
+          is_internal: false,
+        },
+        auth.user.access_token,
+      );
       setBody('');
-      const c = await listComments(id, auth.user?.access_token || '');
+      const c = await listComments(id, auth.user.access_token);
       setComments(c);
     }
   }
