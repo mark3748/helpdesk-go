@@ -123,7 +123,11 @@ export default function TicketDetail() {
       <List
         header="Comments"
         dataSource={comments.data || []}
-        renderItem={(c: any) => <List.Item key={String(c.id)}>{String(c.body)}</List.Item>}
+        renderItem={(c: any) => (
+          <List.Item key={String(c.id)}>
+            {String(c.body_md || c.body || '')}
+          </List.Item>
+        )}
         style={{ marginTop: 16 }}
       />
 
