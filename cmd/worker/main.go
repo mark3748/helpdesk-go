@@ -24,6 +24,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 	"github.com/mark3748/helpdesk-go/internal/sla"
 )
 
@@ -221,7 +222,7 @@ func main() {
 	if c.IMAPHost != "" {
 		go func() {
 			for {
-				if err := pollIMAP(ctx, c, db, mc); err != nil {
+				if err := pollIMAP(ctx, c, db, mc, rdb); err != nil {
 					log.Error().Err(err).Msg("poll imap")
 				}
 				time.Sleep(time.Minute)
@@ -249,6 +250,8 @@ func main() {
 		if len(res) < 2 {
 			continue
 		}
+		size, _ := rdb.LLen(ctx, "jobs").Result()
+		handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
 		var job Job
 		if err := json.Unmarshal([]byte(res[1]), &job); err != nil {
 			log.Error().Err(err).Msg("unmarshal job")

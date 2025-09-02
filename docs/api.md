@@ -61,6 +61,10 @@ Metrics (agent role)
 - GET `/metrics/resolution` → 200 `{ avg_resolution_ms }` | 500
 - GET `/metrics/tickets` → 200 `{ daily: [{ day, count }] }` | 500
 
+Events
+- GET `/events` (SSE) → stream of `ticket_created`, `ticket_updated`, `queue_changed`
+  - `queue_changed` requires `admin` role
+
 ## Models
 
 Ticket
