@@ -17,7 +17,6 @@ const items: Item[] = [
   { key: 'tickets', label: 'Tickets', path: '/tickets', roles: ['agent', 'admin'] },
   { key: 'manager', label: 'Manager', path: '/manager', roles: ['manager'] },
   // Expose individual settings pages for clearer navigation
-  { key: 'settings', label: 'Mail Settings', path: '/settings', roles: ['admin'] },
   { key: 'settings-oidc', label: 'OIDC Settings', path: '/settings/oidc', roles: ['admin'] },
   { key: 'settings-storage', label: 'Storage Settings', path: '/settings/storage', roles: ['admin'] },
 ];

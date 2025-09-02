@@ -171,6 +171,17 @@ Compose-based UI:
 - Postgres connection/migrations: ensure `DATABASE_URL` is correct and the DB is reachable. Migrations auto-run at startup; logs will show goose errors if any.
 - Redis unavailable: the API/worker log a ping error but continue; features that enqueue/process jobs may be no-ops until Redis is up.
 - Attachments/uploads: configure either MinIO (`MINIO_*`) or a local path via `FILESTORE_PATH`. Permission issues on `FILESTORE_PATH` can cause 500s.
+- Compose data dir permissions (uploads 500): the API image runs as a nonroot user (UID 65532). If `./data` is owned by `root:root`, the API can’t write and uploads will 500. Fix by aligning ownership:
+  ```bash
+  mkdir -p data
+  sudo chown -R 65532:65532 data
+  sudo chmod -R u+rwX data
+  ```
+  Dev-only quick fix:
+  ```bash
+  chmod -R 777 data
+  ```
+  Ephemeral alternative: set `FILESTORE_PATH=/tmp/files` for the `api` service and remove the `./data:/data` volume (attachments won’t persist across restarts). On SELinux, keep the `:Z` label on bind mounts.
 - Exports URL: ticket export uploads require an object store. With MinIO configured, the response includes a URL. With filesystem store, a public URL is not generated.
 - Auth errors: for OIDC, set `OIDC_JWKS_URL` (and `OIDC_ISSUER` if enforcing issuer). For local auth, set `AUTH_LOCAL_SECRET` and optionally `ADMIN_PASSWORD`.
 - Port conflicts: default ports are 8080 (API), 5173 (Agent UI), 5432 (Postgres), 6379 (Redis). Adjust `ADDR` or container port mappings as needed.
