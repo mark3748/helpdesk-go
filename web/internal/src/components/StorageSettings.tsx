@@ -1,10 +1,17 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Form, Input, Button, message } from 'antd';
 import { useSettings } from '../api';
 import { apiFetch } from '../../shared/api';
 
 export default function StorageSettings() {
+  const [form] = Form.useForm();
   const { data } = useSettings();
+
+  useEffect(() => {
+    if ((data as any)?.storage) {
+      form.setFieldsValue((data as any).storage);
+    }
+  }, [data, form]);
 
   const onFinish = async (values: any) => {
     await apiFetch('/settings/storage', {
@@ -16,7 +23,7 @@ export default function StorageSettings() {
   };
 
   return (
-    <Form layout="vertical" onFinish={onFinish} initialValues={(data as any)?.storage}>
+    <Form form={form} layout="vertical" onFinish={onFinish}>
       <Form.Item label="Endpoint" name="endpoint">
         <Input />
       </Form.Item>

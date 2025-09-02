@@ -1,10 +1,17 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Form, Input, Button, message } from 'antd';
 import { useSettings } from '../api';
 import { apiFetch } from '../../shared/api';
 
 export default function OIDCSettings() {
+  const [form] = Form.useForm();
   const { data } = useSettings();
+
+  useEffect(() => {
+    if ((data as any)?.oidc) {
+      form.setFieldsValue((data as any).oidc);
+    }
+  }, [data, form]);
 
   const onFinish = async (values: any) => {
     await apiFetch('/settings/oidc', {
@@ -16,7 +23,7 @@ export default function OIDCSettings() {
   };
 
   return (
-    <Form layout="vertical" onFinish={onFinish} initialValues={(data as any)?.oidc}>
+    <Form form={form} layout="vertical" onFinish={onFinish}>
       <Form.Item label="Issuer" name="issuer">
         <Input />
       </Form.Item>
