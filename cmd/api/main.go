@@ -576,9 +576,9 @@ func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
 	if err := db.QueryRow(ctx, "insert into users (id, username, email, display_name, password_hash) values (gen_random_uuid(), 'admin', 'admin@example.com', 'Admin', $1) returning id", string(hash)).Scan(&uid); err != nil {
 		return err
 	}
-	// Grant agent role
+	// Grant admin and agent roles
 	_, _ = db.Exec(ctx, `insert into user_roles (user_id, role_id)
-      select $1, r.id from roles r where r.name='agent' on conflict do nothing`, uid)
+select $1, r.id from roles r where r.name in ('agent','admin') on conflict do nothing`, uid)
 	log.Info().Str("username", "admin").Msg("seeded local admin user (dev)")
 	return nil
 }
