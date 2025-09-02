@@ -609,9 +609,9 @@ func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
 	if err := db.QueryRow(ctx, "insert into users (id, username, email, display_name, password_hash) values (gen_random_uuid(), 'admin', 'admin@example.com', 'Admin', $1) returning id", string(hash)).Scan(&uid); err != nil {
 		return err
 	}
-	// Grant admin and agent roles
-	_, _ = db.Exec(ctx, `insert into user_roles (user_id, role_id)
-select $1, r.id from roles r where r.name in ('agent','admin') on conflict do nothing`, uid)
+    // Grant all roles to built-in admin (super user)
+    _, _ = db.Exec(ctx, `insert into user_roles (user_id, role_id)
+select $1, r.id from roles r on conflict do nothing`, uid)
 	log.Info().Str("username", "admin").Msg("seeded local admin user (dev)")
 	return nil
 }
@@ -669,23 +669,30 @@ func (a *App) logout(c *gin.Context) {
 }
 
 func (a *App) requireRole(roles ...string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		u, ok := c.Get("user")
-		if !ok {
-			c.AbortWithStatusJSON(401, gin.H{"error": "unauthenticated"})
-			return
-		}
-		user := u.(AuthUser)
-		for _, r := range user.Roles {
-			for _, want := range roles {
-				if r == want {
-					c.Next()
-					return
-				}
-			}
-		}
-		c.AbortWithStatusJSON(403, gin.H{"error": "forbidden"})
-	}
+    return func(c *gin.Context) {
+        u, ok := c.Get("user")
+        if !ok {
+            c.AbortWithStatusJSON(401, gin.H{"error": "unauthenticated"})
+            return
+        }
+        user := u.(AuthUser)
+        // Treat 'admin' as a super-user that can access any route.
+        for _, r := range user.Roles {
+            if r == "admin" {
+                c.Next()
+                return
+            }
+        }
+        for _, r := range user.Roles {
+            for _, want := range roles {
+                if r == want {
+                    c.Next()
+                    return
+                }
+            }
+        }
+        c.AbortWithStatusJSON(403, gin.H{"error": "forbidden"})
+    }
 }
 
 func (a *App) me(c *gin.Context) {

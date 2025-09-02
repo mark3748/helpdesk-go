@@ -1,0 +1,3 @@
+./json.go
+./registry.go
+./stdlib.go
