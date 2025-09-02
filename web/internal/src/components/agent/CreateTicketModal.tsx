@@ -1,7 +1,7 @@
 import { Modal, Form, Input, Select, message } from 'antd';
 import { useMutation } from '@tanstack/react-query';
-import { createTicket } from '../../../../shared/api';
-import { useMe } from '../../../../shared/auth';
+import { createTicket } from '../../shared/api';
+import { useMe } from '../../shared/auth';
 
 interface Props {
   open: boolean;

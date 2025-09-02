@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Form, Input, Button, message } from 'antd';
 import { useSettings, useTestConnection } from '../../api';
-import { apiFetch } from '../../../../shared/api';
+import { apiFetch } from '../../shared/api';
 
 export default function StorageSettings() {
   const [form] = Form.useForm();
