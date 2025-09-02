@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/minio/minio-go/v7"
@@ -78,6 +79,31 @@ func TestMe_NoBypass_NoJWKS(t *testing.T) {
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 due to missing JWKS, got %d", rr.Code)
 	}
+}
+
+func TestRequireRoleMultiple(t *testing.T) {
+	app := NewApp(Config{Env: "test"}, nil, nil, nil, nil)
+	handler := app.requireRole("agent", "manager")
+
+	t.Run("allowed role", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set("user", AuthUser{Roles: []string{"manager"}})
+		handler(c)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+	})
+
+	t.Run("forbidden role", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set("user", AuthUser{Roles: []string{"user"}})
+		handler(c)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", w.Code)
+		}
+	})
 }
 func TestEnqueueEmail_JSONMarshalError(t *testing.T) {
 	// Create a minimal app instance without Redis (enqueueEmail will return early if q is nil)

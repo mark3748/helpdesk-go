@@ -49,6 +49,17 @@ export async function updateTicketStatus(
   });
 }
 
+export async function updateTicket(
+  id: string,
+  data: { assignee_id?: string | null; priority?: number },
+): Promise<void> {
+  await apiFetch(`/tickets/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
 export async function fetchComments(ticketId: string): Promise<Comment[]> {
   try {
     return await apiFetch<Comment[]>(`/tickets/${ticketId}/comments`);

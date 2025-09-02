@@ -7,6 +7,7 @@ import TicketDetail from './components/agent/TicketDetail';
 import MailSettings from './components/admin/MailSettings';
 import OIDCSettings from './components/admin/OIDCSettings';
 import StorageSettings from './components/admin/StorageSettings';
+import QueueManager from './components/manager/QueueManager';
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,9 @@ export default function App() {
               <Route path="/settings" element={<MailSettings />} />
               <Route path="/settings/oidc" element={<OIDCSettings />} />
               <Route path="/settings/storage" element={<StorageSettings />} />
+            </Route>
+            <Route element={<RequireRole role="manager" />}>
+              <Route path="/manager" element={<QueueManager />} />
             </Route>
           </Route>
         </Routes>
