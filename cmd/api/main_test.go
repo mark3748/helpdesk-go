@@ -12,6 +12,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 func TestHealthz(t *testing.T) {
@@ -272,5 +274,56 @@ func TestListTickets(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+type attachmentDB struct{}
+
+func (db *attachmentDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
+
+func (db *attachmentDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return &fakeRow{scan: func(dest ...any) error {
+		if p, ok := dest[0].(*string); ok {
+			*p = "obj123"
+		}
+		if p, ok := dest[1].(*string); ok {
+			*p = "file.txt"
+		}
+		if p, ok := dest[2].(**string); ok {
+			*p = nil
+		}
+		return nil
+	}}
+}
+
+func (db *attachmentDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func TestGetAttachment_MinIOPresign(t *testing.T) {
+	db := &attachmentDB{}
+	mc, err := minio.New("localhost:9000", &minio.Options{
+		Creds:  credentials.NewStaticV4("id", "secret", ""),
+		Secure: false,
+		Region: "us-east-1",
+	})
+	if err != nil {
+		t.Fatalf("minio new: %v", err)
+	}
+	cfg := Config{Env: "test", MinIOEndpoint: "localhost:9000", MinIOBucket: "bucket", TestBypassAuth: true}
+	app := NewApp(cfg, db, nil, mc, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/1", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", rr.Code)
+	}
+	loc := rr.Header().Get("Location")
+	if !strings.Contains(loc, "X-Amz-Signature") {
+		t.Fatalf("expected presigned URL, got %s", loc)
 	}
 }
