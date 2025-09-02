@@ -3,6 +3,28 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
+# Internal frontend (optional)
+frontendInternal:
+  enabled: true
+  image:
+    repository: your-registry/helpdesk-internal-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+
+# Requester frontend (optional, separate ingress)
+frontendRequester:
+  enabled: false
+  image:
+    repository: your-registry/helpdesk-requester-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+
 workerImage:
   repository: your-registry/helpdesk-worker
   tag: latest
@@ -17,6 +39,22 @@ ingress:
   className: nginx
   hosts:
     - host: helpdesk.local
+      paths:
+        - path: /
+          pathType: Prefix
+        - path: /api
+          pathType: Prefix
+        - path: /swagger
+          pathType: Prefix
+  tls: []
+
+# Separate ingress for requester portal (optional)
+ingressRequester:
+  enabled: false
+  className: nginx
+  apiProxy: true
+  hosts:
+    - host: requester.helpdesk.local
       paths:
         - path: /
           pathType: Prefix

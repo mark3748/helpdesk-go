@@ -6,19 +6,37 @@ import type { ReactNode } from 'react';
 
 const { Sider, Content, Header } = Layout;
 
-interface Item {
-  key: string;
-  label: string;
-  path: string;
-  roles?: string[];
-}
+type Role = 'agent' | 'manager' | 'admin';
+type NavChild = { key: string; label: string; path: string };
+type NavGroup = { key: string; label: string; role: Role; children: NavChild[] };
 
-const items: Item[] = [
-  { key: 'tickets', label: 'Tickets', path: '/tickets', roles: ['agent', 'admin'] },
-  { key: 'manager', label: 'Manager', path: '/manager', roles: ['manager'] },
-  // Expose individual settings pages for clearer navigation
-  { key: 'settings-oidc', label: 'OIDC Settings', path: '/settings/oidc', roles: ['admin'] },
-  { key: 'settings-storage', label: 'Storage Settings', path: '/settings/storage', roles: ['admin'] },
+const groups: NavGroup[] = [
+  {
+    key: 'group-agent',
+    label: 'Agent',
+    role: 'agent',
+    children: [
+      { key: 'tickets', label: 'Tickets', path: '/tickets' },
+    ],
+  },
+  {
+    key: 'group-manager',
+    label: 'Manager',
+    role: 'manager',
+    children: [
+      { key: 'manager', label: 'Queue Manager', path: '/manager' },
+    ],
+  },
+  {
+    key: 'group-admin',
+    label: 'Admin',
+    role: 'admin',
+    children: [
+      { key: 'settings', label: 'Mail Settings', path: '/settings' },
+      { key: 'settings-oidc', label: 'OIDC Settings', path: '/settings/oidc' },
+      { key: 'settings-storage', label: 'Storage Settings', path: '/settings/storage' },
+    ],
+  },
 ];
 
 export function SidebarLayout({ children }: { children?: ReactNode }) {
@@ -26,15 +44,23 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
   const loc = useLocation();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const menuItems = items
-    .filter((i) => !i.roles || i.roles.some((r) => me?.roles?.includes(r)))
-    .map((i) => ({ key: i.key, label: <Link to={i.path}>{i.label}</Link> }));
+  const roles = me?.roles || [];
+  const isSuper = roles.includes('admin');
+  const visibleGroups = groups.filter((g) => isSuper || roles.includes(g.role));
+  const menuItems = visibleGroups.map((g) => ({
+    key: g.key,
+    label: g.label,
+    children: g.children.map((c) => ({ key: c.key, label: <Link to={c.path}>{c.label}</Link> })),
+  }));
 
   const parts = loc.pathname.split('/').filter(Boolean);
   // Prefer a more specific key when on sub-pages under /settings
   const selected = parts.length > 1 && parts[0] === 'settings'
     ? `settings-${parts[1]}`
     : (parts[0] || 'tickets');
+  const defaultOpenKeys = visibleGroups
+    .filter((g) => g.children.some((c) => c.key === selected))
+    .map((g) => g.key);
 
   async function doLogout() {
     try {
@@ -54,7 +80,7 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider>
-        <Menu theme="dark" selectedKeys={[selected]} items={menuItems} />
+        <Menu theme="dark" selectedKeys={[selected]} defaultOpenKeys={defaultOpenKeys} items={menuItems} />
       </Sider>
       <Layout>
         <Header style={{ background: '#fff', padding: '0 16px', display: 'flex', alignItems: 'center', borderBottom: '1px solid #f0f0f0' }}>

@@ -1,0 +1,12 @@
+./clickhouse.go
+./dsql.go
+./mysql.go
+./postgres.go
+./redshift.go
+./sqlite3.go
+./sqlserver.go
+./starrocks.go
+./tidb.go
+./turso.go
+./vertica.go
+./ydb.go
