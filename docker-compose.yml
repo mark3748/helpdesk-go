@@ -51,7 +51,7 @@ services:
       - ./data:/data:Z
 
   web:
-    image: node:20
+    image: node:22
     working_dir: /app
     environment:
       VITE_API_TARGET: "http://api:8080"
