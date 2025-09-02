@@ -75,7 +75,7 @@ func cfg() Config {
 		MinIOSecret:   getEnv("MINIO_SECRET_KEY", ""),
 		MinIOBucket:   getEnv("MINIO_BUCKET", ""),
 		MinIOUseSSL:   getEnv("MINIO_USE_SSL", "false") == "true",
-		LogPath:       getEnv("LOG_PATH", "/data/logs"),
+		LogPath:       getEnv("LOG_PATH", os.TempDir()),
 	}
 }
 
@@ -173,18 +173,25 @@ func sendEmail(c Config, j EmailJob) error {
 
 func main() {
 	c := cfg()
-	if err := os.MkdirAll(c.LogPath, 0o755); err != nil {
-		log.Fatal().Err(err).Msg("create log dir")
-	}
-	logFile := filepath.Join(c.LogPath, "worker.log")
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		log.Fatal().Err(err).Msg("open log file")
-	}
-	defer f.Close()
-	var writer io.Writer = f
+	writer := io.Writer(os.Stdout)
 	if c.Env == "dev" {
-		writer = zerolog.MultiLevelWriter(f, zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
+		writer = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
+	}
+	if err := os.MkdirAll(c.LogPath, 0o755); err != nil {
+		log.Warn().Err(err).Str("dir", c.LogPath).Msg("using stdout for logs")
+	} else {
+		logFile := filepath.Join(c.LogPath, "worker.log")
+		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			log.Warn().Err(err).Str("path", logFile).Msg("using stdout for logs")
+		} else {
+			if c.Env == "dev" {
+				writer = zerolog.MultiLevelWriter(f, writer)
+			} else {
+				writer = f
+			}
+			defer f.Close()
+		}
 	}
 	log.Logger = zerolog.New(writer).With().Timestamp().Logger()
 	ctx := context.Background()
