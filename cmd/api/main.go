@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -92,6 +93,7 @@ type Config struct {
 	// Filesystem object store for dev/local
 	FileStorePath   string
 	OpenAPISpecPath string
+	LogPath         string
 }
 
 func getConfig() Config {
@@ -114,6 +116,7 @@ func getConfig() Config {
 		AuthLocalSecret: getEnv("AUTH_LOCAL_SECRET", ""),
 		FileStorePath:   getEnv("FILESTORE_PATH", ""),
 		OpenAPISpecPath: getEnv("OPENAPI_SPEC_PATH", ""),
+		LogPath:         getEnv("LOG_PATH", "/data/logs"),
 	}
 	return cfg
 }
@@ -200,12 +203,23 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 
 func main() {
 	cfg := getConfig()
+	if err := os.MkdirAll(cfg.LogPath, 0o755); err != nil {
+		log.Fatal().Err(err).Msg("create log dir")
+	}
+	logFile := filepath.Join(cfg.LogPath, "api.log")
+	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		log.Fatal().Err(err).Msg("open log file")
+	}
+	defer f.Close()
+	var writer io.Writer = f
 	if cfg.Env == "dev" {
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
+		writer = zerolog.MultiLevelWriter(f, zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
 		gin.SetMode(gin.DebugMode)
 	} else {
 		gin.SetMode(gin.ReleaseMode)
 	}
+	log.Logger = zerolog.New(writer).With().Timestamp().Logger()
 
 	// DB connect
 	ctx := context.Background()
@@ -348,6 +362,8 @@ func (a *App) routes() {
 	auth.Use(a.authMiddleware())
 	auth.GET("/me", a.me)
 
+	auth.POST("/test-connection", a.requireRole("admin"), a.testConnection)
+
 	auth.GET("/users/:id/roles", a.requireRole("admin"), a.listUserRoles)
 	auth.POST("/users/:id/roles", a.requireRole("admin"), a.addUserRole)
 	auth.DELETE("/users/:id/roles/:role", a.requireRole("admin"), a.removeUserRole)
@@ -370,6 +386,11 @@ func (a *App) routes() {
 	auth.GET("/metrics/resolution", a.requireRole("agent"), a.metricsResolution)
 	auth.GET("/metrics/tickets", a.requireRole("agent"), a.metricsTicketVolume)
 	auth.POST("/exports/tickets", a.requireRole("agent"), a.exportTickets)
+}
+
+func (a *App) testConnection(c *gin.Context) {
+	log.Info().Msg("test connection")
+	c.JSON(http.StatusOK, gin.H{"ok": true, "log_path": a.cfg.LogPath})
 }
 
 func (a *App) docsUI(c *gin.Context) {

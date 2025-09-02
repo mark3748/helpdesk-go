@@ -123,12 +123,14 @@ API (cmd/api):
 - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`: S3/MinIO settings.
 - `TEST_BYPASS_AUTH`: set `true` in tests to bypass JWT and inject a test user.
 - `OPENAPI_SPEC_PATH`: optional path to the OpenAPI spec for serving `/openapi.yaml` in local dev (default packaged in Docker at `/opt/helpdesk/docs/openapi.yaml`).
+- `LOG_PATH`: directory for API log output (default `/data/logs`).
 
 Worker (cmd/worker):
 - `DATABASE_URL`, `REDIS_ADDR`, `ENV`.
 - SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
 - IMAP (optional): `IMAP_HOST`, `IMAP_USER`, `IMAP_PASS`, `IMAP_FOLDER`.
 - MinIO/S3: `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`.
+- `LOG_PATH`: directory for worker log output (default `/data/logs`).
 
 Web – Agent (web/agent):
 - `VITE_API_TARGET`: API origin for dev proxy (defaults to `http://localhost:8080`).
