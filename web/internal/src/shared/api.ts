@@ -1,4 +1,4 @@
-import type { paths, components } from '../types/openapi';
+import type { Ticket, Comment, Attachment } from '../types/api';
 
 const API_BASE = '/api';
 
@@ -12,13 +12,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return (await res.json()) as T;
 }
 
-export type Ticket =
-  paths['/tickets']['get']['responses']['200']['content']['application/json'][number];
-
-export type Comment =
-  paths['/tickets/{id}/comments']['get']['responses']['200']['content']['application/json'][number];
-
-export type Attachment = components['schemas']['Attachment'];
+export type { Ticket, Comment, Attachment };
 
 export async function createTicket(data: {
   title: string;
@@ -156,4 +150,3 @@ export async function downloadAttachment(
   a.remove();
   URL.revokeObjectURL(url);
 }
-
