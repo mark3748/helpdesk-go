@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { List } from 'antd';
-import { useTickets, subscribeEvents, AppEvent } from '../api';
+import { useTickets, subscribeEvents } from '../api';
+import type { AppEvent } from '../api';
 
 export default function TicketList() {
   const [connected, setConnected] = useState(true);

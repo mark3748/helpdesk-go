@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import process from 'node:process'
 
 // Dev server with API proxy. Target can be overridden via VITE_API_TARGET.
 const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:8080'

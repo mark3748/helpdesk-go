@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useTicket, subscribeEvents, AppEvent } from '../api';
+import { useTicket, subscribeEvents } from '../api';
+import type { AppEvent } from '../api';
 
 interface Props {
   id: string;
