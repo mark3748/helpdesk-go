@@ -70,6 +70,26 @@ services:
     ports:
       - "5173:5173"
 
+  internal:
+    image: node:22
+    working_dir: /app
+    environment:
+      VITE_API_TARGET: "http://api:8080"
+      # Speeds up installs in CI/containers
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_AUDIT: "false"
+      # Work around npm ERR_INVALID_ARG_TYPE when HOME/cache resolve null in some environments
+      HOME: "/root"
+      NPM_CONFIG_CACHE: "/root/.npm"
+    volumes:
+      - ./web/internal:/app:Z
+    command: sh -lc "node -v && npm -v && npm install --no-fund --no-audit && npm run dev -- --host 0.0.0.0 --port 5175"
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "5175:5175"
+
   worker:
     build:
       context: .
