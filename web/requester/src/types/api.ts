@@ -3,6 +3,12 @@ export interface Ticket {
   number?: string | number;
   title?: string;
   status?: string;
+  description?: string;
+  category?: string;
+  subcategory?: string;
+  priority?: number;
+  urgency?: number;
+  requester_id?: string;
 }
 
 export interface Comment {
@@ -17,4 +23,3 @@ export interface Attachment {
   bytes?: number;
   content_type?: string;
 }
-

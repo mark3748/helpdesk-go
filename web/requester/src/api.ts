@@ -35,9 +35,9 @@ export async function listComments(id: string, token: string): Promise<Comment[]
   return apiFetch<Comment[]>(`/tickets/${id}/comments`, {}, token);
 }
 
-export async function addComment(id: string, content: string, token: string): Promise<{ id: string }> {
+export async function addComment(id: string | number, content: string, token: string): Promise<{ id: string }> {
   const body = { body_md: content, is_internal: false } as any;
-  return apiFetch<{ id: string }>(`/tickets/${id}/comments`, {
+  return apiFetch<{ id: string }>(`/tickets/${String(id)}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -48,12 +48,12 @@ export async function listAttachments(id: string, token: string): Promise<Attach
   return apiFetch<Attachment[]>(`/tickets/${id}/attachments`, {}, token);
 }
 
-export async function deleteAttachment(id: string, attID: string, token: string): Promise<void> {
-  await apiFetch(`/tickets/${id}/attachments/${attID}`, { method: 'DELETE' }, token);
+export async function deleteAttachment(id: string | number, attID: string | number, token: string): Promise<void> {
+  await apiFetch(`/tickets/${String(id)}/attachments/${String(attID)}`, { method: 'DELETE' }, token);
 }
 
-export async function downloadAttachment(id: string, attID: string, token: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/tickets/${id}/attachments/${attID}`, {
+export async function downloadAttachment(id: string | number, attID: string | number, token: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/tickets/${String(id)}/attachments/${String(attID)}`, {
     headers: { Authorization: `Bearer ${token}` },
     redirect: 'follow',
   });
@@ -78,7 +78,7 @@ export interface UploadOptions {
 }
 
 export function uploadAttachment(
-  id: string,
+  id: string | number,
   file: File,
   token: string,
   opts: UploadOptions = {},
@@ -88,7 +88,7 @@ export function uploadAttachment(
     form.append('file', file);
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API_BASE}/tickets/${id}/attachments`);
+    xhr.open('POST', `${API_BASE}/tickets/${String(id)}/attachments`);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
     xhr.upload.onprogress = (e) => {
