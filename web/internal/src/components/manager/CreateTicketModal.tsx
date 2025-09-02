@@ -1,6 +1,6 @@
 import { Modal, Form, Input, Select, message } from 'antd';
 import { useMutation } from '@tanstack/react-query';
-import { createTicket } from '../../../../shared/api';
+import { createTicket } from '../../shared/api';
 
 interface Props {
   open: boolean;
@@ -76,4 +76,3 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
     </Modal>
   );
 }
-
