@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "helpdesk.fullname" . }}-api
+  name: {{ include "helpdesk.fullname" . }}
   annotations:
     kubernetes.io/ingress.class: {{ .Values.ingress.className }}
 spec:
@@ -11,14 +11,27 @@ spec:
     - host: {{ .host }}
       http:
         paths:
+          {{- $root := $ }}
           {{- range .paths }}
           - path: {{ .path }}
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "helpdesk.fullname" $ }}-api
+                {{- if $root.Values.frontendInternal.enabled }}
+                {{- if or (regexMatch "^/api($|/)" .path) (regexMatch "^/swagger" .path) }}
+                name: {{ include "helpdesk.fullname" $root }}-api
                 port:
                   name: http
+                {{- else }}
+                name: {{ include "helpdesk.fullname" $root }}-frontend-internal
+                port:
+                  name: http
+                {{- end }}
+                {{- else }}
+                name: {{ include "helpdesk.fullname" $root }}-api
+                port:
+                  name: http
+                {{- end }}
           {{- end }}
     {{- end }}
   {{- if .Values.ingress.tls }}

@@ -50,8 +50,8 @@ services:
     volumes:
       - ./data:/data:Z
 
-  web:
-    image: node:20
+  internal:
+    image: node:22
     working_dir: /app
     environment:
       VITE_API_TARGET: "http://api:8080"
@@ -62,13 +62,13 @@ services:
       HOME: "/root"
       NPM_CONFIG_CACHE: "/root/.npm"
     volumes:
-      - ./web/agent:/app:Z
-    command: sh -lc "node -v && npm -v && npm install --no-fund --no-audit && npm run dev -- --host 0.0.0.0 --port 5173"
+      - ./web/internal:/app:Z
+    command: sh -lc "node -v && npm -v && npm install --no-fund --no-audit && npm run dev -- --host 0.0.0.0 --port 5175"
     depends_on:
       api:
         condition: service_started
     ports:
-      - "5173:5173"
+      - "5175:5175"
 
   worker:
     build:

@@ -7,7 +7,7 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
 - Embedded SQL migrations (goose) for Postgres (JSONB custom fields, FTS index, CSAT columns).
 - Redis-driven worker: email notifications (SMTP), SLA clock updates, optional IMAP poller.
 - Object storage: S3-compatible (MinIO) or local filesystem for attachments.
-- Web apps: agent workspace (`web/agent`) and requester portal (`web/requester`).
+- Web apps: internal workspace (`web/internal`) and requester portal (`web/requester`).
 - Dockerfiles for API & Worker and a Helm chart (deployments, service, ingress, config).
 
 ## Quickstart (local, Docker Compose-free)
@@ -99,11 +99,11 @@ GitHub Actions builds the API and worker images, runs tests (`TEST_BYPASS_AUTH=t
   ```bash
   docker compose up -d db redis api worker
   ```
-- Agent UI (optional dev server):
+- Internal UI (dev server):
   ```bash
-  docker compose up web
+  docker compose up internal
   ```
-- Default ports: API `http://localhost:8080`, Agent UI `http://localhost:5173`, Postgres `5432`, Redis `6379`.
+- Default ports: API `http://localhost:8080`, Internal UI `http://localhost:5175`, Postgres `5432`, Redis `6379`.
 - Filesystem attachments are stored under `./data` (mounted to `/data`) when `FILESTORE_PATH` is used.
 - Compose uses `AUTH_MODE=local` for quick start and seeds an admin (set `ADMIN_PASSWORD`).
 
@@ -115,6 +115,7 @@ API (cmd/api):
 - `DATABASE_URL`: Postgres connection string.
 - `REDIS_ADDR`: Redis address (optional but recommended).
 - `OIDC_ISSUER`, `OIDC_JWKS_URL`: OIDC settings for JWT validation.
+- `OIDC_GROUP_CLAIM`: JWT claim name containing group roles (default `groups`).
 - `AUTH_MODE`: `oidc` or `local`.
 - `AUTH_LOCAL_SECRET`: HMAC secret for local auth cookie JWTs.
 - `ADMIN_PASSWORD`: initial admin password in dev local-auth mode.
@@ -122,14 +123,16 @@ API (cmd/api):
 - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`: S3/MinIO settings.
 - `TEST_BYPASS_AUTH`: set `true` in tests to bypass JWT and inject a test user.
 - `OPENAPI_SPEC_PATH`: optional path to the OpenAPI spec for serving `/openapi.yaml` in local dev (default packaged in Docker at `/opt/helpdesk/docs/openapi.yaml`).
+- `LOG_PATH`: directory for API log output (default system temp dir, e.g. `/tmp`). Falls back to stdout if unwritable.
 
 Worker (cmd/worker):
 - `DATABASE_URL`, `REDIS_ADDR`, `ENV`.
 - SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
 - IMAP (optional): `IMAP_HOST`, `IMAP_USER`, `IMAP_PASS`, `IMAP_FOLDER`.
 - MinIO/S3: `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`.
+- `LOG_PATH`: directory for worker log output (default system temp dir, e.g. `/tmp`). Falls back to stdout if unwritable.
 
-Web – Agent (web/agent):
+Web – Internal (web/internal):
 - `VITE_API_TARGET`: API origin for dev proxy (defaults to `http://localhost:8080`).
 
 Web – Requester (web/requester):
@@ -139,15 +142,15 @@ Web – Requester (web/requester):
 
 ## Web Apps
 
-Agent Workspace (React):
+Internal Workspace (React):
 - Dev server:
   ```bash
-  cd web/agent
+  cd web/internal
   npm install
   # optional: point to a non-default API origin
   VITE_API_TARGET=http://localhost:8080 npm run dev
   ```
-  Open `http://localhost:5173`. The dev server proxies `/api` to `VITE_API_TARGET`.
+  Default dev port is `5173`. When using docker-compose, the internal UI runs on `http://localhost:5175`.
 
 Requester Portal (React):
 - Dev server:
@@ -162,12 +165,23 @@ Requester Portal (React):
   See `web/requester/README.md` for details.
 
 Compose-based UI:
-- `docker compose up web` runs the agent dev server in a container with `VITE_API_TARGET` set to the API service.
+- `docker compose up internal` runs the internal dev server in a container with `VITE_API_TARGET` set to the API service.
 
 ## Troubleshooting
 - Postgres connection/migrations: ensure `DATABASE_URL` is correct and the DB is reachable. Migrations auto-run at startup; logs will show goose errors if any.
 - Redis unavailable: the API/worker log a ping error but continue; features that enqueue/process jobs may be no-ops until Redis is up.
 - Attachments/uploads: configure either MinIO (`MINIO_*`) or a local path via `FILESTORE_PATH`. Permission issues on `FILESTORE_PATH` can cause 500s.
+- Compose data dir permissions (uploads 500): the API image runs as a nonroot user (UID 65532). If `./data` is owned by `root:root`, the API can’t write and uploads will 500. Fix by aligning ownership:
+  ```bash
+  mkdir -p data
+  sudo chown -R 65532:65532 data
+  sudo chmod -R u+rwX data
+  ```
+  Dev-only quick fix:
+  ```bash
+  chmod -R 777 data
+  ```
+  Ephemeral alternative: set `FILESTORE_PATH=/tmp/files` for the `api` service and remove the `./data:/data` volume (attachments won’t persist across restarts). On SELinux, keep the `:Z` label on bind mounts.
 - Exports URL: ticket export uploads require an object store. With MinIO configured, the response includes a URL. With filesystem store, a public URL is not generated.
 - Auth errors: for OIDC, set `OIDC_JWKS_URL` (and `OIDC_ISSUER` if enforcing issuer). For local auth, set `AUTH_LOCAL_SECRET` and optionally `ADMIN_PASSWORD`.
-- Port conflicts: default ports are 8080 (API), 5173 (Agent UI), 5432 (Postgres), 6379 (Redis). Adjust `ADDR` or container port mappings as needed.
+- Port conflicts: default ports are 8080 (API), 5173 (Internal UI dev), 5175 (Compose internal UI), 5432 (Postgres), 6379 (Redis). Adjust `ADDR` or container port mappings as needed.
