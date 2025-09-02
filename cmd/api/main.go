@@ -116,7 +116,7 @@ func getConfig() Config {
 		AuthLocalSecret: getEnv("AUTH_LOCAL_SECRET", ""),
 		FileStorePath:   getEnv("FILESTORE_PATH", ""),
 		OpenAPISpecPath: getEnv("OPENAPI_SPEC_PATH", ""),
-		LogPath:         getEnv("LOG_PATH", "/data/logs"),
+		LogPath:         getEnv("LOG_PATH", os.TempDir()),
 	}
 	return cfg
 }
@@ -203,21 +203,28 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 
 func main() {
 	cfg := getConfig()
-	if err := os.MkdirAll(cfg.LogPath, 0o755); err != nil {
-		log.Fatal().Err(err).Msg("create log dir")
-	}
-	logFile := filepath.Join(cfg.LogPath, "api.log")
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		log.Fatal().Err(err).Msg("open log file")
-	}
-	defer f.Close()
-	var writer io.Writer = f
+	writer := io.Writer(os.Stdout)
 	if cfg.Env == "dev" {
-		writer = zerolog.MultiLevelWriter(f, zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
+		writer = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
 		gin.SetMode(gin.DebugMode)
 	} else {
 		gin.SetMode(gin.ReleaseMode)
+	}
+	if err := os.MkdirAll(cfg.LogPath, 0o755); err != nil {
+		log.Warn().Err(err).Str("dir", cfg.LogPath).Msg("using stdout for logs")
+	} else {
+		logFile := filepath.Join(cfg.LogPath, "api.log")
+		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			log.Warn().Err(err).Str("path", logFile).Msg("using stdout for logs")
+		} else {
+			if cfg.Env == "dev" {
+				writer = zerolog.MultiLevelWriter(f, writer)
+			} else {
+				writer = f
+			}
+			defer f.Close()
+		}
 	}
 	log.Logger = zerolog.New(writer).With().Timestamp().Logger()
 
