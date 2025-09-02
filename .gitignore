@@ -16,6 +16,9 @@ dist/
 **/.env
 coverage.out
 
+# Local runtime data (attachments, etc.)
+/data/
+
 # Node (if/when web gets added)
 node_modules/
 .parcel-cache/
