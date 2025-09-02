@@ -1,2 +1,7 @@
-1. Get the application URL by running these commands:
-  echo "http://$(kubectl get ingress {{ include "helpdesk.fullname" . }}-api -o jsonpath='{.spec.rules[0].host}')"
+1. Get the application URL:
+  echo "http://$(kubectl get ingress {{ include "helpdesk.fullname" . }} -o jsonpath='{.spec.rules[0].host}')"
+
+2. Paths:
+  - Frontend (internal UI): /
+  - API: /api
+  - Swagger UI: /swagger

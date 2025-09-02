@@ -1,0 +1,21 @@
+{{- if .Values.frontendInternal.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helpdesk.fullname" . }}-frontend-internal
+  labels:
+    app.kubernetes.io/name: {{ include "helpdesk.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.frontendInternal.service.type }}
+  ports:
+    - port: {{ .Values.frontendInternal.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "helpdesk.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: frontend-internal
+{{- end }}
+
