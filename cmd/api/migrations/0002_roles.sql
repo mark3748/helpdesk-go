@@ -13,7 +13,9 @@ create table if not exists user_roles (
 -- seed roles
 insert into roles (id, name) values
     (gen_random_uuid(), 'agent'),
-    (gen_random_uuid(), 'requester')
+    (gen_random_uuid(), 'requester'),
+    (gen_random_uuid(), 'admin'),
+    (gen_random_uuid(), 'manager')
     on conflict do nothing;
 
 -- seed dev user with agent role
