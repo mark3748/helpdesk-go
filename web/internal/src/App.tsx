@@ -2,7 +2,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SidebarLayout } from '../../shared/SidebarLayout';
 import { RequireRole } from '../../shared/auth';
-import TicketList from './components/TicketList';
+import QueueList from './components/agent/QueueList';
+import TicketDetail from './components/agent/TicketDetail';
 import MailSettings from './components/admin/MailSettings';
 import OIDCSettings from './components/admin/OIDCSettings';
 import StorageSettings from './components/admin/StorageSettings';
@@ -15,8 +16,9 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<SidebarLayout />}>
-            <Route element={<RequireRole role="agent" />}>
-              <Route path="/tickets" element={<TicketList />} />
+            <Route element={<RequireRole role="agent" />}> 
+              <Route path="/tickets" element={<QueueList />} />
+              <Route path="/tickets/:id" element={<TicketDetail />} />
             </Route>
             <Route element={<RequireRole role="admin" />}>
               <Route path="/settings" element={<MailSettings />} />
