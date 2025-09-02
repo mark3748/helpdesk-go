@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "antd": "^5.19.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.10",
