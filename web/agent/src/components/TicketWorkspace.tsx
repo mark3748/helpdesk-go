@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import TicketQueue from './TicketQueue';
-import type { Ticket, Comment } from '../api';
-import { fetchComments, uploadAttachment, getMe, createTicket, addComment, logout } from '../api';
+import type { Ticket, Comment, Attachment } from '../api';
+import { fetchComments, fetchAttachments, uploadAttachment, deleteAttachment, downloadAttachment, getMe, createTicket, addComment, logout } from '../api';
 import {
   Layout,
   Button,
@@ -93,7 +93,7 @@ export default function TicketWorkspace() {
         <div style={{ marginTop: 16 }}>
           {tabs.map((t) =>
             t.id === activeId ? (
-              <TicketDetail key={t.id} ticket={t} onClose={() => closeTicket(t.id)} />
+              <TicketDetail key={t.id} ticket={t} currentUser={me} onClose={() => closeTicket(t.id)} />
             ) : null
           )}
         </div>
@@ -130,13 +130,15 @@ export default function TicketWorkspace() {
   );
 }
 
-function TicketDetail({ ticket, onClose }: { ticket: Ticket; onClose?: () => void }) {
+function TicketDetail({ ticket, currentUser, onClose }: { ticket: Ticket; currentUser: { id: string } | null; onClose?: () => void }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [adding, setAdding] = useState(false);
   const [uploadPercent, setUploadPercent] = useState(0);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [form] = Form.useForm();
   useEffect(() => {
     fetchComments(ticket.id).then(setComments).catch(console.error);
+    fetchAttachments(ticket.id).then(setAttachments).catch(console.error);
   }, [ticket.id]);
 
   const uploadProps: UploadProps = {
@@ -151,6 +153,8 @@ function TicketDetail({ ticket, onClose }: { ticket: Ticket; onClose?: () => voi
         });
         message.success('Uploaded');
         onSuccess?.({});
+        // Refresh attachments after upload
+        setAttachments(await fetchAttachments(ticket.id));
       } catch (err) {
         message.error('Upload failed');
         onError?.(err as Error);
@@ -170,6 +174,34 @@ function TicketDetail({ ticket, onClose }: { ticket: Ticket; onClose?: () => voi
         <Button>Upload Attachment</Button>
       </Upload>
       {uploadPercent > 0 && <Progress percent={uploadPercent} />}
+      {attachments.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <Typography.Text strong>Attachments</Typography.Text>
+          <ul>
+            {attachments.map((a) => (
+              <li key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span>{a.filename}</span>
+                <span style={{ color: '#888' }}>({(a.bytes / 1024).toFixed(1)} KB)</span>
+                <Button size="small" onClick={async () => {
+                  try {
+                    await downloadAttachment(ticket.id, a.id);
+                  } catch {
+                    message.error('Failed to download attachment');
+                  }
+                }}>Download</Button>
+                <Button size="small" danger onClick={async () => {
+                  const ok = await deleteAttachment(ticket.id, a.id);
+                  if (ok) {
+                    setAttachments(await fetchAttachments(ticket.id));
+                  } else {
+                    message.error('Failed to delete attachment');
+                  }
+                }}>Delete</Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <ul>
         {comments.map((c) => (
           <li key={c.id}>{c.body}</li>
@@ -181,8 +213,8 @@ function TicketDetail({ ticket, onClose }: { ticket: Ticket; onClose?: () => voi
         onFinish={async (values: { body: string }) => {
           setAdding(true);
           // We need current user id; fetch from /me
-          if (!me) { message.error('Session expired. Please log in again.'); setAdding(false); return; }
-          const ok = await addComment(ticket.id, me.id, values.body || '');
+          if (!currentUser) { message.error('Session expired. Please log in again.'); setAdding(false); return; }
+          const ok = await addComment(ticket.id, currentUser.id, values.body || '');
           setAdding(false);
           if (ok) {
             form.resetFields();

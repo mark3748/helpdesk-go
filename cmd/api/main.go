@@ -44,19 +44,32 @@ var migrationsFS embed.FS
 
 // openapi.yaml is served from disk to avoid cross-package embed limitations.
 
-var redocHTML = `<!DOCTYPE html>
+// Serve Swagger UI locally to avoid external CDN dependency.
+var swaggerHTML = `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
     <title>Helpdesk API Docs</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>body { margin: 0; padding: 0; } </style>
-    <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" type="text/css" href="/swagger/swagger-ui.css" />
+    <style>body { margin: 0; padding: 0; }</style>
   </head>
   <body>
-    <redoc spec-url="/openapi.yaml"></redoc>
+    <div id="swagger-ui"></div>
+    <script src="/swagger/swagger-ui-bundle.js" charset="UTF-8"></script>
+    <script src="/swagger/swagger-ui-standalone-preset.js" charset="UTF-8"></script>
+    <script>
+      window.onload = () => {
+        window.ui = SwaggerUIBundle({
+          url: '/openapi.yaml',
+          dom_id: '#swagger-ui',
+          presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+          layout: 'StandaloneLayout'
+        });
+      };
+    </script>
   </body>
-  </html>`
+</html>`
 
 type Config struct {
 	Addr          string
@@ -315,11 +328,13 @@ func main() {
 }
 
 func (a *App) routes() {
-	a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
-	a.r.GET("/csat/:token", a.submitCSAT)
-	// API docs UI and spec
-	a.r.GET("/docs", a.docsUI)
-	a.r.GET("/openapi.yaml", a.openapiSpec)
+    a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+    a.r.GET("/csat/:token", a.submitCSAT)
+    // API docs UI and spec
+    // Serve bundled Swagger UI assets from container image
+    a.r.Static("/swagger", "/opt/helpdesk/swagger")
+    a.r.GET("/docs", a.docsUI)
+    a.r.GET("/openapi.yaml", a.openapiSpec)
 
 	// Local auth endpoints
 	if a.cfg.AuthMode == "local" {
@@ -340,7 +355,8 @@ func (a *App) routes() {
 	auth.POST("/tickets/:id/comments", a.addComment)
 	auth.GET("/tickets/:id/attachments", a.listAttachments)
 	auth.POST("/tickets/:id/attachments", a.uploadAttachment)
-	auth.DELETE("/tickets/:id/attachments/:attID", a.deleteAttachment)
+    auth.GET("/tickets/:id/attachments/:attID", a.getAttachment)
+    auth.DELETE("/tickets/:id/attachments/:attID", a.deleteAttachment)
 	auth.GET("/tickets/:id/watchers", a.listWatchers)
 	auth.POST("/tickets/:id/watchers", a.addWatcher)
 	auth.DELETE("/tickets/:id/watchers/:userID", a.removeWatcher)
@@ -351,7 +367,7 @@ func (a *App) routes() {
 }
 
 func (a *App) docsUI(c *gin.Context) {
-	c.Data(200, "text/html; charset=utf-8", []byte(redocHTML))
+    c.Data(200, "text/html; charset=utf-8", []byte(swaggerHTML))
 }
 
 func (a *App) openapiSpec(c *gin.Context) {
@@ -1039,9 +1055,10 @@ func (a *App) submitCSAT(c *gin.Context) {
 }
 
 type commentReq struct {
-	BodyMD     string `json:"body_md" binding:"required"`
-	IsInternal bool   `json:"is_internal"`
-	AuthorID   string `json:"author_id" binding:"required"`
+    BodyMD     string `json:"body_md" binding:"required"`
+    IsInternal bool   `json:"is_internal"`
+    // AuthorID is ignored server-side; author is derived from authenticated user
+    AuthorID   string `json:"author_id,omitempty"`
 }
 
 func (a *App) listComments(c *gin.Context) {
@@ -1075,25 +1092,25 @@ func (a *App) listComments(c *gin.Context) {
 }
 
 func (a *App) addComment(c *gin.Context) {
-	id := c.Param("id")
-	var in commentReq
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	u := c.MustGet("user").(AuthUser)
-	ctx := c.Request.Context()
-	var cid string
-	err := a.db.QueryRow(ctx, `
+    id := c.Param("id")
+    var in commentReq
+    if err := c.ShouldBindJSON(&in); err != nil {
+        c.JSON(400, gin.H{"error": err.Error()})
+        return
+    }
+    u := c.MustGet("user").(AuthUser)
+    ctx := c.Request.Context()
+    var cid string
+    err := a.db.QueryRow(ctx, `
         insert into ticket_comments (id, ticket_id, author_id, body_md, is_internal)
         values (gen_random_uuid(), $1, $2, $3, $4) returning id
-    `, id, in.AuthorID, in.BodyMD, in.IsInternal).Scan(&cid)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	a.audit(c, "user", u.ID, "ticket", id, "comment_add", gin.H{"comment_id": cid, "author_id": in.AuthorID})
-	c.JSON(201, gin.H{"id": cid})
+    `, id, u.ID, in.BodyMD, in.IsInternal).Scan(&cid)
+    if err != nil {
+        c.JSON(500, gin.H{"error": err.Error()})
+        return
+    }
+    a.audit(c, "user", u.ID, "ticket", id, "comment_add", gin.H{"comment_id": cid, "author_id": u.ID})
+    c.JSON(201, gin.H{"id": cid})
 }
 
 // ===== Attachments =====
@@ -1152,6 +1169,47 @@ func (a *App) listAttachments(c *gin.Context) {
 		}
 	}
 	c.JSON(200, out)
+}
+
+// getAttachment streams the attachment file or redirects to object storage if configured.
+func (a *App) getAttachment(c *gin.Context) {
+    ticketID := c.Param("id")
+    attID := c.Param("attID")
+    ctx := c.Request.Context()
+    var objectKey, filename string
+    var mime *string
+    err := a.db.QueryRow(ctx, "select object_key, filename, mime from attachments where id=$1 and ticket_id=$2", attID, ticketID).Scan(&objectKey, &filename, &mime)
+    if err != nil {
+        c.JSON(404, gin.H{"error": "not found"})
+        return
+    }
+    // If MinIO endpoint is configured, redirect to object URL (assumed accessible)
+    if a.cfg.MinIOEndpoint != "" {
+        scheme := "http"
+        if a.cfg.MinIOUseSSL {
+            scheme = "https"
+        }
+        url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, objectKey)
+        c.Redirect(302, url)
+        return
+    }
+    // Serve from filesystem store when configured
+    if a.cfg.FileStorePath != "" {
+        dir := a.cfg.FileStorePath
+        if a.cfg.MinIOBucket != "" {
+            dir = dir + string(os.PathSeparator) + a.cfg.MinIOBucket
+        }
+        fp := dir + string(os.PathSeparator) + objectKey
+        if mime != nil && *mime != "" {
+            c.Header("Content-Type", *mime)
+        } else {
+            c.Header("Content-Type", "application/octet-stream")
+        }
+        c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+        c.File(fp)
+        return
+    }
+    c.JSON(500, gin.H{"error": "object store not configured"})
 }
 
 func (a *App) deleteAttachment(c *gin.Context) {
