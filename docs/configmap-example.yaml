@@ -1,0 +1,11 @@
+# Example ConfigMap demonstrating how environment variables override UI settings.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: helpdesk-config
+  namespace: helpdesk
+data:
+  LOG_PATH: /var/log/helpdesk
+  OIDC_ISSUER: https://idp.example.com
+  MINIO_ENDPOINT: http://minio:9000
+  SMTP_HOST: smtp.example.com

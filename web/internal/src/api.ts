@@ -88,3 +88,14 @@ export function useSaveMailSettings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   });
 }
+
+export function useTestConnection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch('/test-connection', {
+        method: 'POST',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  });
+}

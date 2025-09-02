@@ -118,7 +118,7 @@ func getConfig() Config {
 		AuthLocalSecret: getEnv("AUTH_LOCAL_SECRET", ""),
 		FileStorePath:   getEnv("FILESTORE_PATH", ""),
 		OpenAPISpecPath: getEnv("OPENAPI_SPEC_PATH", ""),
-		LogPath:         getEnv("LOG_PATH", os.TempDir()),
+		LogPath:         getEnv("LOG_PATH", "/config/logs"),
 	}
 	return cfg
 }
@@ -197,6 +197,7 @@ type App struct {
 // NewApp constructs an App with injected dependencies and registers routes.
 func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client) *App {
 	a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
+	handlers.InitSettings(cfg.LogPath)
 	a.r.Use(gin.Recovery())
 	a.r.Use(gin.Logger())
 	a.routes()
@@ -372,10 +373,11 @@ func (a *App) routes() {
 	auth.GET("/me", a.me)
 	auth.GET("/events", handlers.Events(a.q))
 
-	auth.POST("/test-connection", a.requireRole("admin"), a.testConnection)
-	auth.POST("/settings/storage", a.requireRole("admin"), a.saveStorageSettings)
-	auth.POST("/settings/oidc", a.requireRole("admin"), a.saveOIDCSettings)
-	auth.POST("/settings/mail", a.requireRole("admin"), a.saveMailSettings)
+	auth.GET("/settings", a.requireRole("admin"), handlers.GetSettings)
+	auth.POST("/test-connection", a.requireRole("admin"), handlers.TestConnection)
+	auth.POST("/settings/storage", a.requireRole("admin"), handlers.SaveStorageSettings)
+	auth.POST("/settings/oidc", a.requireRole("admin"), handlers.SaveOIDCSettings)
+	auth.POST("/settings/mail", a.requireRole("admin"), handlers.SaveMailSettings)
 
 	auth.GET("/users/:id/roles", a.requireRole("admin"), a.listUserRoles)
 	auth.POST("/users/:id/roles", a.requireRole("admin"), a.addUserRole)
@@ -399,23 +401,6 @@ func (a *App) routes() {
 	auth.GET("/metrics/resolution", a.requireRole("agent"), a.metricsResolution)
 	auth.GET("/metrics/tickets", a.requireRole("agent"), a.metricsTicketVolume)
 	auth.POST("/exports/tickets", a.requireRole("agent"), a.exportTickets)
-}
-
-func (a *App) testConnection(c *gin.Context) {
-	log.Info().Msg("test connection")
-	c.JSON(http.StatusOK, gin.H{"ok": true, "log_path": a.cfg.LogPath})
-}
-
-func (a *App) saveStorageSettings(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "coming soon"})
-}
-
-func (a *App) saveOIDCSettings(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "coming soon"})
-}
-
-func (a *App) saveMailSettings(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "coming soon"})
 }
 
 func (a *App) docsUI(c *gin.Context) {
