@@ -1,4 +1,40 @@
 {{- if and .Values.ingress.enabled .Release.IsUpgrade }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "helpdesk.fullname" . }}-ingress-cleanup
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "helpdesk.fullname" . }}-ingress-cleanup
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "helpdesk.fullname" . }}-ingress-cleanup
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "helpdesk.fullname" . }}-ingress-cleanup
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "helpdesk.fullname" . }}-ingress-cleanup
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -9,6 +45,7 @@ metadata:
 spec:
   template:
     spec:
+      serviceAccountName: {{ include "helpdesk.fullname" . }}-ingress-cleanup
       restartPolicy: Never
       containers:
         - name: kubectl
@@ -18,3 +55,4 @@ spec:
             - -c
             - kubectl delete ingress {{ include "helpdesk.fullname" . }}-api -n {{ .Release.Namespace }} --ignore-not-found
 {{- end }}
+
