@@ -3,9 +3,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SidebarLayout } from '../../shared/SidebarLayout';
 import { RequireRole } from '../../shared/auth';
 import TicketList from './components/TicketList';
-import MailSettings from './components/MailSettings';
-import OIDCSettings from './components/OIDCSettings';
-import StorageSettings from './components/StorageSettings';
+import MailSettings from './components/admin/MailSettings';
+import OIDCSettings from './components/admin/OIDCSettings';
+import StorageSettings from './components/admin/StorageSettings';
 
 const queryClient = new QueryClient();
 
