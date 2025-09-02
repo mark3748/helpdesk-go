@@ -3,11 +3,20 @@ FROM golang:1.23-alpine AS build
 WORKDIR /src
 COPY . .
 WORKDIR /src/cmd/api
-RUN go mod tidy && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/api
+RUN apk add --no-cache curl \
+    && go mod tidy \
+    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/api \
+    && mkdir -p /out/swagger \
+    && curl -fsSL https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.11.0/swagger-ui.css -o /out/swagger/swagger-ui.css \
+    && curl -fsSL https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.11.0/swagger-ui-bundle.js -o /out/swagger/swagger-ui-bundle.js \
+    && curl -fsSL https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.11.0/swagger-ui-standalone-preset.js -o /out/swagger/swagger-ui-standalone-preset.js \
+    && curl -fsSL https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.11.0/favicon-16x16.png -o /out/swagger/favicon-16x16.png \
+    && curl -fsSL https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.11.0/favicon-32x32.png -o /out/swagger/favicon-32x32.png
 # Run
 FROM gcr.io/distroless/static:nonroot
 COPY --from=build /out/api /api
 COPY --from=build /src/docs/openapi.yaml /opt/helpdesk/docs/openapi.yaml
+COPY --from=build /out/swagger /opt/helpdesk/swagger
 EXPOSE 8080
 USER nonroot:nonroot
 ENTRYPOINT ["/api"]
