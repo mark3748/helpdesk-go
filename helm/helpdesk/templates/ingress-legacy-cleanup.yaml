@@ -1,0 +1,20 @@
+{{- if and .Values.ingress.enabled .Release.IsUpgrade }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "helpdesk.fullname" . }}-ingress-cleanup
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kubectl
+          image: bitnami/kubectl:latest
+          command:
+            - sh
+            - -c
+            - kubectl delete ingress {{ include "helpdesk.fullname" . }}-api -n {{ .Release.Namespace }} --ignore-not-found
+{{- end }}
