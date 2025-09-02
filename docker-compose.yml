@@ -83,6 +83,7 @@ services:
       NPM_CONFIG_CACHE: "/root/.npm"
     volumes:
       - ./web/internal:/app:Z
+      - ./web/shared:/shared:Z
     command: sh -lc "node -v && npm -v && npm install --no-fund --no-audit && npm run dev -- --host 0.0.0.0 --port 5175"
     depends_on:
       api:
