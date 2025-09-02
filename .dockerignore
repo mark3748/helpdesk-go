@@ -1,0 +1,4 @@
+.git
+.gocache
+**/node_modules
+**/dist
