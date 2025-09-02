@@ -115,6 +115,7 @@ API (cmd/api):
 - `DATABASE_URL`: Postgres connection string.
 - `REDIS_ADDR`: Redis address (optional but recommended).
 - `OIDC_ISSUER`, `OIDC_JWKS_URL`: OIDC settings for JWT validation.
+- `OIDC_GROUP_CLAIM`: JWT claim name containing group roles (default `groups`).
 - `AUTH_MODE`: `oidc` or `local`.
 - `AUTH_LOCAL_SECRET`: HMAC secret for local auth cookie JWTs.
 - `ADMIN_PASSWORD`: initial admin password in dev local-auth mode.
