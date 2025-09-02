@@ -1,19 +1,22 @@
-import React from 'react'
-import { Form, Input, Button, message } from 'antd'
+import React from 'react';
+import { Form, Input, Button, message } from 'antd';
+import { useSettings } from '../api';
+import { apiFetch } from '../../shared/api';
 
 export default function StorageSettings() {
+  const { data } = useSettings();
+
   const onFinish = async (values: any) => {
-    await fetch('/settings/storage', {
+    await apiFetch('/settings/storage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify(values),
-    })
-    message.success('Storage settings coming soon')
-  }
+    });
+    message.success('Storage settings saved');
+  };
 
   return (
-    <Form layout="vertical" onFinish={onFinish}>
+    <Form layout="vertical" onFinish={onFinish} initialValues={(data as any)?.storage}>
       <Form.Item label="Endpoint" name="endpoint">
         <Input />
       </Form.Item>
@@ -26,5 +29,5 @@ export default function StorageSettings() {
         </Button>
       </Form.Item>
     </Form>
-  )
+  );
 }

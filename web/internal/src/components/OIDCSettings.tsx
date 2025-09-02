@@ -1,19 +1,22 @@
-import React from 'react'
-import { Form, Input, Button, message } from 'antd'
+import React from 'react';
+import { Form, Input, Button, message } from 'antd';
+import { useSettings } from '../api';
+import { apiFetch } from '../../shared/api';
 
 export default function OIDCSettings() {
+  const { data } = useSettings();
+
   const onFinish = async (values: any) => {
-    await fetch('/settings/oidc', {
+    await apiFetch('/settings/oidc', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify(values),
-    })
-    message.success('OIDC settings coming soon')
-  }
+    });
+    message.success('OIDC settings saved');
+  };
 
   return (
-    <Form layout="vertical" onFinish={onFinish}>
+    <Form layout="vertical" onFinish={onFinish} initialValues={(data as any)?.oidc}>
       <Form.Item label="Issuer" name="issuer">
         <Input />
       </Form.Item>
@@ -26,5 +29,5 @@ export default function OIDCSettings() {
         </Button>
       </Form.Item>
     </Form>
-  )
+  );
 }
