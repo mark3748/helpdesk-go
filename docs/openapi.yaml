@@ -18,6 +18,7 @@ tags:
   - name: CSAT
   - name: Metrics
   - name: Exports
+  - name: Events
 components:
   securitySchemes:
     bearerAuth:
@@ -197,6 +198,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthUser'
         '401': { description: Unauthorized }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /events:
+    get:
+      tags: [Events]
+      summary: Event stream
+      description: Server-sent events for ticket and queue updates.
+      responses:
+        '200':
+          description: OK
+          content:
+            text/event-stream:
+              schema:
+                type: string
       security:
         - bearerAuth: []
         - cookieAuth: []

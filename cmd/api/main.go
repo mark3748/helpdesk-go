@@ -38,6 +38,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
+
+	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 )
 
 //go:embed migrations/*.sql
@@ -368,6 +370,7 @@ func (a *App) routes() {
 	auth := a.r.Group("/")
 	auth.Use(a.authMiddleware())
 	auth.GET("/me", a.me)
+	auth.GET("/events", handlers.Events(a.q))
 
 	auth.POST("/test-connection", a.requireRole("admin"), a.testConnection)
 	auth.POST("/settings/storage", a.requireRole("admin"), a.saveStorageSettings)
@@ -443,6 +446,8 @@ type AuthUser struct {
 	DisplayName string   `json:"display_name"`
 	Roles       []string `json:"roles"`
 }
+
+func (u AuthUser) GetRoles() []string { return u.Roles }
 
 func (a *App) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -968,6 +973,7 @@ func (a *App) createTicket(c *gin.Context) {
 	if requesterEmail != "" {
 		a.enqueueEmail(ctx, requesterEmail, "ticket_created", gin.H{"Number": number})
 	}
+	handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "ticket_created", Data: map[string]interface{}{"id": id}})
 	c.JSON(201, gin.H{"id": id, "number": number, "status": status})
 }
 
@@ -1019,6 +1025,8 @@ func (a *App) enqueueEmail(ctx context.Context, to, template string, data interf
 	if err := a.q.RPush(ctx, "jobs", b).Err(); err != nil {
 		log.Error().Err(err).Msg("enqueue job")
 	}
+	size, _ := a.q.LLen(ctx, "jobs").Result()
+	handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
 }
 
 func (a *App) addStatusHistory(ctx context.Context, ticketID, from, to, actorID string) {
@@ -1154,6 +1162,7 @@ func (a *App) updateTicket(c *gin.Context) {
 			a.enqueueEmail(ctx, requesterEmail, "ticket_updated", gin.H{"Number": number})
 		}
 	}
+	handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "ticket_updated", Data: map[string]interface{}{"id": id}})
 	c.JSON(200, gin.H{"ok": true})
 }
 
