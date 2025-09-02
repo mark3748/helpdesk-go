@@ -1,6 +1,0 @@
-./anonymous.go
-./external.go
-./login.go
-./oauthbearer.go
-./plain.go
-./sasl.go

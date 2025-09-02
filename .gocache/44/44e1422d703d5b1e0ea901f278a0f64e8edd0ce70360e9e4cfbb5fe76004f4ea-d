@@ -1,6 +1,0 @@
-./client.go
-./cmd_any.go
-./cmd_auth.go
-./cmd_noauth.go
-./cmd_selected.go
-./tag.go

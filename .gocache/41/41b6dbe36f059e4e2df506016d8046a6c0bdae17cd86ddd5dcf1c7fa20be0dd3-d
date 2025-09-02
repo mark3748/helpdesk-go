@@ -1,8 +1,0 @@
-./compression_gen.go
-./content_encryption_gen.go
-./elliptic_gen.go
-./jwa.go
-./key_encryption_gen.go
-./key_type_gen.go
-./options_gen.go
-./signature_gen.go

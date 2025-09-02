@@ -1,6 +1,0 @@
-./cache.go
-./fetcher.go
-./httprc.go
-./options_gen.go
-./queue.go
-./whitelist.go
