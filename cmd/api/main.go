@@ -72,17 +72,18 @@ var swaggerHTML = `<!DOCTYPE html>
 </html>`
 
 type Config struct {
-	Addr          string
-	DatabaseURL   string
-	Env           string
-	RedisAddr     string
-	OIDCIssuer    string
-	JWKSURL       string
-	MinIOEndpoint string
-	MinIOAccess   string
-	MinIOSecret   string
-	MinIOBucket   string
-	MinIOUseSSL   bool
+	Addr           string
+	DatabaseURL    string
+	Env            string
+	RedisAddr      string
+	OIDCIssuer     string
+	JWKSURL        string
+	OIDCGroupClaim string
+	MinIOEndpoint  string
+	MinIOAccess    string
+	MinIOSecret    string
+	MinIOBucket    string
+	MinIOUseSSL    bool
 	// Testing helpers
 	TestBypassAuth bool
 	// Local auth
@@ -102,6 +103,7 @@ func getConfig() Config {
 		RedisAddr:       getEnv("REDIS_ADDR", "localhost:6379"),
 		OIDCIssuer:      getEnv("OIDC_ISSUER", ""),
 		JWKSURL:         getEnv("OIDC_JWKS_URL", ""),
+		OIDCGroupClaim:  getEnv("OIDC_GROUP_CLAIM", "groups"),
 		MinIOEndpoint:   getEnv("MINIO_ENDPOINT", ""),
 		MinIOAccess:     getEnv("MINIO_ACCESS_KEY", ""),
 		MinIOSecret:     getEnv("MINIO_SECRET_KEY", ""),
@@ -346,6 +348,10 @@ func (a *App) routes() {
 	auth.Use(a.authMiddleware())
 	auth.GET("/me", a.me)
 
+	auth.GET("/users/:id/roles", a.requireRole("admin"), a.listUserRoles)
+	auth.POST("/users/:id/roles", a.requireRole("admin"), a.addUserRole)
+	auth.DELETE("/users/:id/roles/:role", a.requireRole("admin"), a.removeUserRole)
+
 	// Tickets
 	auth.GET("/tickets", a.listTickets)
 	auth.POST("/tickets", a.createTicket)
@@ -508,12 +514,34 @@ func (a *App) authMiddleware() gin.HandlerFunc {
 			return
 		}
 		defer rows.Close()
-		roles := []string{}
+		roleSet := map[string]struct{}{}
 		for rows.Next() {
 			var role string
 			if err := rows.Scan(&role); err == nil {
-				roles = append(roles, role)
+				roleSet[role] = struct{}{}
 			}
+		}
+		if gc := a.cfg.OIDCGroupClaim; gc != "" {
+			if v, ok := claims[gc]; ok {
+				switch g := v.(type) {
+				case []interface{}:
+					for _, it := range g {
+						if s, ok := it.(string); ok {
+							roleSet[s] = struct{}{}
+						}
+					}
+				case []string:
+					for _, s := range g {
+						roleSet[s] = struct{}{}
+					}
+				case string:
+					roleSet[g] = struct{}{}
+				}
+			}
+		}
+		roles := make([]string, 0, len(roleSet))
+		for r := range roleSet {
+			roles = append(roles, r)
 		}
 		authUser := AuthUser{ID: userID, ExternalID: sub, Email: mail, DisplayName: displayName, Roles: roles}
 		c.Set("user", authUser)
@@ -632,6 +660,58 @@ func (a *App) me(c *gin.Context) {
 		return
 	}
 	c.JSON(200, u)
+}
+
+type roleRequest struct {
+	Role string `json:"role" binding:"required"`
+}
+
+func (a *App) listUserRoles(c *gin.Context) {
+	ctx := c.Request.Context()
+	uid := c.Param("id")
+	rows, err := a.db.Query(ctx, "select r.name from user_roles ur join roles r on ur.role_id=r.id where ur.user_id=$1", uid)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "role lookup"})
+		return
+	}
+	defer rows.Close()
+	roles := []string{}
+	for rows.Next() {
+		var role string
+		if err := rows.Scan(&role); err == nil {
+			roles = append(roles, role)
+		}
+	}
+	c.JSON(200, roles)
+}
+
+func (a *App) addUserRole(c *gin.Context) {
+	var in roleRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	ctx := c.Request.Context()
+	uid := c.Param("id")
+	_, err := a.db.Exec(ctx, `insert into user_roles (user_id, role_id)
+        select $1, r.id from roles r where r.name=$2 on conflict do nothing`, uid, in.Role)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "role add"})
+		return
+	}
+	c.Status(201)
+}
+
+func (a *App) removeUserRole(c *gin.Context) {
+	ctx := c.Request.Context()
+	uid := c.Param("id")
+	role := c.Param("role")
+	_, err := a.db.Exec(ctx, `delete from user_roles where user_id=$1 and role_id in (select id from roles where name=$2)`, uid, role)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "role remove"})
+		return
+	}
+	c.JSON(200, gin.H{"ok": true})
 }
 
 // ===== Data structs =====
