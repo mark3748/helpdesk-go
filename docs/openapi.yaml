@@ -113,7 +113,7 @@ components:
         custom_json: { type: object }
     CommentRequest:
       type: object
-      required: [body_md, author_id]
+      required: [body_md]
       properties:
         body_md: { type: string }
         is_internal: { type: boolean }
@@ -397,6 +397,32 @@ paths:
         - bearerAuth: []
         - cookieAuth: []
   /tickets/{id}/attachments/{attID}:
+    get:
+      tags: [Attachments]
+      summary: Download attachment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: attID
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '302': { description: Redirect to object storage }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
     delete:
       tags: [Attachments]
       summary: Delete attachment

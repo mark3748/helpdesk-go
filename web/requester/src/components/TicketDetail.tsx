@@ -2,8 +2,8 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from 'react-oidc-context';
-import { addComment, getTicket, listComments, uploadAttachment } from '../api';
-import type { Comment, Ticket } from '../api';
+import { addComment, getTicket, listComments, uploadAttachment, listAttachments, downloadAttachment, deleteAttachment } from '../api';
+import type { Comment, Ticket, Attachment } from '../api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function TicketDetail() {
@@ -26,17 +26,15 @@ export default function TicketDetail() {
     enabled: !!id && !!auth.user,
   });
 
+  const attachmentsQuery = useQuery<Attachment[]>({
+    queryKey: ['attachments', id],
+    queryFn: () => listAttachments(id!, auth.user!.access_token),
+    enabled: !!id && !!auth.user,
+  });
+
   const addCommentMutation = useMutation({
     mutationFn: (content: string) =>
-      addComment(
-        id!,
-        {
-          body_md: content,
-          author_id: auth.user?.profile.sub || '',
-          is_internal: false,
-        },
-        auth.user!.access_token,
-      ),
+      addComment(id!, content, auth.user!.access_token),
     onSuccess: () => {
       setBody('');
       qc.invalidateQueries({ queryKey: ['comments', id] });
@@ -58,6 +56,7 @@ export default function TicketDetail() {
         onProgress: (evt) => setProgress(evt.percent),
       });
       alert('Uploaded');
+      qc.invalidateQueries({ queryKey: ['attachments', id] });
     } catch {
       alert('Upload failed');
     } finally {
@@ -71,6 +70,8 @@ export default function TicketDetail() {
   const ticket = ticketQuery.data;
   const comments = commentsQuery.data || [];
   const commentsLoading = commentsQuery.isLoading;
+  const attachments = attachmentsQuery.data || [];
+  const attachmentsLoading = attachmentsQuery.isLoading;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4">
@@ -79,6 +80,36 @@ export default function TicketDetail() {
       <h3 className="text-xl font-semibold">Comments</h3>
       <input type="file" onChange={handleUpload} />
       {uploading && <progress value={progress} max={100} className="w-full" />}
+      <div>
+        <h4 className="text-lg font-semibold">Attachments</h4>
+        {attachmentsLoading ? (
+          <p>Loading…</p>
+        ) : attachments.length === 0 ? (
+          <p className="text-sm text-gray-500">No attachments yet</p>
+        ) : (
+          <ul className="space-y-1">
+            {attachments.map(a => (
+              <li key={a.id} className="flex items-center justify-between">
+                <span>
+                  {a.filename} <span className="text-gray-500 text-sm">({Math.round(((a.bytes || 0) / 1024))} KB)</span>
+                </span>
+                <span className="space-x-2">
+                  <button className="rounded bg-gray-200 px-2 py-1" onClick={() => downloadAttachment(id!, a.id, auth.user!.access_token)}>Download</button>
+                  <button
+                    className="rounded bg-red-600 px-2 py-1 text-white"
+                    onClick={async () => {
+                      await deleteAttachment(id!, a.id, auth.user!.access_token);
+                      qc.invalidateQueries({ queryKey: ['attachments', id] });
+                    }}
+                  >
+                    Delete
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {commentsLoading ? (
         <p>Loading...</p>
       ) : (
