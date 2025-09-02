@@ -387,7 +387,7 @@ func (a *App) routes() {
 	auth.GET("/tickets", a.listTickets)
 	auth.POST("/tickets", a.createTicket)
 	auth.GET("/tickets/:id", a.getTicket)
-	auth.PATCH("/tickets/:id", a.requireRole("agent"), a.updateTicket)
+	auth.PATCH("/tickets/:id", a.requireRole("agent", "manager"), a.updateTicket)
 	auth.GET("/tickets/:id/comments", a.listComments)
 	auth.POST("/tickets/:id/comments", a.addComment)
 	auth.GET("/tickets/:id/attachments", a.listAttachments)
@@ -668,7 +668,7 @@ func (a *App) logout(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
-func (a *App) requireRole(role string) gin.HandlerFunc {
+func (a *App) requireRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		u, ok := c.Get("user")
 		if !ok {
@@ -677,9 +677,11 @@ func (a *App) requireRole(role string) gin.HandlerFunc {
 		}
 		user := u.(AuthUser)
 		for _, r := range user.Roles {
-			if r == role {
-				c.Next()
-				return
+			for _, want := range roles {
+				if r == want {
+					c.Next()
+					return
+				}
 			}
 		}
 		c.AbortWithStatusJSON(403, gin.H{"error": "forbidden"})
