@@ -17,6 +17,7 @@ const groups: NavGroup[] = [
     role: 'agent',
     children: [
       { key: 'tickets', label: 'Tickets', path: '/tickets' },
+      { key: 'metrics', label: 'Metrics', path: '/metrics' },
     ],
   },
   {
@@ -25,6 +26,7 @@ const groups: NavGroup[] = [
     role: 'manager',
     children: [
       { key: 'manager', label: 'Queue Manager', path: '/manager' },
+      { key: 'manager-analytics', label: 'Analytics', path: '/manager/analytics' },
     ],
   },
   {
@@ -35,6 +37,7 @@ const groups: NavGroup[] = [
       { key: 'settings', label: 'Mail Settings', path: '/settings' },
       { key: 'settings-oidc', label: 'OIDC Settings', path: '/settings/oidc' },
       { key: 'settings-storage', label: 'Storage Settings', path: '/settings/storage' },
+      { key: 'settings-users', label: 'User Roles', path: '/settings/users' },
     ],
   },
 ];
