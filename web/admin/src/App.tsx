@@ -1,10 +1,9 @@
-import React from 'react'
 import { Tabs } from 'antd'
 import UserRoles from './components/UserRoles'
 import TestConnection from './components/TestConnection'
-import StorageSettings from '../../internal/StorageSettings'
-import OIDCSettings from '../../internal/OIDCSettings'
-import MailSettings from '../../internal/MailSettings'
+import StorageSettings from '../../internal/src/components/admin/StorageSettings'
+import OIDCSettings from '../../internal/src/components/admin/OIDCSettings'
+import MailSettings from '../../internal/src/components/admin/MailSettings'
 
 export default function App() {
   return (

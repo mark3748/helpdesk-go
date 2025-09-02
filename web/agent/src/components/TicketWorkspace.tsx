@@ -25,7 +25,7 @@ export default function TicketWorkspace() {
   const [form] = Form.useForm();
 
   useEffect(() => {
-    getMe().then((m) => setMe(m ? { id: m.id } : null)).catch(console.error);
+    getMe().then((m) => setMe(m && m.id ? { id: m.id } : null)).catch(console.error);
   }, []);
 
   function openTicket(ticket: Ticket) {

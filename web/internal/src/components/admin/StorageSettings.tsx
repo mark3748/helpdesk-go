@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Form, Input, Button, message } from 'antd';
 import { useSettings, useTestConnection } from '../../api';
 import { apiFetch } from '../../../../shared/api';
@@ -25,8 +25,8 @@ export default function StorageSettings() {
 
   return (
     <>
-      <p>Log directory: {data?.log_path}</p>
-      <p>Last test: {data?.last_test || 'never'}</p>
+      <p>Log directory: {(data as any)?.log_path}</p>
+      <p>Last test: {(data as any)?.last_test || 'never'}</p>
       <Button
         onClick={() =>
           test.mutate(undefined, {
@@ -34,7 +34,7 @@ export default function StorageSettings() {
             onError: () => message.error('Test failed'),
           })
         }
-        loading={test.isLoading}
+        loading={test.isPending}
         style={{ marginBottom: 16 }}
       >
         Test Connection
