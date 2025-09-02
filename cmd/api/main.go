@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -37,6 +38,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
+
+	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 )
 
 //go:embed migrations/*.sql
@@ -72,17 +75,18 @@ var swaggerHTML = `<!DOCTYPE html>
 </html>`
 
 type Config struct {
-	Addr          string
-	DatabaseURL   string
-	Env           string
-	RedisAddr     string
-	OIDCIssuer    string
-	JWKSURL       string
-	MinIOEndpoint string
-	MinIOAccess   string
-	MinIOSecret   string
-	MinIOBucket   string
-	MinIOUseSSL   bool
+	Addr           string
+	DatabaseURL    string
+	Env            string
+	RedisAddr      string
+	OIDCIssuer     string
+	JWKSURL        string
+	OIDCGroupClaim string
+	MinIOEndpoint  string
+	MinIOAccess    string
+	MinIOSecret    string
+	MinIOBucket    string
+	MinIOUseSSL    bool
 	// Testing helpers
 	TestBypassAuth bool
 	// Local auth
@@ -91,6 +95,7 @@ type Config struct {
 	// Filesystem object store for dev/local
 	FileStorePath   string
 	OpenAPISpecPath string
+	LogPath         string
 }
 
 func getConfig() Config {
@@ -102,6 +107,7 @@ func getConfig() Config {
 		RedisAddr:       getEnv("REDIS_ADDR", "localhost:6379"),
 		OIDCIssuer:      getEnv("OIDC_ISSUER", ""),
 		JWKSURL:         getEnv("OIDC_JWKS_URL", ""),
+		OIDCGroupClaim:  getEnv("OIDC_GROUP_CLAIM", "groups"),
 		MinIOEndpoint:   getEnv("MINIO_ENDPOINT", ""),
 		MinIOAccess:     getEnv("MINIO_ACCESS_KEY", ""),
 		MinIOSecret:     getEnv("MINIO_SECRET_KEY", ""),
@@ -112,6 +118,7 @@ func getConfig() Config {
 		AuthLocalSecret: getEnv("AUTH_LOCAL_SECRET", ""),
 		FileStorePath:   getEnv("FILESTORE_PATH", ""),
 		OpenAPISpecPath: getEnv("OPENAPI_SPEC_PATH", ""),
+		LogPath:         getEnv("LOG_PATH", "/config/logs"),
 	}
 	return cfg
 }
@@ -190,6 +197,7 @@ type App struct {
 // NewApp constructs an App with injected dependencies and registers routes.
 func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client) *App {
 	a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
+	handlers.InitSettings(cfg.LogPath)
 	a.r.Use(gin.Recovery())
 	a.r.Use(gin.Logger())
 	a.routes()
@@ -198,12 +206,30 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 
 func main() {
 	cfg := getConfig()
+	writer := io.Writer(os.Stdout)
 	if cfg.Env == "dev" {
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
+		writer = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
 		gin.SetMode(gin.DebugMode)
 	} else {
 		gin.SetMode(gin.ReleaseMode)
 	}
+	if err := os.MkdirAll(cfg.LogPath, 0o755); err != nil {
+		log.Warn().Err(err).Str("dir", cfg.LogPath).Msg("using stdout for logs")
+	} else {
+		logFile := filepath.Join(cfg.LogPath, "api.log")
+		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			log.Warn().Err(err).Str("path", logFile).Msg("using stdout for logs")
+		} else {
+			if cfg.Env == "dev" {
+				writer = zerolog.MultiLevelWriter(f, writer)
+			} else {
+				writer = f
+			}
+			defer f.Close()
+		}
+	}
+	log.Logger = zerolog.New(writer).With().Timestamp().Logger()
 
 	// DB connect
 	ctx := context.Background()
@@ -345,12 +371,23 @@ func (a *App) routes() {
 	auth := a.r.Group("/")
 	auth.Use(a.authMiddleware())
 	auth.GET("/me", a.me)
+	auth.GET("/events", handlers.Events(a.q))
+
+	auth.GET("/settings", a.requireRole("admin"), handlers.GetSettings)
+	auth.POST("/test-connection", a.requireRole("admin"), handlers.TestConnection)
+	auth.POST("/settings/storage", a.requireRole("admin"), handlers.SaveStorageSettings)
+	auth.POST("/settings/oidc", a.requireRole("admin"), handlers.SaveOIDCSettings)
+	auth.POST("/settings/mail", a.requireRole("admin"), handlers.SaveMailSettings)
+
+	auth.GET("/users/:id/roles", a.requireRole("admin"), a.listUserRoles)
+	auth.POST("/users/:id/roles", a.requireRole("admin"), a.addUserRole)
+	auth.DELETE("/users/:id/roles/:role", a.requireRole("admin"), a.removeUserRole)
 
 	// Tickets
 	auth.GET("/tickets", a.listTickets)
 	auth.POST("/tickets", a.createTicket)
 	auth.GET("/tickets/:id", a.getTicket)
-	auth.PATCH("/tickets/:id", a.requireRole("agent"), a.updateTicket)
+	auth.PATCH("/tickets/:id", a.requireRole("agent", "manager"), a.updateTicket)
 	auth.GET("/tickets/:id/comments", a.listComments)
 	auth.POST("/tickets/:id/comments", a.addComment)
 	auth.GET("/tickets/:id/attachments", a.listAttachments)
@@ -394,6 +431,8 @@ type AuthUser struct {
 	DisplayName string   `json:"display_name"`
 	Roles       []string `json:"roles"`
 }
+
+func (u AuthUser) GetRoles() []string { return u.Roles }
 
 func (a *App) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -508,12 +547,34 @@ func (a *App) authMiddleware() gin.HandlerFunc {
 			return
 		}
 		defer rows.Close()
-		roles := []string{}
+		roleSet := map[string]struct{}{}
 		for rows.Next() {
 			var role string
 			if err := rows.Scan(&role); err == nil {
-				roles = append(roles, role)
+				roleSet[role] = struct{}{}
 			}
+		}
+		if gc := a.cfg.OIDCGroupClaim; gc != "" {
+			if v, ok := claims[gc]; ok {
+				switch g := v.(type) {
+				case []interface{}:
+					for _, it := range g {
+						if s, ok := it.(string); ok {
+							roleSet[s] = struct{}{}
+						}
+					}
+				case []string:
+					for _, s := range g {
+						roleSet[s] = struct{}{}
+					}
+				case string:
+					roleSet[g] = struct{}{}
+				}
+			}
+		}
+		roles := make([]string, 0, len(roleSet))
+		for r := range roleSet {
+			roles = append(roles, r)
 		}
 		authUser := AuthUser{ID: userID, ExternalID: sub, Email: mail, DisplayName: displayName, Roles: roles}
 		c.Set("user", authUser)
@@ -548,9 +609,9 @@ func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
 	if err := db.QueryRow(ctx, "insert into users (id, username, email, display_name, password_hash) values (gen_random_uuid(), 'admin', 'admin@example.com', 'Admin', $1) returning id", string(hash)).Scan(&uid); err != nil {
 		return err
 	}
-	// Grant agent role
-	_, _ = db.Exec(ctx, `insert into user_roles (user_id, role_id)
-      select $1, r.id from roles r where r.name='agent' on conflict do nothing`, uid)
+    // Grant all roles to built-in admin (super user)
+    _, _ = db.Exec(ctx, `insert into user_roles (user_id, role_id)
+select $1, r.id from roles r on conflict do nothing`, uid)
 	log.Info().Str("username", "admin").Msg("seeded local admin user (dev)")
 	return nil
 }
@@ -607,22 +668,31 @@ func (a *App) logout(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
-func (a *App) requireRole(role string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		u, ok := c.Get("user")
-		if !ok {
-			c.AbortWithStatusJSON(401, gin.H{"error": "unauthenticated"})
-			return
-		}
-		user := u.(AuthUser)
-		for _, r := range user.Roles {
-			if r == role {
-				c.Next()
-				return
-			}
-		}
-		c.AbortWithStatusJSON(403, gin.H{"error": "forbidden"})
-	}
+func (a *App) requireRole(roles ...string) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        u, ok := c.Get("user")
+        if !ok {
+            c.AbortWithStatusJSON(401, gin.H{"error": "unauthenticated"})
+            return
+        }
+        user := u.(AuthUser)
+        // Treat 'admin' as a super-user that can access any route.
+        for _, r := range user.Roles {
+            if r == "admin" {
+                c.Next()
+                return
+            }
+        }
+        for _, r := range user.Roles {
+            for _, want := range roles {
+                if r == want {
+                    c.Next()
+                    return
+                }
+            }
+        }
+        c.AbortWithStatusJSON(403, gin.H{"error": "forbidden"})
+    }
 }
 
 func (a *App) me(c *gin.Context) {
@@ -632,6 +702,58 @@ func (a *App) me(c *gin.Context) {
 		return
 	}
 	c.JSON(200, u)
+}
+
+type roleRequest struct {
+	Role string `json:"role" binding:"required"`
+}
+
+func (a *App) listUserRoles(c *gin.Context) {
+	ctx := c.Request.Context()
+	uid := c.Param("id")
+	rows, err := a.db.Query(ctx, "select r.name from user_roles ur join roles r on ur.role_id=r.id where ur.user_id=$1", uid)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "role lookup"})
+		return
+	}
+	defer rows.Close()
+	roles := []string{}
+	for rows.Next() {
+		var role string
+		if err := rows.Scan(&role); err == nil {
+			roles = append(roles, role)
+		}
+	}
+	c.JSON(200, roles)
+}
+
+func (a *App) addUserRole(c *gin.Context) {
+	var in roleRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	ctx := c.Request.Context()
+	uid := c.Param("id")
+	_, err := a.db.Exec(ctx, `insert into user_roles (user_id, role_id)
+        select $1, r.id from roles r where r.name=$2 on conflict do nothing`, uid, in.Role)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "role add"})
+		return
+	}
+	c.Status(201)
+}
+
+func (a *App) removeUserRole(c *gin.Context) {
+	ctx := c.Request.Context()
+	uid := c.Param("id")
+	role := c.Param("role")
+	_, err := a.db.Exec(ctx, `delete from user_roles where user_id=$1 and role_id in (select id from roles where name=$2)`, uid, role)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "role remove"})
+		return
+	}
+	c.JSON(200, gin.H{"ok": true})
 }
 
 // ===== Data structs =====
@@ -845,6 +967,7 @@ func (a *App) createTicket(c *gin.Context) {
 	if requesterEmail != "" {
 		a.enqueueEmail(ctx, requesterEmail, "ticket_created", gin.H{"Number": number})
 	}
+	handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "ticket_created", Data: map[string]interface{}{"id": id}})
 	c.JSON(201, gin.H{"id": id, "number": number, "status": status})
 }
 
@@ -896,6 +1019,8 @@ func (a *App) enqueueEmail(ctx context.Context, to, template string, data interf
 	if err := a.q.RPush(ctx, "jobs", b).Err(); err != nil {
 		log.Error().Err(err).Msg("enqueue job")
 	}
+	size, _ := a.q.LLen(ctx, "jobs").Result()
+	handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
 }
 
 func (a *App) addStatusHistory(ctx context.Context, ticketID, from, to, actorID string) {
@@ -1031,6 +1156,7 @@ func (a *App) updateTicket(c *gin.Context) {
 			a.enqueueEmail(ctx, requesterEmail, "ticket_updated", gin.H{"Number": number})
 		}
 	}
+	handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "ticket_updated", Data: map[string]interface{}{"id": id}})
 	c.JSON(200, gin.H{"ok": true})
 }
 

@@ -1,8 +1,6 @@
-import type { paths, components } from './types/openapi';
+import type { Ticket, Comment, Attachment } from './types/api';
 
-export type Ticket = components['schemas']['Ticket'];
-export type Comment = components['schemas']['Comment'];
-export type Attachment = components['schemas']['Attachment'];
+export type { Ticket, Comment, Attachment };
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
@@ -18,35 +16,28 @@ async function apiFetch<T = unknown>(path: string, opts: RequestInit = {}, token
 }
 
 export async function listTickets(token: string): Promise<Ticket[]> {
-  type Resp = paths['/tickets']['get']['responses']['200']['content']['application/json'];
-  return apiFetch<Resp>('/tickets', {}, token);
+  return apiFetch<Ticket[]>('/tickets', {}, token);
 }
 
 export async function getTicket(id: string, token: string): Promise<Ticket> {
-  type Resp = paths['/tickets/{id}']['get']['responses']['200']['content']['application/json'];
-  return apiFetch<Resp>(`/tickets/${id}`, {}, token);
+  return apiFetch<Ticket>(`/tickets/${id}`, {}, token);
 }
 
 export async function createTicket(data: Partial<Ticket>, token: string): Promise<Ticket> {
-  type Req = paths['/tickets']['post']['requestBody']['content']['application/json'];
-  type Resp = paths['/tickets']['post']['responses']['201']['content']['application/json'];
-  return apiFetch<Resp>('/tickets', {
+  return apiFetch<Ticket>('/tickets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data as Req),
+    body: JSON.stringify(data),
   }, token);
 }
 
 export async function listComments(id: string, token: string): Promise<Comment[]> {
-  type Resp = paths['/tickets/{id}/comments']['get']['responses']['200']['content']['application/json'];
-  return apiFetch<Resp>(`/tickets/${id}/comments`, {}, token);
+  return apiFetch<Comment[]>(`/tickets/${id}/comments`, {}, token);
 }
 
-export async function addComment(id: string, content: string, token: string): Promise<{ id: string }> {
-  type Req = paths['/tickets/{id}/comments']['post']['requestBody']['content']['application/json'];
-  type Resp = paths['/tickets/{id}/comments']['post']['responses']['201']['content']['application/json'];
-  const body: Req = { body_md: content, is_internal: false } as Req;
-  return apiFetch<Resp>(`/tickets/${id}/comments`, {
+export async function addComment(id: string | number, content: string, token: string): Promise<{ id: string }> {
+  const body = { body_md: content, is_internal: false } as any;
+  return apiFetch<{ id: string }>(`/tickets/${String(id)}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -54,16 +45,15 @@ export async function addComment(id: string, content: string, token: string): Pr
 }
 
 export async function listAttachments(id: string, token: string): Promise<Attachment[]> {
-  type Resp = paths['/tickets/{id}/attachments']['get']['responses']['200']['content']['application/json'];
-  return apiFetch<Resp>(`/tickets/${id}/attachments`, {}, token);
+  return apiFetch<Attachment[]>(`/tickets/${id}/attachments`, {}, token);
 }
 
-export async function deleteAttachment(id: string, attID: string, token: string): Promise<void> {
-  await apiFetch(`/tickets/${id}/attachments/${attID}`, { method: 'DELETE' }, token);
+export async function deleteAttachment(id: string | number, attID: string | number, token: string): Promise<void> {
+  await apiFetch(`/tickets/${String(id)}/attachments/${String(attID)}`, { method: 'DELETE' }, token);
 }
 
-export async function downloadAttachment(id: string, attID: string, token: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/tickets/${id}/attachments/${attID}`, {
+export async function downloadAttachment(id: string | number, attID: string | number, token: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/tickets/${String(id)}/attachments/${String(attID)}`, {
     headers: { Authorization: `Bearer ${token}` },
     redirect: 'follow',
   });
@@ -88,7 +78,7 @@ export interface UploadOptions {
 }
 
 export function uploadAttachment(
-  id: string,
+  id: string | number,
   file: File,
   token: string,
   opts: UploadOptions = {},
@@ -98,7 +88,7 @@ export function uploadAttachment(
     form.append('file', file);
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API_BASE}/tickets/${id}/attachments`);
+    xhr.open('POST', `${API_BASE}/tickets/${String(id)}/attachments`);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
     xhr.upload.onprogress = (e) => {

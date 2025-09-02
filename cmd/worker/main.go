@@ -6,8 +6,10 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/smtp"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"text/template"
@@ -20,9 +22,10 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
-    "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 
-    "github.com/mark3748/helpdesk-go/internal/sla"
+	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	"github.com/mark3748/helpdesk-go/internal/sla"
 )
 
 type Config struct {
@@ -43,6 +46,7 @@ type Config struct {
 	MinIOSecret   string
 	MinIOBucket   string
 	MinIOUseSSL   bool
+	LogPath       string
 }
 
 func getEnv(key, def string) string {
@@ -72,6 +76,7 @@ func cfg() Config {
 		MinIOSecret:   getEnv("MINIO_SECRET_KEY", ""),
 		MinIOBucket:   getEnv("MINIO_BUCKET", ""),
 		MinIOUseSSL:   getEnv("MINIO_USE_SSL", "false") == "true",
+		LogPath:       getEnv("LOG_PATH", os.TempDir()),
 	}
 }
 
@@ -169,9 +174,27 @@ func sendEmail(c Config, j EmailJob) error {
 
 func main() {
 	c := cfg()
+	writer := io.Writer(os.Stdout)
 	if c.Env == "dev" {
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
+		writer = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
 	}
+	if err := os.MkdirAll(c.LogPath, 0o755); err != nil {
+		log.Warn().Err(err).Str("dir", c.LogPath).Msg("using stdout for logs")
+	} else {
+		logFile := filepath.Join(c.LogPath, "worker.log")
+		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			log.Warn().Err(err).Str("path", logFile).Msg("using stdout for logs")
+		} else {
+			if c.Env == "dev" {
+				writer = zerolog.MultiLevelWriter(f, writer)
+			} else {
+				writer = f
+			}
+			defer f.Close()
+		}
+	}
+	log.Logger = zerolog.New(writer).With().Timestamp().Logger()
 	ctx := context.Background()
 	db, err := pgxpool.New(ctx, c.DatabaseURL)
 	if err != nil {
@@ -199,7 +222,7 @@ func main() {
 	if c.IMAPHost != "" {
 		go func() {
 			for {
-				if err := pollIMAP(ctx, c, db, mc); err != nil {
+				if err := pollIMAP(ctx, c, db, mc, rdb); err != nil {
 					log.Error().Err(err).Msg("poll imap")
 				}
 				time.Sleep(time.Minute)
@@ -227,6 +250,8 @@ func main() {
 		if len(res) < 2 {
 			continue
 		}
+		size, _ := rdb.LLen(ctx, "jobs").Result()
+		handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
 		var job Job
 		if err := json.Unmarshal([]byte(res[1]), &job); err != nil {
 			log.Error().Err(err).Msg("unmarshal job")

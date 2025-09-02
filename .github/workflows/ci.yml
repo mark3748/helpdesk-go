@@ -30,6 +30,10 @@ jobs:
         run: docker build -f Dockerfile.api -t helpdesk-api .
       - name: Build worker image
         run: docker build -f Dockerfile.worker -t helpdesk-worker .
+      - name: Build internal frontend image
+        run: docker build -f Dockerfile.frontend-internal -t helpdesk-internal-frontend .
+      - name: Build requester frontend image
+        run: docker build -f Dockerfile.frontend-requester -t helpdesk-requester-frontend .
       - uses: azure/setup-helm@v3
         with:
           version: v3.13.3

@@ -1,0 +1,4 @@
+./main.go
+./auth_jwks_test.go
+./export_test.go
+./main_test.go

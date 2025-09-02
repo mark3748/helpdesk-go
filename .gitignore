@@ -15,6 +15,7 @@ dist/
 **/.DS_Store
 **/.env
 coverage.out
+**/.gocache
 
 # Local runtime data (attachments, etc.)
 /data/
