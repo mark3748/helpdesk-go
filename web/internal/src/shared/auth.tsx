@@ -9,9 +9,13 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (res.status === 204) return undefined as unknown as T;
   return (await res.json()) as T;
 }
-import type { components } from '../types/openapi';
-
-export type Me = components['schemas']['AuthUser'];
+export type Me = {
+  id?: string;
+  external_id?: string;
+  email?: string;
+  display_name?: string;
+  roles?: string[];
+};
 
 export function useMe() {
   return useQuery<Me | null>({

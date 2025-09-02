@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { paths } from './types/openapi';
+import type { Ticket } from './types/api';
 import { apiFetch } from './shared/api';
 
 export interface AppEvent {
@@ -48,10 +48,10 @@ export function subscribeEvents(
   };
 }
 
-export type Ticket = paths['/tickets']['get']['responses']['200']['content']['application/json'][number];
+export type { Ticket };
 
 export function useTickets(opts: { refetchInterval?: number | false } = {}) {
-  type Resp = paths['/tickets']['get']['responses']['200']['content']['application/json'];
+  type Resp = Ticket[];
   return useQuery({
     queryKey: ['tickets'],
     queryFn: () => apiFetch<Resp>('/tickets'),
@@ -60,7 +60,7 @@ export function useTickets(opts: { refetchInterval?: number | false } = {}) {
 }
 
 export function useTicket(id: string, opts: { refetchInterval?: number | false } = {}) {
-  type Resp = paths['/tickets/{id}']['get']['responses']['200']['content']['application/json'];
+  type Resp = Ticket;
   return useQuery({
     queryKey: ['ticket', id],
     queryFn: () => apiFetch<Resp>(`/tickets/${id}`),
