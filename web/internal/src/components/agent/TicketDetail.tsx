@@ -13,7 +13,7 @@ import {
   deleteAttachment,
   downloadAttachment,
   updateTicketStatus,
-} from '../../../../shared/api';
+} from '../../shared/api';
 
 export default function TicketDetail() {
   const { id = '' } = useParams();

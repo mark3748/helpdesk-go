@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useTickets, subscribeEvents } from '../../api';
 import type { AppEvent } from '../../api';
-import { updateTicket } from '../../../../shared/api';
+import { updateTicket } from '../../shared/api';
 import CreateTicketModal from './CreateTicketModal';
 
 export default function QueueManager() {
@@ -129,4 +129,3 @@ export default function QueueManager() {
     </Space>
   );
 }
-
