@@ -370,6 +370,9 @@ func (a *App) routes() {
 	auth.GET("/me", a.me)
 
 	auth.POST("/test-connection", a.requireRole("admin"), a.testConnection)
+	auth.POST("/settings/storage", a.requireRole("admin"), a.saveStorageSettings)
+	auth.POST("/settings/oidc", a.requireRole("admin"), a.saveOIDCSettings)
+	auth.POST("/settings/mail", a.requireRole("admin"), a.saveMailSettings)
 
 	auth.GET("/users/:id/roles", a.requireRole("admin"), a.listUserRoles)
 	auth.POST("/users/:id/roles", a.requireRole("admin"), a.addUserRole)
@@ -398,6 +401,18 @@ func (a *App) routes() {
 func (a *App) testConnection(c *gin.Context) {
 	log.Info().Msg("test connection")
 	c.JSON(http.StatusOK, gin.H{"ok": true, "log_path": a.cfg.LogPath})
+}
+
+func (a *App) saveStorageSettings(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "coming soon"})
+}
+
+func (a *App) saveOIDCSettings(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "coming soon"})
+}
+
+func (a *App) saveMailSettings(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "coming soon"})
 }
 
 func (a *App) docsUI(c *gin.Context) {
