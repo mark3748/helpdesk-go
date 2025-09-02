@@ -11,7 +11,7 @@ export default function TicketDetail({ id }: Props) {
 
   useEffect(() => {
     const stop = subscribeEvents((ev: AppEvent) => {
-      if (ev.type === 'ticket_updated' && (ev.data as any)?.id === id) {
+      if (ev.type === 'ticket_updated' && String((ev.data as any)?.id) === id) {
         refetch();
       }
     }, setConnected);
