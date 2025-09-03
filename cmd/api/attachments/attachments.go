@@ -53,7 +53,9 @@ func Upload(a *app.App) gin.HandlerFunc {
             return
         }
         defer f.Close()
-        key := uuid.New().String() + "-" + header.Filename
+        safeName := sanitizeFilename(header.Filename)
+        if safeName == "" { safeName = "file" }
+        key := uuid.New().String() + "-" + safeName
         size := header.Size
         ct := header.Header.Get("Content-Type")
         if ct == "" { ct = mime.TypeByExtension(filepath.Ext(header.Filename)) }
@@ -97,7 +99,13 @@ func Get(a *app.App) gin.HandlerFunc {
         }
         // Serve from filesystem store when configured
         if fs, ok := a.M.(*app.FsObjectStore); ok {
-            path := fs.Base + string(filepath.Separator) + a.Cfg.MinIOBucket + string(filepath.Separator) + key
+            root := filepath.Join(fs.Base, a.Cfg.MinIOBucket)
+            path := filepath.Clean(filepath.Join(root, key))
+            // Ensure the path is within the root (prevent traversal)
+            if rel, err := filepath.Rel(root, path); err != nil || strings.HasPrefix(rel, "..") {
+                c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
+                return
+            }
             f, err := os.ReadFile(path)
             if err != nil {
                 c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
@@ -111,6 +119,31 @@ func Get(a *app.App) gin.HandlerFunc {
         // Otherwise unimplemented (e.g., MinIO); client may handle 501
         c.JSON(http.StatusNotImplemented, gin.H{"error": "download not implemented"})
     }
+}
+
+// sanitizeFilename removes path separators and dot segments and restricts to a
+// conservative character set, preserving the extension when possible.
+func sanitizeFilename(name string) string {
+    // Drop any path components
+    name = filepath.Base(name)
+    // Replace Windows separators too
+    name = strings.ReplaceAll(name, "\\", "_")
+    name = strings.ReplaceAll(name, "/", "_")
+    // Remove dot-dot sequences
+    name = strings.ReplaceAll(name, "..", "")
+    // Allow only letters, digits, space, dash, underscore, and dot
+    b := strings.Builder{}
+    for _, r := range name {
+        if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == ' ' || r == '-' || r == '_' || r == '.' {
+            b.WriteRune(r)
+        } else {
+            b.WriteByte('_')
+        }
+    }
+    out := strings.TrimSpace(b.String())
+    // Avoid empty or hidden names
+    out = strings.TrimLeft(out, ".")
+    return out
 }
 
 func Delete(a *app.App) gin.HandlerFunc {
