@@ -18,6 +18,8 @@ Base URL examples:
 ## Endpoints
 
 Health
+- GET `/livez` → 200 OK `{ "ok": true }`
+- GET `/readyz` → 200 OK `{ "ok": true }` | 500
 - GET `/healthz` → 200 OK `{ "ok": true }`
 
 Auth (local mode only)

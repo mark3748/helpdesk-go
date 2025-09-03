@@ -83,6 +83,17 @@ func SaveMailSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+// MailSettings returns the current mail configuration.
+func MailSettings() map[string]string {
+	mu.RLock()
+	defer mu.RUnlock()
+	out := make(map[string]string, len(cfgStore.Mail))
+	for k, v := range cfgStore.Mail {
+		out[k] = v
+	}
+	return out
+}
+
 // TestConnection records a test run and returns log path and last result.
 func TestConnection(c *gin.Context) {
 	mu.Lock()

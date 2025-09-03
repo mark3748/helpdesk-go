@@ -144,6 +144,21 @@ components:
           additionalProperties:
             type: string
 paths:
+  /livez:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      security: []
+      responses:
+        '200': { description: OK }
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness check
+      security: []
+      responses:
+        '200': { description: OK }
+        '500': { description: Dependency failure }
   /healthz:
     get:
       tags: [Health]
