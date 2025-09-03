@@ -101,16 +101,45 @@ func TestReadyzFailures(t *testing.T) {
 		}
 	})
 
-	t.Run("smtp", func(t *testing.T) {
-		setMail(map[string]string{"host": "127.0.0.1", "port": "1"})
-		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil, nil)
-		rr := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
-		app.r.ServeHTTP(rr, req)
-		if rr.Code == http.StatusOK {
-			t.Fatalf("expected failure, got %d", rr.Code)
-		}
-	})
+    t.Run("smtp", func(t *testing.T) {
+        setMail(map[string]string{"host": "127.0.0.1", "port": "1"})
+        app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil, nil)
+        rr := httptest.NewRecorder()
+        req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+        app.r.ServeHTTP(rr, req)
+        if rr.Code == http.StatusOK {
+            t.Fatalf("expected failure, got %d", rr.Code)
+        }
+    })
+
+    t.Run("redis", func(t *testing.T) {
+        setMail(map[string]string{"host": "", "port": ""})
+        app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil, nil)
+        // Override pingRedis to simulate a failing Redis
+        app.pingRedis = func(ctx context.Context) error { return errors.New("redis down") }
+        rr := httptest.NewRecorder()
+        req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+        app.r.ServeHTTP(rr, req)
+        if rr.Code == http.StatusOK {
+            t.Fatalf("expected failure, got %d", rr.Code)
+        }
+        if !strings.Contains(rr.Body.String(), "redis") {
+            t.Fatalf("expected redis error in body, got %s", rr.Body.String())
+        }
+    })
+
+    t.Run("object store bucket auto-create", func(t *testing.T) {
+        setMail(map[string]string{"host": "", "port": ""})
+        dir := t.TempDir()
+        // Do not create bucket subdir; readyz should mkdir it and succeed
+        app := NewApp(Config{Env: "test", MinIOBucket: "attachments"}, readyzDB{}, nil, &fsObjectStore{base: dir}, nil)
+        rr := httptest.NewRecorder()
+        req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+        app.r.ServeHTTP(rr, req)
+        if rr.Code != http.StatusOK {
+            t.Fatalf("expected success, got %d body=%s", rr.Code, rr.Body.String())
+        }
+    })
 }
 
 func TestMe_BypassAuth(t *testing.T) {

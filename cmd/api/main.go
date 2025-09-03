@@ -187,22 +187,27 @@ func (f *fsObjectStore) RemoveObject(ctx context.Context, bucketName, objectName
 }
 
 type App struct {
-	cfg  Config
-	db   DB
-	r    *gin.Engine
-	keyf jwt.Keyfunc
-	m    ObjectStore
-	q    *redis.Client
+    cfg  Config
+    db   DB
+    r    *gin.Engine
+    keyf jwt.Keyfunc
+    m    ObjectStore
+    q    *redis.Client
+    // pingRedis allows overriding Redis health check in tests
+    pingRedis func(ctx context.Context) error
 }
 
 // NewApp constructs an App with injected dependencies and registers routes.
 func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client) *App {
-	a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
-	handlers.InitSettings(cfg.LogPath)
-	a.r.Use(gin.Recovery())
-	a.r.Use(gin.Logger())
-	a.routes()
-	return a
+    a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
+    if q != nil {
+        a.pingRedis = func(ctx context.Context) error { return q.Ping(ctx).Err() }
+    }
+    handlers.InitSettings(cfg.LogPath)
+    a.r.Use(gin.Recovery())
+    a.r.Use(gin.Logger())
+    a.routes()
+    return a
 }
 
 func main() {
@@ -325,12 +330,19 @@ func main() {
 	var store ObjectStore
 	if mc != nil {
 		store = mc
-	} else if cfg.FileStorePath != "" {
-		if err := os.MkdirAll(cfg.FileStorePath, 0o755); err != nil {
-			log.Fatal().Err(err).Str("path", cfg.FileStorePath).Msg("create filestore path")
-		}
-		store = &fsObjectStore{base: cfg.FileStorePath}
-	}
+    } else if cfg.FileStorePath != "" {
+        if err := os.MkdirAll(cfg.FileStorePath, 0o755); err != nil {
+            log.Fatal().Err(err).Str("path", cfg.FileStorePath).Msg("create filestore path")
+        }
+        // Ensure bucket subdirectory exists for readiness and uploads
+        if cfg.MinIOBucket != "" {
+            bucketDir := filepath.Join(cfg.FileStorePath, cfg.MinIOBucket)
+            if err := os.MkdirAll(bucketDir, 0o755); err != nil {
+                log.Fatal().Err(err).Str("path", bucketDir).Msg("create filestore bucket path")
+            }
+        }
+        store = &fsObjectStore{base: cfg.FileStorePath}
+    }
 
 	// Seed a dev admin for local auth
 	if cfg.AuthMode == "local" && cfg.Env == "dev" {
@@ -428,17 +440,25 @@ func (a *App) openapiSpec(c *gin.Context) {
 }
 
 func (a *App) readyz(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
 
-	if a.db != nil {
-		var n int
-		if err := a.db.QueryRow(ctx, "select 1").Scan(&n); err != nil {
-			log.Error().Err(err).Msg("readyz db")
-			c.JSON(500, gin.H{"error": "db"})
-			return
-		}
-	}
+    if a.db != nil {
+        var n int
+        if err := a.db.QueryRow(ctx, "select 1").Scan(&n); err != nil {
+            log.Error().Err(err).Msg("readyz db")
+            c.JSON(500, gin.H{"error": "db"})
+            return
+        }
+    }
+
+    if a.pingRedis != nil {
+        if err := a.pingRedis(ctx); err != nil {
+            log.Error().Err(err).Msg("readyz redis")
+            c.JSON(500, gin.H{"error": "redis"})
+            return
+        }
+    }
 
 	if a.m != nil {
 		switch s := a.m.(type) {
@@ -449,17 +469,23 @@ func (a *App) readyz(c *gin.Context) {
 				c.JSON(500, gin.H{"error": "object_store"})
 				return
 			}
-		case *fsObjectStore:
-			dir := s.base
-			if a.cfg.MinIOBucket != "" {
-				dir = filepath.Join(dir, a.cfg.MinIOBucket)
-			}
-			testFile := filepath.Join(dir, ".readyz")
-			if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
-				log.Error().Err(err).Msg("readyz filestore")
-				c.JSON(500, gin.H{"error": "object_store"})
-				return
-			}
+    case *fsObjectStore:
+        dir := s.base
+        if a.cfg.MinIOBucket != "" {
+            dir = filepath.Join(dir, a.cfg.MinIOBucket)
+        }
+        // Ensure directory exists so WriteFile does not fail on fresh deploys
+        if err := os.MkdirAll(dir, 0o755); err != nil {
+            log.Error().Err(err).Str("dir", dir).Msg("readyz filestore mkdir")
+            c.JSON(500, gin.H{"error": "object_store"})
+            return
+        }
+        testFile := filepath.Join(dir, ".readyz")
+        if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
+            log.Error().Err(err).Msg("readyz filestore")
+            c.JSON(500, gin.H{"error": "object_store"})
+            return
+        }
 			_ = os.Remove(testFile)
 		}
 	}
