@@ -53,6 +53,40 @@ func TestLivez(t *testing.T) {
 	}
 }
 
+func TestSecurityHeaders(t *testing.T) {
+	cfg := Config{Env: "test", AllowedOrigins: []string{"http://allowed"}}
+	app := NewApp(cfg, nil, nil, nil, nil)
+
+	t.Run("allowed origin", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		req.Header.Set("Origin", "http://allowed")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rr.Code)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "http://allowed" {
+			t.Fatalf("expected Access-Control-Allow-Origin header, got %q", got)
+		}
+		if got := rr.Header().Get("Content-Security-Policy"); got != "default-src 'none'" {
+			t.Fatalf("expected Content-Security-Policy header, got %q", got)
+		}
+		if got := rr.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Fatalf("expected X-Content-Type-Options header, got %q", got)
+		}
+	})
+
+	t.Run("disallowed origin", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		req.Header.Set("Origin", "http://bad")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", rr.Code)
+		}
+	})
+}
+
 type readyzRow struct{ err error }
 
 func (r readyzRow) Scan(dest ...any) error { return r.err }
@@ -92,7 +126,7 @@ func TestReadyzFailures(t *testing.T) {
 
 	t.Run("object store", func(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
-		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, &fsObjectStore{base: "/no/such"}, nil)
+		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, &fsObjectStore{base: "/dev/null"}, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
