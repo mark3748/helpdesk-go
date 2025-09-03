@@ -1811,12 +1811,13 @@ func (a *App) exportTicketsStatus(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "redis"})
 		return
 	}
-	var st struct {
-		Requester string `json:"requester"`
-		Status    string `json:"status"`
-		URL       string `json:"url"`
-		Error     string `json:"error"`
-	}
+    var st struct {
+        Requester string `json:"requester"`
+        Status    string `json:"status"`
+        URL       string `json:"url"`
+        ObjectKey string `json:"object_key"`
+        Error     string `json:"error"`
+    }
 	if err := json.Unmarshal([]byte(val), &st); err != nil {
 		c.JSON(500, gin.H{"error": "decode"})
 		return
@@ -1827,13 +1828,39 @@ func (a *App) exportTicketsStatus(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "not found"})
 		return
 	}
-	if st.Status != "done" {
-		out := gin.H{"status": st.Status}
-		if st.Error != "" {
-			out["error"] = st.Error
-		}
-		c.JSON(200, out)
-		return
-	}
-	c.JSON(200, gin.H{"url": st.URL})
+    if st.Status != "done" {
+        out := gin.H{"status": st.Status}
+        if st.Error != "" {
+            out["error"] = st.Error
+        }
+        c.JSON(200, out)
+        return
+    }
+    // Backward compatibility: if a URL was stored, return it.
+    if st.URL != "" {
+        c.JSON(200, gin.H{"url": st.URL})
+        return
+    }
+    // Prefer on-demand signing using the stored object key.
+    if st.ObjectKey == "" {
+        c.JSON(500, gin.H{"error": "missing object key"})
+        return
+    }
+    if mc, ok := a.m.(*minio.Client); ok {
+        // Use a longer TTL so users have time to download.
+        u, err := mc.PresignedGetObject(ctx, a.cfg.MinIOBucket, st.ObjectKey, 15*time.Minute, nil)
+        if err != nil {
+            c.JSON(500, gin.H{"error": "sign url"})
+            return
+        }
+        c.JSON(200, gin.H{"url": u.String()})
+        return
+    }
+    // Fallback to constructing a static URL when not using MinIO client.
+    scheme := "http"
+    if a.cfg.MinIOUseSSL {
+        scheme = "https"
+    }
+    url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, st.ObjectKey)
+    c.JSON(200, gin.H{"url": url})
 }
