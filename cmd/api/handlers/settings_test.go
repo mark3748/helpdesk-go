@@ -73,16 +73,25 @@ func (db *fakeDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.Com
 			}
 		}
 	case strings.Contains(s, "update settings set storage"):
-		if b, ok := args[0].([]byte); ok {
-			_ = json.Unmarshal(b, &db.s.Storage)
+		switch v := args[0].(type) {
+		case string:
+			_ = json.Unmarshal([]byte(v), &db.s.Storage)
+		case []byte:
+			_ = json.Unmarshal(v, &db.s.Storage)
 		}
 	case strings.Contains(s, "update settings set oidc"):
-		if b, ok := args[0].([]byte); ok {
-			_ = json.Unmarshal(b, &db.s.OIDC)
+		switch v := args[0].(type) {
+		case string:
+			_ = json.Unmarshal([]byte(v), &db.s.OIDC)
+		case []byte:
+			_ = json.Unmarshal(v, &db.s.OIDC)
 		}
 	case strings.Contains(s, "update settings set mail"):
-		if b, ok := args[0].([]byte); ok {
-			_ = json.Unmarshal(b, &db.s.Mail)
+		switch v := args[0].(type) {
+		case string:
+			_ = json.Unmarshal([]byte(v), &db.s.Mail)
+		case []byte:
+			_ = json.Unmarshal(v, &db.s.Mail)
 		}
 	case strings.Contains(s, "update settings set last_test"):
 		if t, ok := args[0].(time.Time); ok {
