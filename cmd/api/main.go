@@ -444,7 +444,8 @@ func (a *App) routes() {
 	a.r.GET("/livez", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 	a.r.GET("/readyz", a.readyz)
 	a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
-	a.r.GET("/csat/:token", a.submitCSAT)
+	a.r.GET("/csat/:token", a.csatForm)
+	a.r.POST("/csat/:token", a.submitCSAT)
 	// API docs UI and spec
 	// Serve bundled Swagger UI assets from container image
 	a.r.Static("/swagger", "/opt/helpdesk/swagger")
@@ -1327,8 +1328,7 @@ func (a *App) updateTicket(c *gin.Context) {
 				_, _ = a.db.Exec(ctx, `update tickets set csat_token=$1, csat_score=null where id=$2`, token, id)
 				data := gin.H{
 					"Number":  number,
-					"GoodURL": fmt.Sprintf("/csat/%s?score=good", token),
-					"BadURL":  fmt.Sprintf("/csat/%s?score=bad", token),
+					"CSATURL": fmt.Sprintf("/csat/%s", token),
 				}
 				a.enqueueEmail(ctx, requesterEmail, "ticket_resolved", data)
 			}
@@ -1342,7 +1342,7 @@ func (a *App) updateTicket(c *gin.Context) {
 
 func (a *App) submitCSAT(c *gin.Context) {
 	token := c.Param("token")
-	score := c.Query("score")
+	score := c.PostForm("score")
 	if score != "good" && score != "bad" {
 		c.JSON(400, gin.H{"error": "invalid score"})
 		return
@@ -1358,6 +1358,11 @@ func (a *App) submitCSAT(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"ok": true})
+}
+
+func (a *App) csatForm(c *gin.Context) {
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(200, `<!doctype html><html><body><form method="POST"><button name="score" value="good">Good</button><button name="score" value="bad">Bad</button></form></body></html>`)
 }
 
 type commentReq struct {
