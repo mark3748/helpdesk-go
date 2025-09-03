@@ -604,6 +604,23 @@ paths:
   /csat/{token}:
     get:
       tags: [CSAT]
+      summary: CSAT form
+      description: Public endpoint embedded in emails.
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            text/html:
+              schema: { type: string }
+        '500': { description: Server Error }
+    post:
+      tags: [CSAT]
       summary: Submit CSAT score
       description: Public endpoint embedded in emails.
       security: []
@@ -612,12 +629,17 @@ paths:
           name: token
           required: true
           schema: { type: string }
-        - in: query
-          name: score
-          required: true
-          schema:
-            type: string
-            enum: [good, bad]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [score]
+              properties:
+                score:
+                  type: string
+                  enum: [good, bad]
       responses:
         '200': { description: OK }
         '400': { description: Invalid score }
