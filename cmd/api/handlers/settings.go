@@ -173,11 +173,17 @@ func TestMailSettings(db DB) gin.HandlerFunc {
 			return
 		}
 		host := s.Mail["smtp_host"]
-		port := s.Mail["smtp_port"]
-		from := s.Mail["smtp_from"]
-		if host == "" || port == "" || from == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "smtp config incomplete"})
+		if host == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "smtp_host required"})
 			return
+		}
+		port := s.Mail["smtp_port"]
+		if port == "" {
+			port = "25"
+		}
+		from := s.Mail["smtp_from"]
+		if from == "" {
+			from = "test@example.com"
 		}
 		addr := host + ":" + port
 		var auth smtp.Auth
