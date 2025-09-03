@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/time/rate"
 )
 
 // Config holds API configuration values.
@@ -36,6 +38,8 @@ type Config struct {
 	FileStorePath   string
 	OpenAPISpecPath string
 	LogPath         string
+	RateLimitRPS    float64
+	RateLimitBurst  int
 }
 
 // GetEnv returns the environment variable value or default.
@@ -67,6 +71,12 @@ func GetConfig() Config {
 		FileStorePath:   GetEnv("FILESTORE_PATH", ""),
 		OpenAPISpecPath: GetEnv("OPENAPI_SPEC_PATH", ""),
 		LogPath:         GetEnv("LOG_PATH", "/config/logs"),
+	}
+	if v, err := strconv.ParseFloat(GetEnv("RATE_LIMIT_RPS", "0"), 64); err == nil {
+		cfg.RateLimitRPS = v
+	}
+	if v, err := strconv.Atoi(GetEnv("RATE_LIMIT_BURST", "0")); err == nil {
+		cfg.RateLimitBurst = v
 	}
 	return cfg
 }
@@ -140,6 +150,12 @@ type App struct {
 func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client) *App {
 	a := &App{Cfg: cfg, DB: db, R: gin.New(), Keyf: keyf, M: store, Q: q}
 	a.R.Use(gin.Recovery())
-	a.R.Use(gin.Logger())
+	a.R.Use(RequestID())
+	rl := rate.NewLimiter(rate.Inf, 0)
+	if cfg.RateLimitRPS > 0 {
+		rl = rate.NewLimiter(rate.Limit(cfg.RateLimitRPS), cfg.RateLimitBurst)
+	}
+	a.R.Use(RateLimit(rl))
+	a.R.Use(Logger())
 	return a
 }
