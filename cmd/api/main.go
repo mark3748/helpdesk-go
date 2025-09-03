@@ -490,20 +490,20 @@ func (a *App) readyz(c *gin.Context) {
 		}
 	}
 
-	if ms := handlers.MailSettings(); ms != nil {
-		host := ms["host"]
-		port := ms["port"]
-		if host != "" && port != "" {
-			conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 5*time.Second)
-			if err != nil {
-				log.Error().Err(err).Msg("readyz smtp")
-				c.JSON(500, gin.H{"error": "smtp"})
-				return
-			}
-			fmt.Fprintf(conn, "QUIT\r\n")
-			conn.Close()
-		}
-	}
+    if ms := handlers.MailSettings(); ms != nil {
+        host := ms["host"]
+        port := ms["port"]
+        if host != "" && port != "" {
+            // Basic connectivity check only; do not send SMTP commands.
+            conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 5*time.Second)
+            if err != nil {
+                log.Error().Err(err).Msg("readyz smtp")
+                c.JSON(500, gin.H{"error": "smtp"})
+                return
+            }
+            conn.Close()
+        }
+    }
 
 	c.JSON(200, gin.H{"ok": true})
 }
