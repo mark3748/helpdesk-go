@@ -165,7 +165,7 @@ returning id::text, number, title, status, assignee_id::text, priority`
 		t.RequesterID = in.RequesterID
 		// Best-effort fill requester label
 		if a.DB != nil {
-			_ = a.DB.QueryRow(c.Request.Context(), `select coalesce(display_name,''), coalesce(email,'') from users where id=$1`, in.RequesterID).Scan(&t.Requester, &t.Requester)
+			_ = a.DB.QueryRow(c.Request.Context(), `select coalesce(name,''), coalesce(email,'') from requesters where id=$1`, in.RequesterID).Scan(&t.Requester, &t.Requester)
 		}
 		c.JSON(http.StatusCreated, t)
 	}
