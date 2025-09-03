@@ -1,0 +1,145 @@
+package app
+
+import (
+	"context"
+	"io"
+	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/minio/minio-go/v7"
+	"github.com/redis/go-redis/v9"
+)
+
+// Config holds API configuration values.
+type Config struct {
+	Addr           string
+	DatabaseURL    string
+	Env            string
+	RedisAddr      string
+	OIDCIssuer     string
+	JWKSURL        string
+	OIDCGroupClaim string
+	MinIOEndpoint  string
+	MinIOAccess    string
+	MinIOSecret    string
+	MinIOBucket    string
+	MinIOUseSSL    bool
+	// Testing helpers
+	TestBypassAuth bool
+	// Local auth
+	AuthMode        string // "oidc" or "local"
+	AuthLocalSecret string
+	// Filesystem object store for dev/local
+	FileStorePath   string
+	OpenAPISpecPath string
+	LogPath         string
+}
+
+// GetEnv returns the environment variable value or default.
+func GetEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// GetConfig builds Config from environment.
+func GetConfig() Config {
+	cfg := Config{
+		Addr:            GetEnv("ADDR", ":8080"),
+		DatabaseURL:     GetEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
+		Env:             GetEnv("ENV", "dev"),
+		RedisAddr:       GetEnv("REDIS_ADDR", "localhost:6379"),
+		OIDCIssuer:      GetEnv("OIDC_ISSUER", ""),
+		JWKSURL:         GetEnv("OIDC_JWKS_URL", ""),
+		OIDCGroupClaim:  GetEnv("OIDC_GROUP_CLAIM", "groups"),
+		MinIOEndpoint:   GetEnv("MINIO_ENDPOINT", ""),
+		MinIOAccess:     GetEnv("MINIO_ACCESS_KEY", ""),
+		MinIOSecret:     GetEnv("MINIO_SECRET_KEY", ""),
+		MinIOBucket:     GetEnv("MINIO_BUCKET", "attachments"),
+		MinIOUseSSL:     GetEnv("MINIO_USE_SSL", "false") == "true",
+		TestBypassAuth:  GetEnv("TEST_BYPASS_AUTH", "false") == "true",
+		AuthMode:        GetEnv("AUTH_MODE", "oidc"),
+		AuthLocalSecret: GetEnv("AUTH_LOCAL_SECRET", ""),
+		FileStorePath:   GetEnv("FILESTORE_PATH", ""),
+		OpenAPISpecPath: GetEnv("OPENAPI_SPEC_PATH", ""),
+		LogPath:         GetEnv("LOG_PATH", "/config/logs"),
+	}
+	return cfg
+}
+
+// DB is a minimal interface to allow mocking in tests.
+type DB interface {
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+}
+
+// ObjectStore wraps the subset of MinIO we need for tests.
+type ObjectStore interface {
+	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+}
+
+// fsObjectStore implements ObjectStore on the local filesystem for development/testing.
+type FsObjectStore struct {
+	Base string
+}
+
+func (f *FsObjectStore) PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
+	_ = ctx
+	dir := f.Base
+	if bucketName != "" {
+		dir = dir + string(os.PathSeparator) + bucketName
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return minio.UploadInfo{}, err
+	}
+	fp := dir + string(os.PathSeparator) + objectName
+	tmp := fp + ".tmp"
+	out, err := os.Create(tmp)
+	if err != nil {
+		return minio.UploadInfo{}, err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, reader); err != nil {
+		_ = os.Remove(tmp)
+		return minio.UploadInfo{}, err
+	}
+	if err := os.Rename(tmp, fp); err != nil {
+		return minio.UploadInfo{}, err
+	}
+	return minio.UploadInfo{Bucket: bucketName, Key: objectName, Size: objectSize}, nil
+}
+
+func (f *FsObjectStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
+	_ = ctx
+	_ = opts
+	dir := f.Base
+	if bucketName != "" {
+		dir = dir + string(os.PathSeparator) + bucketName
+	}
+	fp := dir + string(os.PathSeparator) + objectName
+	return os.Remove(fp)
+}
+
+// App wires dependencies and the Gin router.
+type App struct {
+	Cfg  Config
+	DB   DB
+	R    *gin.Engine
+	Keyf jwt.Keyfunc
+	M    ObjectStore
+	Q    *redis.Client
+}
+
+// NewApp constructs an App with injected dependencies.
+func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client) *App {
+	a := &App{Cfg: cfg, DB: db, R: gin.New(), Keyf: keyf, M: store, Q: q}
+	a.R.Use(gin.Recovery())
+	a.R.Use(gin.Logger())
+	return a
+}
