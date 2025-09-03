@@ -14,7 +14,7 @@ import (
 func TestMiddleware(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	l := New(rdb, 2, time.Minute)
+	l := New(rdb, 2, time.Minute, "test:")
 	r := gin.New()
 	r.Use(l.Middleware(func(c *gin.Context) string { return "key" }))
 	r.GET("/", func(c *gin.Context) { c.String(200, "ok") })
