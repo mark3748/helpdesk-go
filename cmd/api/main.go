@@ -35,6 +35,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/pressly/goose/v3"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -461,6 +462,7 @@ func (a *App) routes() {
 	a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 	a.r.GET("/csat/:token", a.csatForm)
 	a.r.POST("/csat/:token", a.submitCSAT)
+	a.r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	// API docs UI and spec
 	// Serve bundled Swagger UI assets from container image
 	a.r.Static("/swagger", "/opt/helpdesk/swagger")
