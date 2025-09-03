@@ -88,6 +88,7 @@ type Config struct {
 	MinIOSecret    string
 	MinIOBucket    string
 	MinIOUseSSL    bool
+	AllowedOrigins []string
 	// Testing helpers
 	TestBypassAuth bool
 	// Local auth
@@ -102,18 +103,32 @@ type Config struct {
 func getConfig() Config {
 	_ = godotenv.Load()
 	cfg := Config{
-		Addr:            getEnv("ADDR", ":8080"),
-		DatabaseURL:     getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
-		Env:             getEnv("ENV", "dev"),
-		RedisAddr:       getEnv("REDIS_ADDR", "localhost:6379"),
-		OIDCIssuer:      getEnv("OIDC_ISSUER", ""),
-		JWKSURL:         getEnv("OIDC_JWKS_URL", ""),
-		OIDCGroupClaim:  getEnv("OIDC_GROUP_CLAIM", "groups"),
-		MinIOEndpoint:   getEnv("MINIO_ENDPOINT", ""),
-		MinIOAccess:     getEnv("MINIO_ACCESS_KEY", ""),
-		MinIOSecret:     getEnv("MINIO_SECRET_KEY", ""),
-		MinIOBucket:     getEnv("MINIO_BUCKET", "attachments"),
-		MinIOUseSSL:     getEnv("MINIO_USE_SSL", "false") == "true",
+		Addr:           getEnv("ADDR", ":8080"),
+		DatabaseURL:    getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
+		Env:            getEnv("ENV", "dev"),
+		RedisAddr:      getEnv("REDIS_ADDR", "localhost:6379"),
+		OIDCIssuer:     getEnv("OIDC_ISSUER", ""),
+		JWKSURL:        getEnv("OIDC_JWKS_URL", ""),
+		OIDCGroupClaim: getEnv("OIDC_GROUP_CLAIM", "groups"),
+		MinIOEndpoint:  getEnv("MINIO_ENDPOINT", ""),
+		MinIOAccess:    getEnv("MINIO_ACCESS_KEY", ""),
+		MinIOSecret:    getEnv("MINIO_SECRET_KEY", ""),
+		MinIOBucket:    getEnv("MINIO_BUCKET", "attachments"),
+		MinIOUseSSL:    getEnv("MINIO_USE_SSL", "false") == "true",
+		AllowedOrigins: func() []string {
+			v := getEnv("ALLOWED_ORIGINS", "")
+			if v == "" {
+				return nil
+			}
+			parts := strings.Split(v, ",")
+			out := make([]string, 0, len(parts))
+			for _, p := range parts {
+				if s := strings.TrimSpace(p); s != "" {
+					out = append(out, s)
+				}
+			}
+			return out
+		}(),
 		TestBypassAuth:  getEnv("TEST_BYPASS_AUTH", "false") == "true",
 		AuthMode:        getEnv("AUTH_MODE", "oidc"),
 		AuthLocalSecret: getEnv("AUTH_LOCAL_SECRET", ""),
@@ -187,27 +202,58 @@ func (f *fsObjectStore) RemoveObject(ctx context.Context, bucketName, objectName
 }
 
 type App struct {
-    cfg  Config
-    db   DB
-    r    *gin.Engine
-    keyf jwt.Keyfunc
-    m    ObjectStore
-    q    *redis.Client
-    // pingRedis allows overriding Redis health check in tests
-    pingRedis func(ctx context.Context) error
+	cfg  Config
+	db   DB
+	r    *gin.Engine
+	keyf jwt.Keyfunc
+	m    ObjectStore
+	q    *redis.Client
+	// pingRedis allows overriding Redis health check in tests
+	pingRedis func(ctx context.Context) error
 }
 
 // NewApp constructs an App with injected dependencies and registers routes.
 func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client) *App {
-    a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
-    if q != nil {
-        a.pingRedis = func(ctx context.Context) error { return q.Ping(ctx).Err() }
-    }
-    handlers.InitSettings(cfg.LogPath)
-    a.r.Use(gin.Recovery())
-    a.r.Use(gin.Logger())
-    a.routes()
-    return a
+	a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
+	if q != nil {
+		a.pingRedis = func(ctx context.Context) error { return q.Ping(ctx).Err() }
+	}
+	handlers.InitSettings(cfg.LogPath)
+	a.r.Use(gin.Recovery())
+	a.r.Use(gin.Logger())
+    a.r.Use(func(c *gin.Context) {
+        c.Header("Content-Security-Policy", "default-src 'none'")
+        c.Header("X-Content-Type-Options", "nosniff")
+        origin := c.GetHeader("Origin")
+        if origin != "" && len(cfg.AllowedOrigins) > 0 {
+            allowed := false
+            for _, ao := range cfg.AllowedOrigins {
+                if origin == ao {
+                    allowed = true
+                    break
+                }
+            }
+            if !allowed {
+                c.AbortWithStatus(http.StatusForbidden)
+                return
+            }
+            // CORS headers for allowed origins
+            c.Header("Access-Control-Allow-Origin", origin)
+            c.Header("Vary", "Origin")
+            c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+            c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With")
+            c.Header("Access-Control-Allow-Credentials", "true")
+            // Handle preflight requests
+            if c.Request.Method == http.MethodOptions {
+                c.Status(http.StatusNoContent)
+                c.Abort()
+                return
+            }
+        }
+        c.Next()
+    })
+	a.routes()
+	return a
 }
 
 func main() {
@@ -330,19 +376,19 @@ func main() {
 	var store ObjectStore
 	if mc != nil {
 		store = mc
-    } else if cfg.FileStorePath != "" {
-        if err := os.MkdirAll(cfg.FileStorePath, 0o755); err != nil {
-            log.Fatal().Err(err).Str("path", cfg.FileStorePath).Msg("create filestore path")
-        }
-        // Ensure bucket subdirectory exists for readiness and uploads
-        if cfg.MinIOBucket != "" {
-            bucketDir := filepath.Join(cfg.FileStorePath, cfg.MinIOBucket)
-            if err := os.MkdirAll(bucketDir, 0o755); err != nil {
-                log.Fatal().Err(err).Str("path", bucketDir).Msg("create filestore bucket path")
-            }
-        }
-        store = &fsObjectStore{base: cfg.FileStorePath}
-    }
+	} else if cfg.FileStorePath != "" {
+		if err := os.MkdirAll(cfg.FileStorePath, 0o755); err != nil {
+			log.Fatal().Err(err).Str("path", cfg.FileStorePath).Msg("create filestore path")
+		}
+		// Ensure bucket subdirectory exists for readiness and uploads
+		if cfg.MinIOBucket != "" {
+			bucketDir := filepath.Join(cfg.FileStorePath, cfg.MinIOBucket)
+			if err := os.MkdirAll(bucketDir, 0o755); err != nil {
+				log.Fatal().Err(err).Str("path", bucketDir).Msg("create filestore bucket path")
+			}
+		}
+		store = &fsObjectStore{base: cfg.FileStorePath}
+	}
 
 	// Seed a dev admin for local auth
 	if cfg.AuthMode == "local" && cfg.Env == "dev" {
@@ -440,25 +486,25 @@ func (a *App) openapiSpec(c *gin.Context) {
 }
 
 func (a *App) readyz(c *gin.Context) {
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-    if a.db != nil {
-        var n int
-        if err := a.db.QueryRow(ctx, "select 1").Scan(&n); err != nil {
-            log.Error().Err(err).Msg("readyz db")
-            c.JSON(500, gin.H{"error": "db"})
-            return
-        }
-    }
+	if a.db != nil {
+		var n int
+		if err := a.db.QueryRow(ctx, "select 1").Scan(&n); err != nil {
+			log.Error().Err(err).Msg("readyz db")
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+	}
 
-    if a.pingRedis != nil {
-        if err := a.pingRedis(ctx); err != nil {
-            log.Error().Err(err).Msg("readyz redis")
-            c.JSON(500, gin.H{"error": "redis"})
-            return
-        }
-    }
+	if a.pingRedis != nil {
+		if err := a.pingRedis(ctx); err != nil {
+			log.Error().Err(err).Msg("readyz redis")
+			c.JSON(500, gin.H{"error": "redis"})
+			return
+		}
+	}
 
 	if a.m != nil {
 		switch s := a.m.(type) {
@@ -469,41 +515,41 @@ func (a *App) readyz(c *gin.Context) {
 				c.JSON(500, gin.H{"error": "object_store"})
 				return
 			}
-    case *fsObjectStore:
-        dir := s.base
-        if a.cfg.MinIOBucket != "" {
-            dir = filepath.Join(dir, a.cfg.MinIOBucket)
-        }
-        // Ensure directory exists so WriteFile does not fail on fresh deploys
-        if err := os.MkdirAll(dir, 0o755); err != nil {
-            log.Error().Err(err).Str("dir", dir).Msg("readyz filestore mkdir")
-            c.JSON(500, gin.H{"error": "object_store"})
-            return
-        }
-        testFile := filepath.Join(dir, ".readyz")
-        if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
-            log.Error().Err(err).Msg("readyz filestore")
-            c.JSON(500, gin.H{"error": "object_store"})
-            return
-        }
+		case *fsObjectStore:
+			dir := s.base
+			if a.cfg.MinIOBucket != "" {
+				dir = filepath.Join(dir, a.cfg.MinIOBucket)
+			}
+			// Ensure directory exists so WriteFile does not fail on fresh deploys
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				log.Error().Err(err).Str("dir", dir).Msg("readyz filestore mkdir")
+				c.JSON(500, gin.H{"error": "object_store"})
+				return
+			}
+			testFile := filepath.Join(dir, ".readyz")
+			if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
+				log.Error().Err(err).Msg("readyz filestore")
+				c.JSON(500, gin.H{"error": "object_store"})
+				return
+			}
 			_ = os.Remove(testFile)
 		}
 	}
 
-    if ms := handlers.MailSettings(); ms != nil {
-        host := ms["host"]
-        port := ms["port"]
-        if host != "" && port != "" {
-            // Basic connectivity check only; do not send SMTP commands.
-            conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 5*time.Second)
-            if err != nil {
-                log.Error().Err(err).Msg("readyz smtp")
-                c.JSON(500, gin.H{"error": "smtp"})
-                return
-            }
-            conn.Close()
-        }
-    }
+	if ms := handlers.MailSettings(); ms != nil {
+		host := ms["host"]
+		port := ms["port"]
+		if host != "" && port != "" {
+			// Basic connectivity check only; do not send SMTP commands.
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 5*time.Second)
+			if err != nil {
+				log.Error().Err(err).Msg("readyz smtp")
+				c.JSON(500, gin.H{"error": "smtp"})
+				return
+			}
+			conn.Close()
+		}
+	}
 
 	c.JSON(200, gin.H{"ok": true})
 }

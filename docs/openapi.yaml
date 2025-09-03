@@ -19,6 +19,10 @@ tags:
   - name: Metrics
   - name: Exports
   - name: Events
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+# Cross-origin requests are limited to origins set via the ALLOWED_ORIGINS env var.
 components:
   securitySchemes:
     bearerAuth:
