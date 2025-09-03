@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 import { Form, Input, Button, message } from 'antd';
-import { useSettings, useSaveMailSettings, useTestConnection } from '../../api';
+import { useSettings, useSaveMailSettings, useMailTest } from '../../api';
 
 export default function MailSettings() {
   const [form] = Form.useForm();
   const { data } = useSettings();
   const save = useSaveMailSettings();
-  const test = useTestConnection();
+  const test = useMailTest();
 
   useEffect(() => {
     if ((data as any)?.mail) {

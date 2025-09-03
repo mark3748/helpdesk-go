@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/smtp"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,8 @@ type Settings struct {
 	LogPath  string            `json:"log_path"`
 	LastTest string            `json:"last_test"`
 }
+
+var smtpSendMail = smtp.SendMail
 
 // InitSettings ensures a row exists and sets initial log path.
 func InitSettings(ctx context.Context, db DB, logPath string) {
@@ -103,8 +106,20 @@ func SaveStorageSettings(db DB) gin.HandlerFunc {
 	}
 }
 
-// SaveOIDCSettings stores OIDC configuration.
-func SaveOIDCSettings(db DB) gin.HandlerFunc {
+// GetOIDCSettings returns OIDC configuration.
+func GetOIDCSettings(db DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		s, err := loadSettings(c.Request.Context(), db)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, s.OIDC)
+	}
+}
+
+// PutOIDCSettings stores OIDC configuration.
+func PutOIDCSettings(db DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var data map[string]string
 		if err := c.ShouldBindJSON(&data); err != nil {
@@ -120,8 +135,20 @@ func SaveOIDCSettings(db DB) gin.HandlerFunc {
 	}
 }
 
-// SaveMailSettings stores mail configuration.
-func SaveMailSettings(db DB) gin.HandlerFunc {
+// GetMailSettings returns mail configuration.
+func GetMailSettings(db DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		s, err := loadSettings(c.Request.Context(), db)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, s.Mail)
+	}
+}
+
+// PutMailSettings stores mail configuration.
+func PutMailSettings(db DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var data map[string]string
 		if err := c.ShouldBindJSON(&data); err != nil {
@@ -137,19 +164,42 @@ func SaveMailSettings(db DB) gin.HandlerFunc {
 	}
 }
 
-// TestConnection records a test run and returns log path and last result.
-func TestConnection(db DB) gin.HandlerFunc {
+// TestMailSettings sends a test email and records the attempt.
+func TestMailSettings(db DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		now := time.Now()
-		if _, err := db.Exec(c.Request.Context(), "update settings set last_test=$1 where id=1", now); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
 		s, err := loadSettings(c.Request.Context(), db)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		host := s.Mail["smtp_host"]
+		if host == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "smtp_host required"})
+			return
+		}
+		port := s.Mail["smtp_port"]
+		if port == "" {
+			port = "25"
+		}
+		from := s.Mail["smtp_from"]
+		if from == "" {
+			from = "test@example.com"
+		}
+		addr := host + ":" + port
+		var auth smtp.Auth
+		user := s.Mail["smtp_user"]
+		pass := s.Mail["smtp_pass"]
+		if user != "" {
+			auth = smtp.PlainAuth("", user, pass, host)
+		}
+		msg := []byte("To: " + from + "\r\nSubject: Test Mail\r\n\r\nThis is a test email.")
+		if err := smtpSendMail(addr, auth, from, []string{from}, msg); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		now := time.Now()
+		_, _ = db.Exec(c.Request.Context(), "update settings set last_test=$1 where id=1", now)
+		s.LastTest = now.Format(time.RFC3339)
 		c.JSON(http.StatusOK, gin.H{"ok": true, "log_path": s.LogPath, "last_test": s.LastTest})
 	}
 }
