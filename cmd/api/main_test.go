@@ -628,49 +628,154 @@ func TestUpdateTicketInvalidEnums(t *testing.T) {
 	})
 }
 
-type updateCaptureDB struct{
-    firstExecArgs []any
+type updateCaptureDB struct {
+	firstExecArgs []any
 }
 
-func (db *updateCaptureDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) { return &fakeRows{}, nil }
+func (db *updateCaptureDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
 func (db *updateCaptureDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
-    // Return oldStatus, number, requesterEmail
-    return &fakeRow{scan: func(dest ...any) error {
-        if len(dest) >= 3 {
-            if p, ok := dest[0].(*string); ok { *p = "Open" }
-            if p, ok := dest[1].(*string); ok { *p = "TKT-1" }
-            if p, ok := dest[2].(*string); ok { *p = "" }
-        }
-        return nil
-    }}
+	// Return oldStatus, number, requesterEmail
+	return &fakeRow{scan: func(dest ...any) error {
+		if len(dest) >= 3 {
+			if p, ok := dest[0].(*string); ok {
+				*p = "Open"
+			}
+			if p, ok := dest[1].(*string); ok {
+				*p = "TKT-1"
+			}
+			if p, ok := dest[2].(*string); ok {
+				*p = ""
+			}
+		}
+		return nil
+	}}
 }
 func (db *updateCaptureDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
-    if db.firstExecArgs == nil {
-        db.firstExecArgs = append([]any{}, args...)
-    }
-    return pgconn.CommandTag{}, nil
+	if db.firstExecArgs == nil {
+		db.firstExecArgs = append([]any{}, args...)
+	}
+	return pgconn.CommandTag{}, nil
 }
 
 func TestUpdateTicket_LowercaseStatus_Normalized(t *testing.T) {
-    db := &updateCaptureDB{}
-    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	db := &updateCaptureDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
 
-    rr := httptest.NewRecorder()
-    req := httptest.NewRequest(http.MethodPatch, "/tickets/1", strings.NewReader(`{"status":"open"}`))
-    req.Header.Set("Content-Type", "application/json")
-    app.r.ServeHTTP(rr, req)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/tickets/1", strings.NewReader(`{"status":"open"}`))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
 
-    if rr.Code != http.StatusOK {
-        t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
-    }
-    if len(db.firstExecArgs) < 1 {
-        t.Fatalf("expected exec args captured")
-    }
-    val := db.firstExecArgs[0]
-    if ps, ok := val.(*string); ok {
-        val = *ps
-    }
-    if val != "Open" {
-        t.Fatalf("expected normalized status 'Open', got %#v", val)
-    }
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(db.firstExecArgs) < 1 {
+		t.Fatalf("expected exec args captured")
+	}
+	val := db.firstExecArgs[0]
+	if ps, ok := val.(*string); ok {
+		val = *ps
+	}
+	if val != "Open" {
+		t.Fatalf("expected normalized status 'Open', got %#v", val)
+	}
+}
+
+type eventCaptureDB struct {
+	execs []string
+}
+
+func (db *eventCaptureDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
+
+func (db *eventCaptureDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	s := strings.ToLower(strings.TrimSpace(sql))
+	switch {
+	case strings.HasPrefix(s, "insert into tickets"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if len(dest) >= 3 {
+				*(dest[0].(*string)) = "t1"
+				*(dest[1].(*string)) = "TKT-1"
+				*(dest[2].(*string)) = "New"
+			}
+			return nil
+		}}
+	case strings.HasPrefix(s, "insert into ticket_comments"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if len(dest) >= 1 {
+				*(dest[0].(*string)) = "c1"
+			}
+			return nil
+		}}
+	default:
+		return &fakeRow{scan: func(dest ...any) error {
+			for _, d := range dest {
+				switch v := d.(type) {
+				case *string:
+					*v = ""
+				case **string:
+					*v = nil
+				}
+			}
+			return nil
+		}}
+	}
+}
+
+func (db *eventCaptureDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	db.execs = append(db.execs, sql)
+	return pgconn.CommandTag{}, nil
+}
+
+func TestCreateTicket_EventRecorded(t *testing.T) {
+	db := &eventCaptureDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	body := `{"title":"foo","requester_id":"u1","priority":1}`
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rr.Code)
+	}
+	found := false
+	for _, sql := range db.execs {
+		if strings.Contains(strings.ToLower(sql), "insert into ticket_events") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected ticket_events insert, got %v", db.execs)
+	}
+}
+
+func TestAddWatcher_EventRecorded(t *testing.T) {
+	db := &eventCaptureDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	body := `{"user_id":"u2"}`
+	req := httptest.NewRequest(http.MethodPost, "/tickets/1/watchers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rr.Code)
+	}
+	found := false
+	for _, sql := range db.execs {
+		if strings.Contains(strings.ToLower(sql), "insert into ticket_events") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected ticket_events insert, got %v", db.execs)
+	}
 }
