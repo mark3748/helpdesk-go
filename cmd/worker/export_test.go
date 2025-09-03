@@ -117,10 +117,12 @@ func TestHandleExportTicketsJob(t *testing.T) {
 	if err := json.Unmarshal([]byte(val), &st); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if st.Status != "done" || st.URL == "" {
-		t.Fatalf("unexpected status: %+v", st)
-	}
-	res, err := http.Get(st.URL)
+    if st.Status != "done" || st.ObjectKey == "" {
+        t.Fatalf("unexpected status: %+v", st)
+    }
+    // Construct a fetch URL from the fake store and object key.
+    fetchURL := store.URL() + "/bucket/" + st.ObjectKey
+    res, err := http.Get(fetchURL)
 	if err != nil {
 		t.Fatalf("download: %v", err)
 	}
