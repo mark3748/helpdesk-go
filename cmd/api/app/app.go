@@ -151,11 +151,10 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 	a := &App{Cfg: cfg, DB: db, R: gin.New(), Keyf: keyf, M: store, Q: q}
 	a.R.Use(gin.Recovery())
 	a.R.Use(RequestID())
-	rl := rate.NewLimiter(rate.Inf, 0)
-	if cfg.RateLimitRPS > 0 {
-		rl = rate.NewLimiter(rate.Limit(cfg.RateLimitRPS), cfg.RateLimitBurst)
+	if cfg.RateLimitRPS > 0 && cfg.RateLimitBurst > 0 {
+		rl := rate.NewLimiter(rate.Limit(cfg.RateLimitRPS), cfg.RateLimitBurst)
+		a.R.Use(RateLimit(rl))
 	}
-	a.R.Use(RateLimit(rl))
 	a.R.Use(Logger())
 	return a
 }
