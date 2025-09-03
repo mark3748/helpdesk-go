@@ -1,4 +1,8 @@
-import type { Ticket, Comment, Attachment } from './types/api';
+import type { components } from './types/openapi';
+
+export type Ticket = components['schemas']['Ticket'];
+export type Comment = components['schemas']['Comment'];
+export type Attachment = components['schemas']['Attachment'];
 
 export type { Ticket, Comment, Attachment };
 
@@ -15,8 +19,19 @@ async function apiFetch<T = unknown>(path: string, opts: RequestInit = {}, token
   return (await res.json()) as T;
 }
 
-export async function listTickets(token: string): Promise<Ticket[]> {
-  return apiFetch<Ticket[]>('/tickets', {}, token);
+export async function listTickets(
+  token: string,
+  cursor?: string,
+  query: Record<string, string> = {},
+): Promise<{ items: Ticket[]; next_cursor?: string }> {
+  const params = new URLSearchParams(query);
+  if (cursor) params.set('cursor', cursor);
+  const qs = params.toString();
+  return apiFetch<{ items: Ticket[]; next_cursor?: string }>(
+    `/tickets${qs ? `?${qs}` : ''}`,
+    {},
+    token,
+  );
 }
 
 export async function getTicket(id: string, token: string): Promise<Ticket> {

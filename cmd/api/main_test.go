@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -461,6 +462,12 @@ func TestListTickets(t *testing.T) {
 			url:          "/tickets?status=open&priority=1",
 			wantSQLParts: []string{"t.status = $1", "t.priority = $2"},
 			wantArgs:     []any{"open", 1},
+		},
+		{
+			name:         "with cursor",
+			url:          "/tickets?cursor=2024-01-02T03:04:05Z",
+			wantSQLParts: []string{"t.created_at < $1"},
+			wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
 		},
 	}
 

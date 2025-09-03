@@ -325,14 +325,22 @@ paths:
         - in: query
           name: search
           schema: { type: string }
+        - in: query
+          name: cursor
+          schema: { type: string, format: date-time }
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/Ticket' }
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Ticket' }
+                  next_cursor:
+                    type: string
         '500': { description: Server Error }
       security:
         - bearerAuth: []

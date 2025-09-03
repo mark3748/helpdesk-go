@@ -1041,6 +1041,13 @@ func (a *App) listTickets(c *gin.Context) {
 		args = append(args, v)
 		i++
 	}
+	if v := c.Query("cursor"); v != "" {
+		if ts, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			where = append(where, fmt.Sprintf("t.created_at < $%d", i))
+			args = append(args, ts)
+			i++
+		}
+	}
 
 	if len(where) > 0 {
 		base += "\n       where " + strings.Join(where, " and ")
@@ -1083,7 +1090,11 @@ func (a *App) listTickets(c *gin.Context) {
 		}
 		out = append(out, t)
 	}
-	c.JSON(200, out)
+	resp := gin.H{"items": out}
+	if len(out) == 200 {
+		resp["next_cursor"] = out[len(out)-1].CreatedAt.Format(time.RFC3339Nano)
+	}
+	c.JSON(200, resp)
 }
 
 type jsonRaw []byte
