@@ -89,6 +89,7 @@ See `docs/api.md` for detailed status codes, request/response bodies, and models
 - Unit tests can bypass JWT validation by setting `TEST_BYPASS_AUTH=true`. This injects a synthetic user with the `agent` role so auth-protected routes can be exercised without a JWKS.
 - Handlers depend on database and object storage interfaces, enabling fakes in tests without external services.
 - Run all tests from repo root: `go test ./...`
+- The project targets **≥70%** test coverage across packages; pull requests should not drop below this threshold.
 
 ## Continuous Integration
 
