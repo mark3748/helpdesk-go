@@ -126,15 +126,16 @@ func Update(a *app.App) gin.HandlerFunc {
 			args = append(args, *in.Name)
 			idx++
 		}
-		if in.Phone != nil {
-			if *in.Phone == "" || !ValidPhone(*in.Phone) {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_phone"})
-				return
-			}
-			set = append(set, fmt.Sprintf("phone=$%d", idx))
-			args = append(args, *in.Phone)
-			idx++
-		}
+    if in.Phone != nil {
+        if *in.Phone != "" && !ValidPhone(*in.Phone) {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_phone"})
+            return
+        }
+        // Store empty string as NULL for consistency with Create
+        set = append(set, fmt.Sprintf("phone=nullif($%d,'')", idx))
+        args = append(args, *in.Phone)
+        idx++
+    }
 		if a.DB == nil {
 			c.JSON(http.StatusOK, Requester{ID: c.Param("id")})
 			return

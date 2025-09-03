@@ -163,10 +163,18 @@ returning id::text, number, title, status, assignee_id::text, priority`
 		t.Status = status
 		t.AssigneeID = assignee
 		t.RequesterID = in.RequesterID
-		// Best-effort fill requester label
-		if a.DB != nil {
-			_ = a.DB.QueryRow(c.Request.Context(), `select coalesce(name,''), coalesce(email,'') from requesters where id=$1`, in.RequesterID).Scan(&t.Requester, &t.Requester)
-		}
+    // Best-effort fill requester label
+    if a.DB != nil {
+        var name, email string
+        _ = a.DB.QueryRow(c.Request.Context(), `select coalesce(name,''), coalesce(email,'') from requesters where id=$1`, in.RequesterID).Scan(&name, &email)
+        if name != "" && email != "" {
+            t.Requester = fmt.Sprintf("%s <%s>", name, email)
+        } else if name != "" {
+            t.Requester = name
+        } else {
+            t.Requester = email
+        }
+    }
 		c.JSON(http.StatusCreated, t)
 	}
 }
@@ -222,7 +230,7 @@ func List(a *app.App) gin.HandlerFunc {
 			where = append(where, fmt.Sprintf("(t.title ILIKE $%d OR t.description ILIKE $%d)", n, n))
 			args = append(args, "%"+v+"%")
 		}
-		sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(u.display_name, u.email, '') as requester from tickets t left join users u on u.id=t.requester_id"
+	sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester from tickets t left join requesters r on r.id=t.requester_id"
 		if len(where) > 0 {
 			sql += " where " + strings.Join(where, " and ")
 		}
@@ -257,7 +265,7 @@ func Get(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusOK, Ticket{})
 			return
 		}
-		const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(u.display_name, u.email, '') as requester from tickets t left join users u on u.id=t.requester_id where t.id=$1`
+	const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester from tickets t left join requesters r on r.id=t.requester_id where t.id=$1`
 		var t Ticket
 		var assignee *string
 		var number any
