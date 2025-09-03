@@ -50,6 +50,7 @@ components:
         requester_id: { type: string, format: uuid }
         assignee_id: { type: string, format: uuid, nullable: true }
         team_id: { type: string, format: uuid, nullable: true }
+        queue_id: { type: string, format: uuid, nullable: true }
         priority: { type: integer, minimum: 1, maximum: 4 }
         urgency: { type: integer, minimum: 1, maximum: 4, nullable: true }
         category: { type: string, nullable: true }
@@ -101,6 +102,8 @@ components:
         urgency: { type: integer, minimum: 1, maximum: 4 }
         category: { type: string }
         subcategory: { type: string }
+        assignee_id: { type: string, format: uuid }
+        queue_id: { type: string, format: uuid }
         custom_json: { type: object }
     UpdateTicketRequest:
       type: object
@@ -143,6 +146,53 @@ components:
           type: object
           additionalProperties:
             type: string
+    Requester:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+    Queue:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    EventEnvelope:
+      type: object
+      properties:
+        type: { type: string }
+        data: { type: object }
+    PresignRequest:
+      type: object
+      required: [filename]
+      properties:
+        filename: { type: string }
+        content_type: { type: string }
+    PresignResponse:
+      type: object
+      properties:
+        url: { type: string }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+    OIDCSettings:
+      type: object
+      properties:
+        issuer: { type: string }
+        client_id: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+    MailSettings:
+      type: object
+      properties:
+        smtp_host: { type: string }
+        imap_host: { type: string }
+        from: { type: string }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
 paths:
   /healthz:
     get:
@@ -212,7 +262,7 @@ paths:
           content:
             text/event-stream:
               schema:
-                type: string
+                $ref: '#/components/schemas/EventEnvelope'
       security:
         - bearerAuth: []
         - cookieAuth: []
@@ -292,6 +342,12 @@ paths:
           schema: { type: string, format: uuid }
         - in: query
           name: assignee
+          schema: { type: string, format: uuid }
+        - in: query
+          name: requester
+          schema: { type: string, format: uuid }
+        - in: query
+          name: queue
           schema: { type: string, format: uuid }
         - in: query
           name: search
@@ -690,4 +746,5 @@ paths:
       security:
         - bearerAuth: []
         - cookieAuth: []
+
 
