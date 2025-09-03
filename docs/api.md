@@ -63,10 +63,12 @@ Metrics (agent role)
 - GET `/metrics/sla` → 200 `{ total, met, sla_attainment }` | 500
 - GET `/metrics/resolution` → 200 `{ avg_resolution_ms }` | 500
 - GET `/metrics/tickets` → 200 `{ daily: [{ day, count }] }` | 500
+- GET `/metrics` → Prometheus metrics (no auth)
 
 Events
 - GET `/events` (SSE) → stream of `ticket_created`, `ticket_updated`, `queue_changed`
   - `queue_changed` requires `admin` role
+  - Heartbeat comments (`:hb`) sent ~every 30s keep the connection alive
 
 ## Models
 

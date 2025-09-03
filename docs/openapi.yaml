@@ -234,7 +234,7 @@ paths:
     get:
       tags: [Events]
       summary: Event stream
-      description: Server-sent events for ticket and queue updates.
+      description: Server-sent events for ticket and queue updates. Heartbeat comments (`:hb`) are sent about every 30s.
       responses:
         '200':
           description: OK
