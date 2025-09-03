@@ -15,6 +15,7 @@ import (
 
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 	requesterspkg "github.com/mark3748/helpdesk-go/cmd/api/requesters"
 )
 
@@ -401,6 +402,9 @@ func Update(a *app.App) gin.HandlerFunc {
 		}
 		t.Number = number
 		t.AssigneeID = assignee
+		if in.AssigneeID != nil {
+			handlers.PublishEvent(c.Request.Context(), a.Q, handlers.Event{Type: "ticket_updated", Data: map[string]any{"id": t.ID}})
+		}
 		c.JSON(http.StatusOK, t)
 	}
 }

@@ -25,6 +25,7 @@ import (
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 	metricspkg "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 	migratepkg "github.com/mark3748/helpdesk-go/cmd/api/migrations"
+	queuespkg "github.com/mark3748/helpdesk-go/cmd/api/queues"
 	requesterspkg "github.com/mark3748/helpdesk-go/cmd/api/requesters"
 	rolespkg "github.com/mark3748/helpdesk-go/cmd/api/roles"
 	ticketspkg "github.com/mark3748/helpdesk-go/cmd/api/tickets"
@@ -197,10 +198,12 @@ func main() {
 	auth.POST("/requesters", requesterspkg.Create(a))
 	auth.GET("/requesters/:id", requesterspkg.Get(a))
 	auth.PATCH("/requesters/:id", requesterspkg.Update(a))
+	auth.GET("/queues", authpkg.RequireRole("agent", "manager"), queuespkg.List(a))
 	auth.GET("/tickets", ticketspkg.List(a))
 	auth.POST("/tickets", ticketspkg.Create(a))
 	auth.GET("/tickets/:id", ticketspkg.Get(a))
 	auth.PATCH("/tickets/:id", authpkg.RequireRole("agent", "manager"), ticketspkg.Update(a))
+	auth.POST("/tickets/:id/assign", authpkg.RequireRole("agent", "manager"), ticketspkg.Assign(a))
 	auth.GET("/tickets/:id/comments", commentspkg.List(a))
 	auth.POST("/tickets/:id/comments", commentspkg.Add(a))
 	auth.GET("/tickets/:id/attachments", attachmentspkg.List(a))
