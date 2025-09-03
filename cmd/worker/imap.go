@@ -6,25 +6,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/mail"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/emersion/go-imap"
 	imapclient "github.com/emersion/go-imap/client"
+	"github.com/emersion/go-message/mail"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 
+	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 )
 
 // pollIMAP connects to an IMAP inbox, retrieves new messages and stores them.
-func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client, rdb *redis.Client) error {
-	if c.MinIOBucket != "" && mc == nil {
-		return fmt.Errorf("MinIO client is nil")
+func pollIMAP(ctx context.Context, c Config, db app.DB, store app.ObjectStore, rdb *redis.Client) error {
+	if c.MinIOBucket != "" && store == nil {
+		return fmt.Errorf("object store is nil")
 	}
 	addr := fmt.Sprintf("%s:993", c.IMAPHost)
 	cli, err := imapclient.DialTLS(addr, nil)
@@ -75,67 +76,8 @@ func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client,
 			continue
 		}
 
-		key := fmt.Sprintf("email/%s.eml", uuid.NewString())
-		if c.MinIOBucket != "" {
-			_, err = mc.PutObject(ctx, c.MinIOBucket, key, bytes.NewReader(raw), int64(len(raw)), minio.PutObjectOptions{})
-			if err != nil {
-				log.Error().Err(err).Msg("put object")
-			}
-		}
-
-		m, err := mail.ReadMessage(bytes.NewReader(raw))
-		if err != nil {
-			log.Error().Err(err).Msg("parse message")
-			continue
-		}
-		subject := sanitizeEmailHeader(m.Header.Get("Subject"))
-		from := sanitizeEmailHeader(m.Header.Get("From"))
-		body, err := io.ReadAll(m.Body)
-		if err != nil {
-			log.Error().Err(err).Msg("read message body")
-			continue
-		}
-		cleanBody := sanitizeEmailBody(body)
-
-		var ticketID int64
-		re := regexp.MustCompile(`\[TKT-(\d+)\]`)
-		if match := re.FindStringSubmatch(subject); len(match) == 2 {
-			if n, err := strconv.Atoi(match[1]); err == nil {
-				if err := db.QueryRow(ctx, "select id from tickets where number=$1", n).Scan(&ticketID); err != nil {
-					ticketID = 0
-				}
-			}
-		}
-
-		created := false
-		if ticketID == 0 {
-			if err := db.QueryRow(ctx, "insert into tickets (title, description, status) values ($1,$2,'New') returning id", subject, cleanBody).Scan(&ticketID); err != nil {
-				log.Error().Err(err).Msg("create ticket")
-				continue
-			}
-			created = true
-		} else {
-			if _, err := db.Exec(ctx, "insert into ticket_comments (ticket_id, body_md, is_internal) values ($1,$2,false)", ticketID, cleanBody); err != nil {
-				log.Error().Err(err).Msg("insert comment")
-			}
-		}
-		if created {
-			handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "ticket_created", Data: map[string]interface{}{"id": ticketID}})
-		} else {
-			handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "ticket_updated", Data: map[string]interface{}{"id": ticketID}})
-		}
-
-		parsed := map[string]string{
-			"subject": subject,
-			"from":    from,
-		}
-		pj, err := json.Marshal(parsed)
-		if err != nil {
-			log.Error().Err(err).Msg("marshal parsed email")
-			continue
-		}
-		if _, err := db.Exec(ctx, "insert into email_inbound (raw_store_key, parsed_json, status, ticket_id) values ($1,$2,'processed',$3)", key, pj, ticketID); err != nil {
-			log.Error().Err(err).Msg("insert email_inbound")
+		if err := processIMAPMessage(ctx, c, db, store, rdb, raw); err != nil {
+			log.Error().Err(err).Msg("process message")
 		}
 
 		seq := new(imap.SeqSet)
@@ -145,4 +87,125 @@ func pollIMAP(ctx context.Context, c Config, db *pgxpool.Pool, mc *minio.Client,
 		}
 	}
 	return <-done
+}
+
+// processIMAPMessage parses and stores a single email message.
+func processIMAPMessage(ctx context.Context, c Config, db app.DB, store app.ObjectStore, rdb *redis.Client, raw []byte) error {
+	mr, err := mail.CreateReader(bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	msgID := strings.TrimSpace(mr.Header.Get("Message-Id"))
+	if msgID != "" {
+		var existing int64
+		if err := db.QueryRow(ctx, "select ticket_id from email_inbound where message_id=$1", msgID).Scan(&existing); err == nil {
+			return nil
+		}
+	}
+
+	subject := sanitizeEmailHeader(mr.Header.Get("Subject"))
+	from := sanitizeEmailHeader(mr.Header.Get("From"))
+
+	type att struct {
+		name string
+		mime string
+		data []byte
+	}
+	var atts []att
+	var body string
+
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		switch h := part.Header.(type) {
+		case *mail.InlineHeader:
+			ct, _, _ := h.ContentType()
+			b, _ := io.ReadAll(part.Body)
+			if body == "" && strings.HasPrefix(ct, "text/") {
+				body = sanitizeEmailBody(b)
+			}
+		case *mail.AttachmentHeader:
+			filename, _ := h.Filename()
+			filename = sanitizeAttachmentName(filename)
+			if filename == "" {
+				log.Error().Msg("attachment filename invalid")
+				continue
+			}
+			ct, _, _ := h.ContentType()
+			b, _ := io.ReadAll(part.Body)
+			atts = append(atts, att{name: filename, mime: ct, data: b})
+		}
+	}
+
+	var ticketID int64
+	re := regexp.MustCompile(`\[TKT-(\d+)\]`)
+	if match := re.FindStringSubmatch(subject); len(match) == 2 {
+		if n, err := strconv.Atoi(match[1]); err == nil {
+			if err := db.QueryRow(ctx, "select id from tickets where number=$1", n).Scan(&ticketID); err != nil {
+				ticketID = 0
+			}
+		}
+	}
+
+	created := false
+	if ticketID == 0 {
+		if err := db.QueryRow(ctx, "insert into tickets (title, description, status) values ($1,$2,'New') returning id", subject, body).Scan(&ticketID); err != nil {
+			return err
+		}
+		created = true
+	} else {
+		if _, err := db.Exec(ctx, "insert into ticket_comments (ticket_id, body_md, is_internal) values ($1,$2,false)", ticketID, body); err != nil {
+			log.Error().Err(err).Msg("insert comment")
+		}
+	}
+	if created {
+		handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "ticket_created", Data: map[string]interface{}{"id": ticketID}})
+	} else {
+		handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "ticket_updated", Data: map[string]interface{}{"id": ticketID}})
+	}
+
+	var attMeta []map[string]interface{}
+	for _, a := range atts {
+		if store != nil && c.MinIOBucket != "" {
+			fname := sanitizeAttachmentName(a.name)
+			if fname == "" {
+				log.Error().Msg("attachment filename invalid")
+				continue
+			}
+			key := fmt.Sprintf("attachments/%s/%s", uuid.NewString(), fname)
+			if _, err := store.PutObject(ctx, c.MinIOBucket, key, bytes.NewReader(a.data), int64(len(a.data)), minio.PutObjectOptions{ContentType: a.mime}); err != nil {
+				log.Error().Err(err).Msg("put attachment")
+			} else {
+				if _, err := db.Exec(ctx, "insert into attachments (ticket_id, uploader_id, object_key, filename, bytes, mime) values ($1,$2,$3,$4,$5,$6)", ticketID, uuid.Nil, key, fname, len(a.data), a.mime); err != nil {
+					log.Error().Err(err).Msg("insert attachment")
+				}
+				attMeta = append(attMeta, map[string]interface{}{"filename": fname, "object_key": key})
+			}
+		}
+	}
+
+	parsed := map[string]interface{}{
+		"subject":     subject,
+		"from":        from,
+		"attachments": attMeta,
+	}
+	pj, err := json.Marshal(parsed)
+	if err != nil {
+		return err
+	}
+	rawKey := fmt.Sprintf("email/%s.eml", uuid.NewString())
+	if store != nil && c.MinIOBucket != "" {
+		if _, err := store.PutObject(ctx, c.MinIOBucket, rawKey, bytes.NewReader(raw), int64(len(raw)), minio.PutObjectOptions{}); err != nil {
+			log.Error().Err(err).Msg("put object")
+		}
+	}
+	if _, err := db.Exec(ctx, "insert into email_inbound (raw_store_key, parsed_json, message_id, status, ticket_id) values ($1,$2,$3,'processed',$4)", rawKey, pj, msgID, ticketID); err != nil {
+		log.Error().Err(err).Msg("insert email_inbound")
+	}
+	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/smtp"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 	"github.com/mark3748/helpdesk-go/internal/sla"
 )
@@ -46,6 +48,7 @@ type Config struct {
 	MinIOSecret   string
 	MinIOBucket   string
 	MinIOUseSSL   bool
+	FileStorePath string
 	LogPath       string
 }
 
@@ -76,6 +79,7 @@ func cfg() Config {
 		MinIOSecret:   getEnv("MINIO_SECRET_KEY", ""),
 		MinIOBucket:   getEnv("MINIO_BUCKET", ""),
 		MinIOUseSSL:   getEnv("MINIO_USE_SSL", "false") == "true",
+		FileStorePath: getEnv("FILESTORE_PATH", ""),
 		LogPath:       getEnv("LOG_PATH", os.TempDir()),
 	}
 }
@@ -134,6 +138,20 @@ func sanitizeAndValidateEmail(email string) (string, error) {
 // sanitizeEmailBody removes potentially harmful HTML or scripts from an email body
 func sanitizeEmailBody(body []byte) string {
 	return string(htmlPolicy.SanitizeBytes(body))
+}
+
+// sanitizeAttachmentName strips path components to prevent filesystem traversal
+func sanitizeAttachmentName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	name = strings.ReplaceAll(name, "\\", "/")
+	name = path.Base(name)
+	if name == "." || name == ".." {
+		return ""
+	}
+	return name
 }
 
 func sendEmail(c Config, j EmailJob) error {
@@ -208,21 +226,26 @@ func main() {
 	}
 	defer rdb.Close()
 
-	var mc *minio.Client
+	var store app.ObjectStore
 	if c.MinIOEndpoint != "" {
-		mc, err = minio.New(c.MinIOEndpoint, &minio.Options{
+		mc, err := minio.New(c.MinIOEndpoint, &minio.Options{
 			Creds:  credentials.NewStaticV4(c.MinIOAccess, c.MinIOSecret, ""),
 			Secure: c.MinIOUseSSL,
 		})
 		if err != nil {
 			log.Error().Err(err).Msg("minio init")
+		} else {
+			store = mc
 		}
+	}
+	if store == nil && c.FileStorePath != "" {
+		store = &app.FsObjectStore{Base: c.FileStorePath}
 	}
 
 	if c.IMAPHost != "" {
 		go func() {
 			for {
-				if err := pollIMAP(ctx, c, db, mc, rdb); err != nil {
+				if err := pollIMAP(ctx, c, db, store, rdb); err != nil {
 					log.Error().Err(err).Msg("poll imap")
 				}
 				time.Sleep(time.Minute)
