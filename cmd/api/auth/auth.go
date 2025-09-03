@@ -50,9 +50,43 @@ func Middleware(a *app.App) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			return
 		}
-		c.Set("user", AuthUser{})
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			return
+		}
+		u := AuthUser{
+			ExternalID:  getStringClaim(claims, "sub"),
+			Email:       getStringClaim(claims, "email"),
+			DisplayName: getStringClaim(claims, "name"),
+		}
+		if u.DisplayName == "" {
+			u.DisplayName = getStringClaim(claims, "preferred_username")
+		}
+		if groups, ok := claims[a.Cfg.OIDCGroupClaim]; ok {
+			switch g := groups.(type) {
+			case []interface{}:
+				for _, v := range g {
+					if s, ok := v.(string); ok {
+						u.Roles = append(u.Roles, s)
+					}
+				}
+			case []string:
+				u.Roles = append(u.Roles, g...)
+			case string:
+				u.Roles = append(u.Roles, g)
+			}
+		}
+		c.Set("user", u)
 		c.Next()
 	}
+}
+
+func getStringClaim(c jwt.MapClaims, key string) string {
+	if v, ok := c[key].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // Me returns the authenticated user.
