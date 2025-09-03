@@ -27,9 +27,14 @@ Auth (local mode only)
 User
 - GET `/me` → 200 `{ id, external_id, email, display_name, roles }` | 401
 
+Requesters
+- POST `/requesters` body `{ email?, name?, phone? }` (email or phone required) → 201 `{ id }` | 400 | 500
+- GET `/requesters/:id` → 200 `{ id, email, name, phone }` | 404
+- PATCH `/requesters/:id` body partial `{ email?, name?, phone? }` → 200 `{ id }` | 400 | 404 | 500
+
 Tickets
 - GET `/tickets` query `status,priority,team,assignee,search` → 200 `[Ticket]` | 500
-- POST `/tickets` body `{ title, description, requester_id, priority, urgency?, category?, subcategory?, custom_json? }` → 201 `{ id, number, status }` | 400 | 500
+- POST `/tickets` body `{ title, description, requester_id?, requester?, priority, urgency?, category?, subcategory?, custom_json? }` → 201 `{ id, number, status }` | 400 | 500
   - `urgency` 1-4
   - `custom_json` object of additional fields
 - GET `/tickets/:id` → 200 `Ticket` | 404

@@ -31,6 +31,7 @@ func TestTicketHandlers(t *testing.T) {
 	}{
 		{"list", http.MethodGet, "/tickets", "", http.StatusOK},
 		{"create", http.MethodPost, "/tickets", `{"title":"abc","requester_id":"00000000-0000-0000-0000-000000000000","priority":1}`, http.StatusCreated},
+		{"create_inline", http.MethodPost, "/tickets", `{"title":"abc","requester":{"email":"a@b.com"},"priority":1}`, http.StatusCreated},
 		{"get", http.MethodGet, "/tickets/1", "", http.StatusOK},
 		{"update", http.MethodPut, "/tickets/1", `{}`, http.StatusOK},
 	}
@@ -45,7 +46,7 @@ func TestTicketHandlers(t *testing.T) {
 			if rr.Code != tt.want {
 				t.Fatalf("expected %d, got %d", tt.want, rr.Code)
 			}
-			if tt.name == "create" {
+			if tt.name == "create" || tt.name == "create_inline" {
 				var tk Ticket
 				if err := json.Unmarshal(rr.Body.Bytes(), &tk); err != nil || tk.Title != "abc" {
 					t.Fatalf("unexpected ticket: %v %v", tk, err)

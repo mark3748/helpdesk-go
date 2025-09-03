@@ -13,6 +13,7 @@ import (
 
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	requesterspkg "github.com/mark3748/helpdesk-go/cmd/api/requesters"
 )
 
 type Ticket struct {
@@ -29,9 +30,14 @@ type Ticket struct {
 
 // createTicketReq mirrors the JSON body for creating a ticket.
 type createTicketReq struct {
-	Title       string          `json:"title" binding:"required,min=3"`
-	Description string          `json:"description"`
-	RequesterID string          `json:"requester_id" binding:"required"`
+	Title       string `json:"title" binding:"required,min=3"`
+	Description string `json:"description"`
+	RequesterID string `json:"requester_id"`
+	Requester   *struct {
+		Email string `json:"email"`
+		Name  string `json:"name"`
+		Phone string `json:"phone"`
+	} `json:"requester"`
 	Priority    int16           `json:"priority" binding:"required,min=1,max=4"`
 	AssigneeID  *string         `json:"assignee_id"`
 	Urgency     *int16          `json:"urgency" binding:"omitempty,min=1,max=4"`
@@ -63,6 +69,33 @@ func Create(a *app.App) gin.HandlerFunc {
 			if err := json.Unmarshal(in.CustomJSON, &tmp); err != nil || (tmp != nil && reflect.ValueOf(tmp).Kind() != reflect.Map) {
 				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"custom_json": "must be object"}})
 				return
+			}
+		}
+		if in.RequesterID == "" {
+			if in.Requester == nil {
+				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"requester": "required"}})
+				return
+			}
+			if in.Requester.Email == "" && in.Requester.Phone == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"requester": "email_or_phone"}})
+				return
+			}
+			if in.Requester.Email != "" && !requesterspkg.ValidEmail(in.Requester.Email) {
+				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"email": "invalid"}})
+				return
+			}
+			if in.Requester.Phone != "" && !requesterspkg.ValidPhone(in.Requester.Phone) {
+				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"phone": "invalid"}})
+				return
+			}
+			if a.DB == nil {
+				in.RequesterID = "1"
+			} else {
+				const rq = `insert into requesters (email, name, phone) values (nullif($1,''), nullif($2,''), nullif($3,'')) returning id::text`
+				if err := a.DB.QueryRow(c.Request.Context(), rq, strings.ToLower(in.Requester.Email), in.Requester.Name, in.Requester.Phone).Scan(&in.RequesterID); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
 			}
 		}
 		// Test mode: no DB attached, mimic previous behavior
@@ -126,10 +159,18 @@ returning id::text, number, title, status, assignee_id::text, priority`
 		t.Status = status
 		t.AssigneeID = assignee
 		t.RequesterID = in.RequesterID
-		// Best-effort fill requester label
-		if a.DB != nil {
-			_ = a.DB.QueryRow(c.Request.Context(), `select coalesce(display_name,''), coalesce(email,'') from users where id=$1`, in.RequesterID).Scan(&t.Requester, &t.Requester)
-		}
+    // Best-effort fill requester label
+    if a.DB != nil {
+        var name, email string
+        _ = a.DB.QueryRow(c.Request.Context(), `select coalesce(name,''), coalesce(email,'') from requesters where id=$1`, in.RequesterID).Scan(&name, &email)
+        if name != "" && email != "" {
+            t.Requester = fmt.Sprintf("%s <%s>", name, email)
+        } else if name != "" {
+            t.Requester = name
+        } else {
+            t.Requester = email
+        }
+    }
 		c.JSON(http.StatusCreated, t)
 	}
 }
@@ -185,7 +226,7 @@ func List(a *app.App) gin.HandlerFunc {
 			where = append(where, fmt.Sprintf("(t.title ILIKE $%d OR t.description ILIKE $%d)", n, n))
 			args = append(args, "%"+v+"%")
 		}
-		sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(u.display_name, u.email, '') as requester from tickets t left join users u on u.id=t.requester_id"
+	sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester from tickets t left join requesters r on r.id=t.requester_id"
 		if len(where) > 0 {
 			sql += " where " + strings.Join(where, " and ")
 		}
@@ -220,7 +261,7 @@ func Get(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusOK, Ticket{})
 			return
 		}
-		const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(u.display_name, u.email, '') as requester from tickets t left join users u on u.id=t.requester_id where t.id=$1`
+	const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester from tickets t left join requesters r on r.id=t.requester_id where t.id=$1`
 		var t Ticket
 		var assignee *string
 		var number any

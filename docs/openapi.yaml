@@ -91,13 +91,27 @@ components:
         bytes: { type: integer, format: int64 }
         mime: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
+    Requester:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        phone: { type: string }
+    CreateRequesterRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        name: { type: string }
+        phone: { type: string }
     CreateTicketRequest:
       type: object
-      required: [title, requester_id, priority]
+      required: [title, priority]
       properties:
         title: { type: string }
         description: { type: string }
         requester_id: { type: string, format: uuid }
+        requester: { $ref: '#/components/schemas/CreateRequesterRequest' }
         priority: { type: integer, minimum: 1, maximum: 4 }
         urgency: { type: integer, minimum: 1, maximum: 4 }
         category: { type: string }
@@ -146,12 +160,6 @@ components:
           type: object
           additionalProperties:
             type: string
-    Requester:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        email: { type: string, format: email }
-        name: { type: string }
     Queue:
       type: object
       properties:
@@ -322,6 +330,70 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: OK }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /requesters:
+    post:
+      tags: [Requesters]
+      summary: Create requester
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRequesterRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Requester' }
+        '400': { description: Validation error }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /requesters/{id}:
+    get:
+      tags: [Requesters]
+      summary: Get requester
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Requester' }
+        '404': { description: Not Found }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    patch:
+      tags: [Requesters]
+      summary: Update requester
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRequesterRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Requester' }
+        '400': { description: Validation error }
+        '404': { description: Not Found }
         '500': { description: Server Error }
       security:
         - bearerAuth: []
