@@ -237,13 +237,13 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 	if q != nil {
 		a.pingRedis = func(ctx context.Context) error { return q.Ping(ctx).Err() }
 		if cfg.LoginRateLimit > 0 {
-			a.loginRL = rateln.New(q, cfg.LoginRateLimit, time.Minute)
+			a.loginRL = rateln.New(q, cfg.LoginRateLimit, time.Minute, "login:")
 		}
 		if cfg.TicketRateLimit > 0 {
-			a.ticketRL = rateln.New(q, cfg.TicketRateLimit, time.Minute)
+			a.ticketRL = rateln.New(q, cfg.TicketRateLimit, time.Minute, "tickets:")
 		}
 		if cfg.AttachmentRateLimit > 0 {
-			a.attRL = rateln.New(q, cfg.AttachmentRateLimit, time.Minute)
+			a.attRL = rateln.New(q, cfg.AttachmentRateLimit, time.Minute, "attachments:")
 		}
 	}
 	handlers.InitSettings(cfg.LogPath)

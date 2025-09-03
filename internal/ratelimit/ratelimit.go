@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,9 +19,15 @@ type Limiter struct {
 }
 
 // New returns a new Limiter. limit is the maximum number of requests per window.
-// window defines the period over which limit applies.
-func New(rdb *redis.Client, limit int, window time.Duration) *Limiter {
-	return &Limiter{rdb: rdb, limit: limit, window: window, prefix: "rl:"}
+// window defines the period over which limit applies. prefix namespaces keys in
+// Redis so multiple limiters can coexist without interfering with each other.
+func New(rdb *redis.Client, limit int, window time.Duration, prefix string) *Limiter {
+	if prefix == "" {
+		prefix = "rl:"
+	} else if !strings.HasPrefix(prefix, "rl:") {
+		prefix = "rl:" + prefix
+	}
+	return &Limiter{rdb: rdb, limit: limit, window: window, prefix: prefix}
 }
 
 // Allow consumes a token for the given key if available.
