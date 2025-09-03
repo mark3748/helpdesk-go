@@ -233,7 +233,7 @@ func List(a *app.App) gin.HandlerFunc {
 
 		if teams := getMulti("team"); len(teams) > 0 {
 			n := len(args) + 1
-			where = append(where, fmt.Sprintf("t.team_id = ANY($%d)", n))
+			where = append(where, fmt.Sprintf("t.team_id = ANY($%d::uuid[])", n))
 			args = append(args, teams)
 		}
 
@@ -243,19 +243,19 @@ func List(a *app.App) gin.HandlerFunc {
 		}
 		if len(assignees) > 0 {
 			n := len(args) + 1
-			where = append(where, fmt.Sprintf("t.assignee_id = ANY($%d)", n))
+			where = append(where, fmt.Sprintf("t.assignee_id = ANY($%d::uuid[])", n))
 			args = append(args, assignees)
 		}
 
 		if reqs := getMulti("requester"); len(reqs) > 0 {
 			n := len(args) + 1
-			where = append(where, fmt.Sprintf("t.requester_id = ANY($%d)", n))
+			where = append(where, fmt.Sprintf("t.requester_id = ANY($%d::uuid[])", n))
 			args = append(args, reqs)
 		}
 
 		if qs := getMulti("queue"); len(qs) > 0 {
 			n := len(args) + 1
-			where = append(where, fmt.Sprintf("t.queue_id = ANY($%d)", n))
+			where = append(where, fmt.Sprintf("t.queue_id = ANY($%d::uuid[])", n))
 			args = append(args, qs)
 		}
 
