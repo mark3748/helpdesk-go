@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "gen:api": "openapi-typescript http://localhost:8080/openapi.yaml -o src/types/openapi.ts",
-    "gen:api:container": "openapi-typescript http://api:8080/openapi.yaml -o src/types/openapi.ts"
+    "gen:api:container": "openapi-typescript http://api:8080/openapi.yaml -o src/types/openapi.ts",
+    "test": "vitest"
   },
   "dependencies": {
     "@ant-design/v5-patch-for-react-19": "^1.0.3",
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
+    "@testing-library/react": "^16.0.0",
     "@types/node": "^24.3.0",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
@@ -29,9 +31,11 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
+    "jsdom": "^26.1.0",
     "openapi-typescript": "^7.9.1",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.39.1",
-    "vite": "^7.1.4"
+    "vite": "^7.1.4",
+    "vitest": "^2.1.4"
   }
 }

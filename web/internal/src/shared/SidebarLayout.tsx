@@ -34,7 +34,8 @@ const groups: NavGroup[] = [
     label: 'Admin',
     role: 'admin',
     children: [
-      { key: 'settings', label: 'Mail Settings', path: '/settings' },
+      { key: 'settings', label: 'Admin Settings', path: '/settings' },
+      { key: 'settings-mail', label: 'Mail Settings', path: '/settings/mail' },
       { key: 'settings-oidc', label: 'OIDC Settings', path: '/settings/oidc' },
       { key: 'settings-storage', label: 'Storage Settings', path: '/settings/storage' },
       { key: 'settings-users', label: 'User Roles', path: '/settings/users' },
