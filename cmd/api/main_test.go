@@ -148,4 +148,15 @@ func TestCreateTicketValidationErrors(t *testing.T) {
 			t.Fatalf("expected custom_json error, got %v", resp.Errors)
 		}
 	})
+
+	t.Run("null custom_json", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		body := `{"title":"abc","requester_id":"00000000-0000-0000-0000-000000000000","priority":1,"custom_json":null}`
+		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		a.R.ServeHTTP(rr, req)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d", rr.Code)
+		}
+	})
 }

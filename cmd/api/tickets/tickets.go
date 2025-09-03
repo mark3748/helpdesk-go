@@ -52,7 +52,7 @@ func Create(a *app.App) gin.HandlerFunc {
 		}
 		if len(in.CustomJSON) > 0 {
 			var tmp interface{}
-			if err := json.Unmarshal(in.CustomJSON, &tmp); err != nil || reflect.ValueOf(tmp).Kind() != reflect.Map {
+			if err := json.Unmarshal(in.CustomJSON, &tmp); err != nil || (tmp != nil && reflect.ValueOf(tmp).Kind() != reflect.Map) {
 				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"custom_json": "must be object"}})
 				return
 			}
