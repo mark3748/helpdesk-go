@@ -52,7 +52,8 @@ Watchers
 - DELETE `/tickets/:id/watchers/:userID` → 200 `{ ok:true }` | 500
 
 Customer Satisfaction (CSAT)
-- GET `/csat/:token?score=good|bad` (public) → 200 `{ ok:true }` | 400 | 404 | 500
+- GET `/csat/:token` (public) → 200 HTML form | 500
+- POST `/csat/:token` score=good|bad → 200 `{ ok:true }` | 400 | 404 | 500
 
 Exports
 - POST `/exports/tickets` (agent role) body `{ ids: [uuid] }` → 200 `{ url }` | 400 | 500
