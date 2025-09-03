@@ -156,7 +156,17 @@ func (f *fakeIMAPClient) Search(criteria *imap.SearchCriteria) ([]uint32, error)
 	return []uint32{1}, nil
 }
 func (f *fakeIMAPClient) Fetch(seqset *imap.SeqSet, items []imap.FetchItem, ch chan *imap.Message) error {
-	section := &imap.BodySectionName{}
+	// Use the same body section requested by pollIMAP so msg.GetBody can find it.
+	var section *imap.BodySectionName
+	for _, it := range items {
+		if s, err := imap.ParseBodySectionName(it); err == nil {
+			section = s
+			break
+		}
+	}
+	if section == nil {
+		section = &imap.BodySectionName{}
+	}
 	msg := &imap.Message{SeqNum: 1, Body: map[*imap.BodySectionName]imap.Literal{section: &bytesLiteral{data: f.raw}}}
 	ch <- msg
 	close(ch)
