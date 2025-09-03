@@ -197,7 +197,7 @@ type App struct {
 // NewApp constructs an App with injected dependencies and registers routes.
 func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client) *App {
 	a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
-	handlers.InitSettings(cfg.LogPath)
+	handlers.InitSettings(context.Background(), db, cfg.LogPath)
 	a.r.Use(gin.Recovery())
 	a.r.Use(gin.Logger())
 	a.routes()
@@ -373,11 +373,11 @@ func (a *App) routes() {
 	auth.GET("/me", a.me)
 	auth.GET("/events", handlers.Events(a.q))
 
-	auth.GET("/settings", a.requireRole("admin"), handlers.GetSettings)
-	auth.POST("/test-connection", a.requireRole("admin"), handlers.TestConnection)
-	auth.POST("/settings/storage", a.requireRole("admin"), handlers.SaveStorageSettings)
-	auth.POST("/settings/oidc", a.requireRole("admin"), handlers.SaveOIDCSettings)
-	auth.POST("/settings/mail", a.requireRole("admin"), handlers.SaveMailSettings)
+	auth.GET("/settings", a.requireRole("admin"), handlers.GetSettings(a.db))
+	auth.POST("/test-connection", a.requireRole("admin"), handlers.TestConnection(a.db))
+	auth.POST("/settings/storage", a.requireRole("admin"), handlers.SaveStorageSettings(a.db))
+	auth.POST("/settings/oidc", a.requireRole("admin"), handlers.SaveOIDCSettings(a.db))
+	auth.POST("/settings/mail", a.requireRole("admin"), handlers.SaveMailSettings(a.db))
 
 	auth.GET("/users/:id/roles", a.requireRole("admin"), a.listUserRoles)
 	auth.POST("/users/:id/roles", a.requireRole("admin"), a.addUserRole)
@@ -609,8 +609,8 @@ func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
 	if err := db.QueryRow(ctx, "insert into users (id, username, email, display_name, password_hash) values (gen_random_uuid(), 'admin', 'admin@example.com', 'Admin', $1) returning id", string(hash)).Scan(&uid); err != nil {
 		return err
 	}
-    // Grant all roles to built-in admin (super user)
-    _, _ = db.Exec(ctx, `insert into user_roles (user_id, role_id)
+	// Grant all roles to built-in admin (super user)
+	_, _ = db.Exec(ctx, `insert into user_roles (user_id, role_id)
 select $1, r.id from roles r on conflict do nothing`, uid)
 	log.Info().Str("username", "admin").Msg("seeded local admin user (dev)")
 	return nil
@@ -669,30 +669,30 @@ func (a *App) logout(c *gin.Context) {
 }
 
 func (a *App) requireRole(roles ...string) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        u, ok := c.Get("user")
-        if !ok {
-            c.AbortWithStatusJSON(401, gin.H{"error": "unauthenticated"})
-            return
-        }
-        user := u.(AuthUser)
-        // Treat 'admin' as a super-user that can access any route.
-        for _, r := range user.Roles {
-            if r == "admin" {
-                c.Next()
-                return
-            }
-        }
-        for _, r := range user.Roles {
-            for _, want := range roles {
-                if r == want {
-                    c.Next()
-                    return
-                }
-            }
-        }
-        c.AbortWithStatusJSON(403, gin.H{"error": "forbidden"})
-    }
+	return func(c *gin.Context) {
+		u, ok := c.Get("user")
+		if !ok {
+			c.AbortWithStatusJSON(401, gin.H{"error": "unauthenticated"})
+			return
+		}
+		user := u.(AuthUser)
+		// Treat 'admin' as a super-user that can access any route.
+		for _, r := range user.Roles {
+			if r == "admin" {
+				c.Next()
+				return
+			}
+		}
+		for _, r := range user.Roles {
+			for _, want := range roles {
+				if r == want {
+					c.Next()
+					return
+				}
+			}
+		}
+		c.AbortWithStatusJSON(403, gin.H{"error": "forbidden"})
+	}
 }
 
 func (a *App) me(c *gin.Context) {
