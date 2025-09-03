@@ -69,6 +69,8 @@ Notes:
 - Exports: `POST /exports/tickets` (CSV)
 - CSAT: `GET /csat/:token` form, `POST /csat/:token` score=good|bad (public)
 - Metrics (agent role): `GET /metrics/sla`, `GET /metrics/resolution`, `GET /metrics/tickets`
+- Prometheus metrics: `GET /metrics` (no auth)
+- Events: `GET /events` (SSE) with heartbeat comments `:hb` ~every 30s
 
 See `docs/api.md` for detailed status codes, request/response bodies, and models. For tooling and client generation, use `docs/openapi.yaml`. A live documentation UI is served at `/docs` when the API is running; the spec is served at `/openapi.yaml` and is packaged in the Docker image. For metrics visualization guidance, see `docs/grafana.md`.
 
