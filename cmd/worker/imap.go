@@ -131,6 +131,11 @@ func processIMAPMessage(ctx context.Context, c Config, db app.DB, store app.Obje
 			}
 		case *mail.AttachmentHeader:
 			filename, _ := h.Filename()
+			filename = sanitizeAttachmentName(filename)
+			if filename == "" {
+				log.Error().Msg("attachment filename invalid")
+				continue
+			}
 			ct, _, _ := h.ContentType()
 			b, _ := io.ReadAll(part.Body)
 			atts = append(atts, att{name: filename, mime: ct, data: b})
@@ -167,14 +172,19 @@ func processIMAPMessage(ctx context.Context, c Config, db app.DB, store app.Obje
 	var attMeta []map[string]interface{}
 	for _, a := range atts {
 		if store != nil && c.MinIOBucket != "" {
-			key := fmt.Sprintf("attachments/%s/%s", uuid.NewString(), a.name)
+			fname := sanitizeAttachmentName(a.name)
+			if fname == "" {
+				log.Error().Msg("attachment filename invalid")
+				continue
+			}
+			key := fmt.Sprintf("attachments/%s/%s", uuid.NewString(), fname)
 			if _, err := store.PutObject(ctx, c.MinIOBucket, key, bytes.NewReader(a.data), int64(len(a.data)), minio.PutObjectOptions{ContentType: a.mime}); err != nil {
 				log.Error().Err(err).Msg("put attachment")
 			} else {
-				if _, err := db.Exec(ctx, "insert into attachments (ticket_id, uploader_id, object_key, filename, bytes, mime) values ($1,$2,$3,$4,$5,$6)", ticketID, uuid.Nil, key, a.name, len(a.data), a.mime); err != nil {
+				if _, err := db.Exec(ctx, "insert into attachments (ticket_id, uploader_id, object_key, filename, bytes, mime) values ($1,$2,$3,$4,$5,$6)", ticketID, uuid.Nil, key, fname, len(a.data), a.mime); err != nil {
 					log.Error().Err(err).Msg("insert attachment")
 				}
-				attMeta = append(attMeta, map[string]interface{}{"filename": a.name, "object_key": key})
+				attMeta = append(attMeta, map[string]interface{}{"filename": fname, "object_key": key})
 			}
 		}
 	}
