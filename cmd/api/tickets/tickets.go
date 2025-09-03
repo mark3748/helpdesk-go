@@ -1,12 +1,14 @@
 package tickets
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -159,98 +161,171 @@ returning id::text, number, title, status, assignee_id::text, priority`
 		t.Status = status
 		t.AssigneeID = assignee
 		t.RequesterID = in.RequesterID
-    // Best-effort fill requester label
-    if a.DB != nil {
-        var name, email string
-        _ = a.DB.QueryRow(c.Request.Context(), `select coalesce(name,''), coalesce(email,'') from requesters where id=$1`, in.RequesterID).Scan(&name, &email)
-        if name != "" && email != "" {
-            t.Requester = fmt.Sprintf("%s <%s>", name, email)
-        } else if name != "" {
-            t.Requester = name
-        } else {
-            t.Requester = email
-        }
-    }
+		// Best-effort fill requester label
+		if a.DB != nil {
+			var name, email string
+			_ = a.DB.QueryRow(c.Request.Context(), `select coalesce(name,''), coalesce(email,'') from requesters where id=$1`, in.RequesterID).Scan(&name, &email)
+			if name != "" && email != "" {
+				t.Requester = fmt.Sprintf("%s <%s>", name, email)
+			} else if name != "" {
+				t.Requester = name
+			} else {
+				t.Requester = email
+			}
+		}
 		c.JSON(http.StatusCreated, t)
 	}
 }
 
-// List returns recent tickets.
+// List returns recent tickets using cursor pagination.
 func List(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if a.DB == nil {
-			c.JSON(http.StatusOK, []Ticket{})
+			c.JSON(http.StatusOK, gin.H{"tickets": []Ticket{}, "next_cursor": ""})
 			return
 		}
-		// Basic filters
+
+		// helper for multi-value query params (comma or repeated)
+		getMulti := func(key string) []string {
+			vals := c.QueryArray(key)
+			if len(vals) == 0 {
+				if v := strings.TrimSpace(c.Query(key)); v != "" {
+					vals = []string{v}
+				}
+			}
+			out := []string{}
+			for _, val := range vals {
+				for _, v := range strings.Split(val, ",") {
+					v = strings.TrimSpace(v)
+					if v != "" {
+						out = append(out, v)
+					}
+				}
+			}
+			return out
+		}
+
 		where := []string{}
 		args := []any{}
-		if v := strings.TrimSpace(c.Query("status")); v != "" {
+
+		statuses := getMulti("status")
+		if len(statuses) > 0 {
 			n := len(args) + 1
-			where = append(where, fmt.Sprintf("t.status = $%d", n))
-			args = append(args, v)
+			where = append(where, fmt.Sprintf("t.status = ANY($%d)", n))
+			args = append(args, statuses)
+		} else {
+			where = append(where, "t.status <> 'Closed'")
 		}
-		if v := strings.TrimSpace(c.Query("priority")); v != "" {
-			if p, err := strconv.Atoi(v); err == nil {
+
+		if ps := getMulti("priority"); len(ps) > 0 {
+			nums := []int{}
+			for _, v := range ps {
+				if p, err := strconv.Atoi(v); err == nil {
+					nums = append(nums, p)
+				}
+			}
+			if len(nums) > 0 {
 				n := len(args) + 1
-				where = append(where, fmt.Sprintf("t.priority = $%d", n))
-				args = append(args, p)
+				where = append(where, fmt.Sprintf("t.priority = ANY($%d)", n))
+				args = append(args, nums)
 			}
 		}
-		if v := strings.TrimSpace(c.Query("team")); v != "" {
+
+		if teams := getMulti("team"); len(teams) > 0 {
 			n := len(args) + 1
-			where = append(where, fmt.Sprintf("t.team_id = $%d", n))
-			args = append(args, v)
+			where = append(where, fmt.Sprintf("t.team_id = ANY($%d)", n))
+			args = append(args, teams)
 		}
-		assignee := strings.TrimSpace(c.Query("assignee"))
-		if assignee == "" {
-			assignee = strings.TrimSpace(c.Query("assignee_id"))
+
+		assignees := getMulti("assignee")
+		if len(assignees) == 0 {
+			assignees = getMulti("assignee_id")
 		}
-		if assignee != "" {
+		if len(assignees) > 0 {
 			n := len(args) + 1
-			where = append(where, fmt.Sprintf("t.assignee_id = $%d", n))
-			args = append(args, assignee)
+			where = append(where, fmt.Sprintf("t.assignee_id = ANY($%d)", n))
+			args = append(args, assignees)
 		}
-		if v := strings.TrimSpace(c.Query("requester")); v != "" {
+
+		if reqs := getMulti("requester"); len(reqs) > 0 {
 			n := len(args) + 1
-			where = append(where, fmt.Sprintf("t.requester_id = $%d", n))
-			args = append(args, v)
+			where = append(where, fmt.Sprintf("t.requester_id = ANY($%d)", n))
+			args = append(args, reqs)
 		}
-		if v := strings.TrimSpace(c.Query("queue")); v != "" {
+
+		if qs := getMulti("queue"); len(qs) > 0 {
 			n := len(args) + 1
-			where = append(where, fmt.Sprintf("t.queue_id = $%d", n))
-			args = append(args, v)
+			where = append(where, fmt.Sprintf("t.queue_id = ANY($%d)", n))
+			args = append(args, qs)
 		}
+
 		if v := strings.TrimSpace(c.Query("search")); v != "" {
 			n := len(args) + 1
 			where = append(where, fmt.Sprintf("(t.title ILIKE $%d OR t.description ILIKE $%d)", n, n))
 			args = append(args, "%"+v+"%")
 		}
-	sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester from tickets t left join requesters r on r.id=t.requester_id"
+
+		// cursor handling
+		if cur := strings.TrimSpace(c.Query("cursor")); cur != "" {
+			if b, err := base64.StdEncoding.DecodeString(cur); err == nil {
+				parts := strings.SplitN(string(b), ",", 2)
+				if len(parts) == 2 {
+					if ts, err := time.Parse(time.RFC3339Nano, parts[0]); err == nil {
+						n := len(args) + 1
+						where = append(where, fmt.Sprintf("(t.updated_at, t.id) < ($%d, $%d)", n, n+1))
+						args = append(args, ts, parts[1])
+					}
+				}
+			}
+		}
+
+		limit := 100
+		if v := strings.TrimSpace(c.Query("limit")); v != "" {
+			if l, err := strconv.Atoi(v); err == nil && l > 0 && l <= 100 {
+				limit = l
+			}
+		}
+
+		sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, t.updated_at from tickets t left join requesters r on r.id=t.requester_id"
 		if len(where) > 0 {
 			sql += " where " + strings.Join(where, " and ")
 		}
-		sql += " order by t.created_at desc limit 100"
+		sql += " order by t.updated_at desc, t.id desc limit $" + strconv.Itoa(len(args)+1)
+		args = append(args, limit+1)
+
 		rows, err := a.DB.Query(c.Request.Context(), sql, args...)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		defer rows.Close()
+
 		out := []Ticket{}
+		ups := []time.Time{}
 		for rows.Next() {
 			var t Ticket
 			var assignee *string
 			var number any
-			if err := rows.Scan(&t.ID, &number, &t.Title, &t.Status, &assignee, &t.Priority, &t.RequesterID, &t.Requester); err != nil {
+			var updated time.Time
+			if err := rows.Scan(&t.ID, &number, &t.Title, &t.Status, &assignee, &t.Priority, &t.RequesterID, &t.Requester, &updated); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 			t.Number = number
 			t.AssigneeID = assignee
 			out = append(out, t)
+			ups = append(ups, updated)
 		}
-		c.JSON(http.StatusOK, out)
+
+		var next string
+		if len(out) > limit {
+			last := out[len(out)-1]
+			lastUp := ups[len(ups)-1]
+			next = base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s,%s", lastUp.UTC().Format(time.RFC3339Nano), last.ID)))
+			out = out[:len(out)-1]
+		}
+
+		c.JSON(http.StatusOK, gin.H{"tickets": out, "next_cursor": next})
 	}
 }
 
@@ -261,7 +336,7 @@ func Get(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusOK, Ticket{})
 			return
 		}
-	const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester from tickets t left join requesters r on r.id=t.requester_id where t.id=$1`
+		const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester from tickets t left join requesters r on r.id=t.requester_id where t.id=$1`
 		var t Ticket
 		var assignee *string
 		var number any
