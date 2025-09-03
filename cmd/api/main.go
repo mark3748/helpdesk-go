@@ -76,6 +76,21 @@ var swaggerHTML = `<!DOCTYPE html>
   </body>
 </html>`
 
+var (
+	statusEnum   = []string{"New", "Open", "Pending", "Resolved", "Closed"}
+	sourceEnum   = []string{"web", "email"}
+	priorityEnum = []int16{1, 2, 3, 4}
+)
+
+func enumContains[T comparable](list []T, v T) bool {
+	for _, e := range list {
+		if e == v {
+			return true
+		}
+	}
+	return false
+}
+
 type Config struct {
 	Addr           string
 	DatabaseURL    string
@@ -1096,11 +1111,12 @@ type createTicketReq struct {
 	Title       string         `json:"title" binding:"required,min=3"`
 	Description string         `json:"description"`
 	RequesterID string         `json:"requester_id" binding:"required"`
-	Priority    int16          `json:"priority" binding:"required,min=1,max=4"`
-	Urgency     *int16         `json:"urgency" binding:"omitempty,min=1,max=4"`
+	Priority    int16          `json:"priority" binding:"required,oneof=1 2 3 4"`
+	Urgency     *int16         `json:"urgency" binding:"omitempty,oneof=1 2 3 4"`
 	Category    *string        `json:"category"`
 	Subcategory *string        `json:"subcategory" binding:"omitempty,min=1"`
 	CustomJSON  map[string]any `json:"custom_json"`
+	Source      string         `json:"source" binding:"omitempty,oneof=web email"`
 }
 
 func (a *App) createTicket(c *gin.Context) {
@@ -1133,11 +1149,19 @@ func (a *App) createTicket(c *gin.Context) {
 	ctx := c.Request.Context()
 	var id, number, status string
 	status = "New"
+	source := in.Source
+	if source == "" {
+		source = "web"
+	}
+	if !enumContains(sourceEnum, source) {
+		c.JSON(400, gin.H{"error": "invalid source"})
+		return
+	}
 	err := a.db.QueryRow(ctx, `
         insert into tickets (id, number, title, description, requester_id, priority, urgency, category, subcategory, status, source, custom_json)
-        values (gen_random_uuid(), 'TKT-' || to_char(nextval('ticket_seq'), 'FM000000'), $1, $2, $3, $4, $5, $6, $7, $8, 'web', coalesce($9::jsonb,'{}'::jsonb))
+        values (gen_random_uuid(), 'TKT-' || to_char(nextval('ticket_seq'), 'FM000000'), $1, $2, $3, $4, $5, $6, $7, $8, $9, coalesce($10::jsonb,'{}'::jsonb))
         returning id, number, status`,
-		in.Title, in.Description, in.RequesterID, in.Priority, in.Urgency, in.Category, in.Subcategory, status, toJSON(in.CustomJSON)).Scan(&id, &number, &status)
+		in.Title, in.Description, in.RequesterID, in.Priority, in.Urgency, in.Category, in.Subcategory, status, source, toJSON(in.CustomJSON)).Scan(&id, &number, &status)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -1206,6 +1230,9 @@ func (a *App) enqueueEmail(ctx context.Context, to, template string, data interf
 }
 
 func (a *App) addStatusHistory(ctx context.Context, ticketID, from, to, actorID string) {
+	if !enumContains(statusEnum, to) || (from != "" && !enumContains(statusEnum, from)) {
+		return
+	}
 	_, _ = a.db.Exec(ctx, `insert into ticket_status_history (ticket_id, from_status, to_status, actor_id) values ($1,$2,$3,$4)`, ticketID, nullable(from), to, nullable(actorID))
 }
 
@@ -1258,10 +1285,10 @@ func (a *App) getTicket(c *gin.Context) {
 }
 
 type patchTicketReq struct {
-	Status      *string     `json:"status"`
+	Status      *string     `json:"status" binding:"omitempty,oneof=New Open Pending Resolved Closed"`
 	AssigneeID  *string     `json:"assignee_id"`
-	Priority    *int16      `json:"priority"`
-	Urgency     *int16      `json:"urgency"`
+	Priority    *int16      `json:"priority" binding:"omitempty,oneof=1 2 3 4"`
+	Urgency     *int16      `json:"urgency" binding:"omitempty,oneof=1 2 3 4"`
 	ScheduledAt *time.Time  `json:"scheduled_at"`
 	DueAt       *time.Time  `json:"due_at"`
 	CustomJSON  interface{} `json:"custom_json"`
@@ -1811,13 +1838,13 @@ func (a *App) exportTicketsStatus(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "redis"})
 		return
 	}
-    var st struct {
-        Requester string `json:"requester"`
-        Status    string `json:"status"`
-        URL       string `json:"url"`
-        ObjectKey string `json:"object_key"`
-        Error     string `json:"error"`
-    }
+	var st struct {
+		Requester string `json:"requester"`
+		Status    string `json:"status"`
+		URL       string `json:"url"`
+		ObjectKey string `json:"object_key"`
+		Error     string `json:"error"`
+	}
 	if err := json.Unmarshal([]byte(val), &st); err != nil {
 		c.JSON(500, gin.H{"error": "decode"})
 		return
@@ -1828,39 +1855,39 @@ func (a *App) exportTicketsStatus(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "not found"})
 		return
 	}
-    if st.Status != "done" {
-        out := gin.H{"status": st.Status}
-        if st.Error != "" {
-            out["error"] = st.Error
-        }
-        c.JSON(200, out)
-        return
-    }
-    // Backward compatibility: if a URL was stored, return it.
-    if st.URL != "" {
-        c.JSON(200, gin.H{"url": st.URL})
-        return
-    }
-    // Prefer on-demand signing using the stored object key.
-    if st.ObjectKey == "" {
-        c.JSON(500, gin.H{"error": "missing object key"})
-        return
-    }
-    if mc, ok := a.m.(*minio.Client); ok {
-        // Use a longer TTL so users have time to download.
-        u, err := mc.PresignedGetObject(ctx, a.cfg.MinIOBucket, st.ObjectKey, 15*time.Minute, nil)
-        if err != nil {
-            c.JSON(500, gin.H{"error": "sign url"})
-            return
-        }
-        c.JSON(200, gin.H{"url": u.String()})
-        return
-    }
-    // Fallback to constructing a static URL when not using MinIO client.
-    scheme := "http"
-    if a.cfg.MinIOUseSSL {
-        scheme = "https"
-    }
-    url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, st.ObjectKey)
-    c.JSON(200, gin.H{"url": url})
+	if st.Status != "done" {
+		out := gin.H{"status": st.Status}
+		if st.Error != "" {
+			out["error"] = st.Error
+		}
+		c.JSON(200, out)
+		return
+	}
+	// Backward compatibility: if a URL was stored, return it.
+	if st.URL != "" {
+		c.JSON(200, gin.H{"url": st.URL})
+		return
+	}
+	// Prefer on-demand signing using the stored object key.
+	if st.ObjectKey == "" {
+		c.JSON(500, gin.H{"error": "missing object key"})
+		return
+	}
+	if mc, ok := a.m.(*minio.Client); ok {
+		// Use a longer TTL so users have time to download.
+		u, err := mc.PresignedGetObject(ctx, a.cfg.MinIOBucket, st.ObjectKey, 15*time.Minute, nil)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "sign url"})
+			return
+		}
+		c.JSON(200, gin.H{"url": u.String()})
+		return
+	}
+	// Fallback to constructing a static URL when not using MinIO client.
+	scheme := "http"
+	if a.cfg.MinIOUseSSL {
+		scheme = "https"
+	}
+	url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, st.ObjectKey)
+	c.JSON(200, gin.H{"url": url})
 }
