@@ -189,10 +189,12 @@ func main() {
 	// Keep GetSettings visible to authenticated users; restrict writes to admin
 	// to align with internal UI expectations.
 	auth.GET("/settings", handlers.GetSettings(db))
-	auth.POST("/settings/oidc", authpkg.RequireRole("admin"), handlers.SaveOIDCSettings(db))
+	auth.GET("/settings/oidc", authpkg.RequireRole("admin"), handlers.GetOIDCSettings(db))
+	auth.PUT("/settings/oidc", authpkg.RequireRole("admin"), handlers.PutOIDCSettings(db))
 	auth.POST("/settings/storage", authpkg.RequireRole("admin"), handlers.SaveStorageSettings(db))
-	auth.POST("/settings/mail", authpkg.RequireRole("admin"), handlers.SaveMailSettings(db))
-	auth.POST("/test-connection", authpkg.RequireRole("admin"), handlers.TestConnection(db))
+	auth.GET("/settings/mail", authpkg.RequireRole("admin"), handlers.GetMailSettings(db))
+	auth.PUT("/settings/mail", authpkg.RequireRole("admin"), handlers.PutMailSettings(db))
+	auth.POST("/settings/mail/test", authpkg.RequireRole("admin"), handlers.TestMailSettings(db))
 	auth.GET("/events", eventspkg.Stream(a))
 	auth.GET("/me", authpkg.Me)
 	auth.POST("/requesters", requesterspkg.Create(a))

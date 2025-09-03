@@ -84,7 +84,7 @@ export function useSaveMailSettings() {
   return useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       apiFetch('/settings/mail', {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       }),
@@ -92,11 +92,11 @@ export function useSaveMailSettings() {
   });
 }
 
-export function useTestConnection() {
+export function useMailTest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      apiFetch('/test-connection', {
+      apiFetch('/settings/mail/test', {
         method: 'POST',
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),

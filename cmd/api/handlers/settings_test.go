@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/smtp"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
 )
 
 type fakeRow struct {
@@ -105,66 +107,109 @@ func (db *fakeDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.Com
 	return pgconn.CommandTag{}, nil
 }
 
-func TestSettingsHandlers(t *testing.T) {
+func TestSettingsRoundTrip(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := &fakeDB{s: Settings{Storage: map[string]string{}, OIDC: map[string]string{}, Mail: map[string]string{}}}
 	InitSettings(context.Background(), db, "/tmp/logs")
+
+	called := false
+	smtpSendMail = func(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+		called = true
+		return nil
+	}
+	defer func() { smtpSendMail = smtp.SendMail }()
+
 	r := gin.New()
-	r.GET("/settings", GetSettings(db))
-	r.POST("/settings/storage", SaveStorageSettings(db))
-	r.POST("/test-connection", TestConnection(db))
+	r.GET("/settings/oidc", GetOIDCSettings(db))
+	r.PUT("/settings/oidc", PutOIDCSettings(db))
+	r.GET("/settings/mail", GetMailSettings(db))
+	r.PUT("/settings/mail", PutMailSettings(db))
+	r.POST("/settings/mail/test", TestMailSettings(db))
 
-	// initial log path
+	// OIDC round trip
+	body := bytes.NewBufferString(`{"issuer":"https://id"}`)
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/settings", nil)
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 got %d", w.Code)
-	}
-	var resp Settings
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.LogPath != "/tmp/logs" {
-		t.Fatalf("unexpected log path %s", resp.LogPath)
-	}
-
-	// save storage config
-	body := bytes.NewBufferString(`{"endpoint":"s3","bucket":"b"}`)
-	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(http.MethodPost, "/settings/storage", body)
+	req, _ := http.NewRequest(http.MethodPut, "/settings/oidc", body)
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-
-	// ensure persisted
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(http.MethodGet, "/settings", nil)
+	req, _ = http.NewRequest(http.MethodGet, "/settings/oidc", nil)
 	r.ServeHTTP(w, req)
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+	var oidc map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &oidc); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Storage["endpoint"] != "s3" {
-		t.Fatalf("expected endpoint saved")
+	if oidc["issuer"] != "https://id" {
+		t.Fatalf("expected issuer saved, got %#v", oidc)
 	}
 
-	// test connection updates last test
+	// Mail round trip
+	body = bytes.NewBufferString(`{"smtp_host":"smtp","smtp_port":"25","smtp_from":"a@b"}`)
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(http.MethodPost, "/test-connection", nil)
+	req, _ = http.NewRequest(http.MethodPut, "/settings/mail", body)
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", w.Code)
 	}
-
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(http.MethodGet, "/settings", nil)
+	req, _ = http.NewRequest(http.MethodGet, "/settings/mail", nil)
 	r.ServeHTTP(w, req)
+	var mail map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &mail); err != nil {
+		t.Fatal(err)
+	}
+	if mail["smtp_host"] != "smtp" {
+		t.Fatalf("expected smtp_host saved, got %#v", mail)
+	}
+
+	// send test mail
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPost, "/settings/mail/test", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", w.Code)
+	}
+	if !called {
+		t.Fatalf("expected smtpSendMail called")
+	}
+	var resp map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.LastTest == "" {
-		t.Fatalf("expected last test set")
+	if resp["last_test"] == "" {
+		t.Fatalf("expected last_test in response")
+	}
+}
+
+func TestSettingsRoleGuard(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := &fakeDB{s: Settings{Mail: map[string]string{}}}
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("user", authpkg.AuthUser{Roles: []string{"agent"}}) })
+	r.GET("/settings/mail", authpkg.RequireRole("admin"), GetMailSettings(db))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/settings/mail", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 got %d", w.Code)
+	}
+}
+
+func TestMailTestMissingConfig(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := &fakeDB{s: Settings{Mail: map[string]string{}}}
+	r := gin.New()
+	r.POST("/settings/mail/test", TestMailSettings(db))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/settings/mail/test", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 got %d", w.Code)
 	}
 }
