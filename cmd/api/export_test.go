@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -206,5 +208,46 @@ func TestExportTicketsAsync(t *testing.T) {
 	}
 	if resp["url"] != "http://example.com/export.csv" {
 		t.Fatalf("unexpected url %q", resp["url"])
+	}
+}
+
+func TestAttachmentEventsRecorded(t *testing.T) {
+	store := newFakeObjectStore()
+	defer store.Close()
+
+	db := &eventCaptureDB{}
+	cfg := Config{Env: "test", TestBypassAuth: true, MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
+	app := NewApp(cfg, db, nil, store, nil)
+
+	// upload attachment
+	buf := &bytes.Buffer{}
+	mw := multipart.NewWriter(buf)
+	fw, _ := mw.CreateFormFile("file", "test.txt")
+	_, _ = fw.Write([]byte("hello"))
+	_ = mw.Close()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/tickets/1/attachments", buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	app.r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rr.Code)
+	}
+
+	// delete attachment
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodDelete, "/tickets/1/attachments/obj123", nil)
+	app.r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	count := 0
+	for _, sql := range db.execs {
+		if strings.Contains(strings.ToLower(sql), "insert into ticket_events") {
+			count++
+		}
+	}
+	if count < 2 {
+		t.Fatalf("expected 2 ticket_events inserts, got %d (%v)", count, db.execs)
 	}
 }
