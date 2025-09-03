@@ -4,8 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "npm run gen:api:container",
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "prebuild": "npm run gen:api",
     "lint": "eslint .",
     "preview": "vite preview",
     "gen:api": "openapi-typescript http://localhost:8080/openapi.yaml -o src/types/openapi.ts",

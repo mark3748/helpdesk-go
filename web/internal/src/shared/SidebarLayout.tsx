@@ -75,6 +75,7 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
   }
 
   const userMenuItems = [
+    { key: 'settings', label: 'Settings' },
     { key: 'logout', label: 'Logout' },
   ];
 
@@ -97,7 +98,10 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
             <Dropdown
               menu={{
                 items: userMenuItems,
-                onClick: ({ key }) => { if (key === 'logout') doLogout(); },
+                onClick: ({ key }) => {
+                  if (key === 'logout') doLogout();
+                  if (key === 'settings') nav('/me/settings');
+                },
               }}
               trigger={["click"]}
             >

@@ -9,11 +9,12 @@ import MailSettings from './components/admin/MailSettings';
 import OIDCSettings from './components/admin/OIDCSettings';
 import StorageSettings from './components/admin/StorageSettings';
 import AdminSettings from './components/admin/AdminSettings';
-import UserRoleManagement from './components/admin/UserRoleManagement';
+import AdminUsers from './components/admin/AdminUsers';
 import QueueManager from './components/manager/QueueManager';
 import ManagerAnalytics from './components/manager/ManagerAnalytics';
 import Login from './components/Login';
 import ComingSoon from './shared/ComingSoon';
+import UserSettings from './components/UserSettings';
 
 const queryClient = new QueryClient();
 
@@ -38,9 +39,11 @@ export default function App() {
               <Route path="/settings/mail" element={<MailSettings />} />
               <Route path="/settings/oidc" element={<OIDCSettings />} />
               <Route path="/settings/storage" element={<StorageSettings />} />
-              <Route path="/settings/users" element={<UserRoleManagement />} />
+              <Route path="/settings/users" element={<AdminUsers />} />
               <Route path="/settings/*" element={<ComingSoon title="Settings area" detail="Additional admin settings will appear here." />} />
             </Route>
+            {/* User account settings (any authenticated user) */}
+            <Route path="/me/settings" element={<UserSettings />} />
             <Route element={<RequireRole role="manager" />}>
               <Route path="/manager" element={<QueueManager />} />
               <Route path="/manager/analytics" element={<ManagerAnalytics />} />
