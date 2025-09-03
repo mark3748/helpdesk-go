@@ -95,7 +95,7 @@ func SaveStorageSettings(db DB) gin.HandlerFunc {
 			return
 		}
 		b, _ := json.Marshal(data)
-		if _, err := db.Exec(c.Request.Context(), "update settings set storage=$1 where id=1", b); err != nil {
+		if _, err := db.Exec(c.Request.Context(), "update settings set storage=$1::jsonb where id=1", string(b)); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -112,7 +112,7 @@ func SaveOIDCSettings(db DB) gin.HandlerFunc {
 			return
 		}
 		b, _ := json.Marshal(data)
-		if _, err := db.Exec(c.Request.Context(), "update settings set oidc=$1 where id=1", b); err != nil {
+		if _, err := db.Exec(c.Request.Context(), "update settings set oidc=$1::jsonb where id=1", string(b)); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -129,7 +129,7 @@ func SaveMailSettings(db DB) gin.HandlerFunc {
 			return
 		}
 		b, _ := json.Marshal(data)
-		if _, err := db.Exec(c.Request.Context(), "update settings set mail=$1 where id=1", b); err != nil {
+		if _, err := db.Exec(c.Request.Context(), "update settings set mail=$1::jsonb where id=1", string(b)); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
