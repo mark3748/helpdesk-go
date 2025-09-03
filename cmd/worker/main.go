@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/smtp"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -137,6 +138,20 @@ func sanitizeAndValidateEmail(email string) (string, error) {
 // sanitizeEmailBody removes potentially harmful HTML or scripts from an email body
 func sanitizeEmailBody(body []byte) string {
 	return string(htmlPolicy.SanitizeBytes(body))
+}
+
+// sanitizeAttachmentName strips path components to prevent filesystem traversal
+func sanitizeAttachmentName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	name = strings.ReplaceAll(name, "\\", "/")
+	name = path.Base(name)
+	if name == "." || name == ".." {
+		return ""
+	}
+	return name
 }
 
 func sendEmail(c Config, j EmailJob) error {

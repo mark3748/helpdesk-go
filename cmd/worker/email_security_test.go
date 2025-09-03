@@ -70,6 +70,43 @@ func TestSanitizeEmailBody(t *testing.T) {
 	}
 }
 
+func TestSanitizeAttachmentName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple filename",
+			input:    "file.txt",
+			expected: "file.txt",
+		},
+		{
+			name:     "path traversal",
+			input:    "../../../../etc/passwd",
+			expected: "passwd",
+		},
+		{
+			name:     "windows traversal",
+			input:    "..\\..\\evil.txt",
+			expected: "evil.txt",
+		},
+		{
+			name:     "empty",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sanitizeAttachmentName(tt.input); got != tt.expected {
+				t.Errorf("sanitizeAttachmentName(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestValidateEmailAddress(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -238,4 +275,3 @@ func TestSendEmailSecurityValidation(t *testing.T) {
 		t.Error("Email validation should have passed for clean email address")
 	}
 }
-
