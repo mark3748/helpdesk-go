@@ -1168,6 +1168,7 @@ func (a *App) createTicket(c *gin.Context) {
 	}
 	a.addStatusHistory(ctx, id, "", status, u.ID)
 	a.audit(c, "user", u.ID, "ticket", id, "create", gin.H{"title": in.Title, "requester_id": in.RequesterID})
+	a.recordTicketEvent(ctx, id, "create", u.ID, gin.H{"title": in.Title, "requester_id": in.RequesterID})
 	var requesterEmail string
 	_ = a.db.QueryRow(ctx, "select coalesce(email,'') from users where id=$1", in.RequesterID).Scan(&requesterEmail)
 	if requesterEmail != "" {
@@ -1184,6 +1185,15 @@ func toJSON(v interface{}) *string {
 	b, _ := json.Marshal(v)
 	s := string(b)
 	return &s
+}
+
+func (a *App) recordTicketEvent(ctx context.Context, ticketID, action, actorID string, diff interface{}) {
+	if ticketID == "" || action == "" {
+		return
+	}
+	diffJSON, _ := json.Marshal(diff)
+	_, _ = a.db.Exec(ctx, `insert into ticket_events (ticket_id, action, actor_id, diff_json) values ($1,$2,$3,$4)`,
+		ticketID, action, nullable(actorID), diffJSON)
 }
 
 func (a *App) audit(c *gin.Context, actorType, actorID, entityType, entityID, action string, diff interface{}) {
@@ -1285,38 +1295,43 @@ func (a *App) getTicket(c *gin.Context) {
 }
 
 type patchTicketReq struct {
-    // Accept both title-case and lowercase to avoid breaking existing clients
-    Status      *string     `json:"status" binding:"omitempty,oneof=New new Open open Pending pending Resolved resolved Closed closed"`
-    AssigneeID  *string     `json:"assignee_id"`
-    Priority    *int16      `json:"priority" binding:"omitempty,oneof=1 2 3 4"`
-    Urgency     *int16      `json:"urgency" binding:"omitempty,oneof=1 2 3 4"`
-    ScheduledAt *time.Time  `json:"scheduled_at"`
-    DueAt       *time.Time  `json:"due_at"`
-    CustomJSON  interface{} `json:"custom_json"`
+	// Accept both title-case and lowercase to avoid breaking existing clients
+	Status      *string     `json:"status" binding:"omitempty,oneof=New new Open open Pending pending Resolved resolved Closed closed"`
+	AssigneeID  *string     `json:"assignee_id"`
+	Priority    *int16      `json:"priority" binding:"omitempty,oneof=1 2 3 4"`
+	Urgency     *int16      `json:"urgency" binding:"omitempty,oneof=1 2 3 4"`
+	ScheduledAt *time.Time  `json:"scheduled_at"`
+	DueAt       *time.Time  `json:"due_at"`
+	CustomJSON  interface{} `json:"custom_json"`
 }
 
 func (a *App) updateTicket(c *gin.Context) {
-    id := c.Param("id")
-    var in patchTicketReq
-    if err := c.ShouldBindJSON(&in); err != nil {
-        c.JSON(400, gin.H{"error": err.Error()})
-        return
-    }
-    // Normalize status to Title-case for storage and consistency
-    if in.Status != nil {
-        switch strings.ToLower(*in.Status) {
-        case "new":
-            s := "New"; in.Status = &s
-        case "open":
-            s := "Open"; in.Status = &s
-        case "pending":
-            s := "Pending"; in.Status = &s
-        case "resolved":
-            s := "Resolved"; in.Status = &s
-        case "closed":
-            s := "Closed"; in.Status = &s
-        }
-    }
+	id := c.Param("id")
+	var in patchTicketReq
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	// Normalize status to Title-case for storage and consistency
+	if in.Status != nil {
+		switch strings.ToLower(*in.Status) {
+		case "new":
+			s := "New"
+			in.Status = &s
+		case "open":
+			s := "Open"
+			in.Status = &s
+		case "pending":
+			s := "Pending"
+			in.Status = &s
+		case "resolved":
+			s := "Resolved"
+			in.Status = &s
+		case "closed":
+			s := "Closed"
+			in.Status = &s
+		}
+	}
 	u := c.MustGet("user").(AuthUser)
 	ctx := c.Request.Context()
 	var oldStatus, number, requesterEmail string
@@ -1364,6 +1379,7 @@ func (a *App) updateTicket(c *gin.Context) {
 		diff["custom_json"] = in.CustomJSON
 	}
 	a.audit(c, "user", u.ID, "ticket", id, "update", diff)
+	a.recordTicketEvent(ctx, id, "update", u.ID, diff)
 	if requesterEmail != "" {
 		if in.Status != nil && *in.Status == "Resolved" && oldStatus != *in.Status {
 			b := make([]byte, 16)
@@ -1465,6 +1481,7 @@ func (a *App) addComment(c *gin.Context) {
 		return
 	}
 	a.audit(c, "user", u.ID, "ticket", id, "comment_add", gin.H{"comment_id": cid, "author_id": u.ID})
+	a.recordTicketEvent(ctx, id, "comment_add", u.ID, gin.H{"comment_id": cid, "author_id": u.ID})
 	c.JSON(201, gin.H{"id": cid})
 }
 
@@ -1497,6 +1514,7 @@ func (a *App) uploadAttachment(c *gin.Context) {
 		return
 	}
 	a.audit(c, "user", u.ID, "ticket", ticketID, "attachment_add", gin.H{"attachment_id": id})
+	a.recordTicketEvent(ctx, ticketID, "attachment_add", u.ID, gin.H{"attachment_id": id})
 	c.JSON(201, gin.H{"id": id})
 }
 
@@ -1591,6 +1609,7 @@ func (a *App) deleteAttachment(c *gin.Context) {
 		return
 	}
 	a.audit(c, "user", u.ID, "ticket", ticketID, "attachment_delete", gin.H{"attachment_id": attID})
+	a.recordTicketEvent(ctx, ticketID, "attachment_delete", u.ID, gin.H{"attachment_id": attID})
 	c.JSON(200, gin.H{"ok": true})
 }
 
@@ -1633,6 +1652,7 @@ func (a *App) addWatcher(c *gin.Context) {
 		return
 	}
 	a.audit(c, "user", u.ID, "ticket", ticketID, "watcher_add", gin.H{"user_id": in.UserID})
+	a.recordTicketEvent(ctx, ticketID, "watcher_add", u.ID, gin.H{"user_id": in.UserID})
 	c.JSON(201, gin.H{"ok": true})
 }
 
@@ -1647,6 +1667,7 @@ func (a *App) removeWatcher(c *gin.Context) {
 		return
 	}
 	a.audit(c, "user", u.ID, "ticket", ticketID, "watcher_remove", gin.H{"user_id": watcherID})
+	a.recordTicketEvent(ctx, ticketID, "watcher_remove", u.ID, gin.H{"user_id": watcherID})
 	c.JSON(200, gin.H{"ok": true})
 }
 
