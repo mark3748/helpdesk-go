@@ -9,9 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/minio/minio-go/v7"
+	"github.com/redis/go-redis/v9"
 )
 
 // fakeObjectStore stores objects in memory and serves them over HTTP.
@@ -90,14 +92,24 @@ func (r *ticketRows) Conn() *pgx.Conn        { return nil }
 // exportDB returns predefined ticket rows.
 type exportDB struct {
 	tickets []ticket
+	count   int
 }
 
 func (db *exportDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
 	return &ticketRows{data: db.tickets}, nil
 }
-func (db *exportDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+
+type countRow struct{ n int }
+
+func (r countRow) Scan(dest ...any) error {
+	*(dest[0].(*int)) = r.n
 	return nil
 }
+
+func (db *exportDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return countRow{n: db.count}
+}
+
 func (db *exportDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
 }
@@ -106,7 +118,7 @@ func TestExportTickets(t *testing.T) {
 	store := newFakeObjectStore()
 	defer store.Close()
 
-	db := &exportDB{tickets: []ticket{{ID: "1", Number: "TKT-1", Title: "First", Status: "Open", Priority: 1}}}
+	db := &exportDB{tickets: []ticket{{ID: "1", Number: "TKT-1", Title: "First", Status: "Open", Priority: 1}}, count: 1}
 	cfg := Config{Env: "test", TestBypassAuth: true, MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
 	app := NewApp(cfg, db, nil, store, nil)
 
@@ -137,5 +149,62 @@ func TestExportTickets(t *testing.T) {
 	want := "id,number,title,status,priority\n1,TKT-1,First,Open,1"
 	if got != want {
 		t.Fatalf("csv mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestExportTicketsAsync(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+
+	store := newFakeObjectStore()
+	defer store.Close()
+
+	db := &exportDB{count: exportSyncLimit + 1}
+	cfg := Config{Env: "test", TestBypassAuth: true, MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
+	app := NewApp(cfg, db, nil, store, rdb)
+
+	body := strings.NewReader(`{"ids":["1","2"]}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/exports/tickets", body)
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rr.Code)
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	jobID := resp["job_id"]
+	if jobID == "" {
+		t.Fatalf("missing job_id")
+	}
+
+	// simulate worker completion
+	st := struct {
+		Requester string `json:"requester"`
+		Status    string `json:"status"`
+		URL       string `json:"url"`
+	}{"test-user", "done", "http://example.com/export.csv"}
+	b, _ := json.Marshal(st)
+	if err := rdb.Set(context.Background(), "export_tickets:"+jobID, b, 0).Err(); err != nil {
+		t.Fatalf("redis set: %v", err)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/exports/tickets/"+jobID, nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	resp = map[string]string{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if resp["url"] != "http://example.com/export.csv" {
+		t.Fatalf("unexpected url %q", resp["url"])
 	}
 }
