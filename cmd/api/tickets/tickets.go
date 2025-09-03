@@ -15,7 +15,7 @@ import (
 
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
-	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	eventspkg "github.com/mark3748/helpdesk-go/cmd/api/events"
 	requesterspkg "github.com/mark3748/helpdesk-go/cmd/api/requesters"
 )
 
@@ -173,6 +173,7 @@ returning id::text, number, title, status, assignee_id::text, priority`
 			} else {
 				t.Requester = email
 			}
+			eventspkg.Emit(c.Request.Context(), a.DB, t.ID, "ticket_created", map[string]any{"id": t.ID})
 		}
 		c.JSON(http.StatusCreated, t)
 	}
@@ -403,7 +404,7 @@ func Update(a *app.App) gin.HandlerFunc {
 		t.Number = number
 		t.AssigneeID = assignee
 		if in.AssigneeID != nil {
-			handlers.PublishEvent(c.Request.Context(), a.Q, handlers.Event{Type: "ticket_updated", Data: map[string]any{"id": t.ID}})
+			eventspkg.Emit(c.Request.Context(), a.DB, t.ID, "ticket_updated", map[string]any{"id": t.ID})
 		}
 		c.JSON(http.StatusOK, t)
 	}
