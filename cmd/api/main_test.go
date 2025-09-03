@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -13,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -35,6 +38,108 @@ func TestHealthz(t *testing.T) {
 	if ok, _ := body["ok"].(bool); !ok {
 		t.Fatalf("expected ok=true in body, got: %v", body)
 	}
+}
+
+func TestLivez(t *testing.T) {
+	cfg := Config{Env: "test"}
+	app := NewApp(cfg, nil, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+}
+
+type readyzRow struct{ err error }
+
+func (r readyzRow) Scan(dest ...any) error { return r.err }
+
+type readyzDB struct{ err error }
+
+func (db readyzDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return nil, nil
+}
+func (db readyzDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return readyzRow{err: db.err}
+}
+func (db readyzDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func setMail(ms map[string]string) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	b, _ := json.Marshal(ms)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(b))
+	c.Request.Header.Set("Content-Type", "application/json")
+	handlers.SaveMailSettings(c)
+}
+
+func TestReadyzFailures(t *testing.T) {
+	t.Run("db", func(t *testing.T) {
+		setMail(map[string]string{"host": "", "port": ""})
+		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{err: errors.New("db")}, nil, nil, nil)
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code == http.StatusOK {
+			t.Fatalf("expected failure, got %d", rr.Code)
+		}
+	})
+
+	t.Run("object store", func(t *testing.T) {
+		setMail(map[string]string{"host": "", "port": ""})
+		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, &fsObjectStore{base: "/no/such"}, nil)
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code == http.StatusOK {
+			t.Fatalf("expected failure, got %d", rr.Code)
+		}
+	})
+
+	t.Run("smtp", func(t *testing.T) {
+		setMail(map[string]string{"host": "127.0.0.1", "port": "1"})
+		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil, nil)
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code == http.StatusOK {
+			t.Fatalf("expected failure, got %d", rr.Code)
+		}
+	})
+
+	t.Run("redis", func(t *testing.T) {
+		setMail(map[string]string{"host": "", "port": ""})
+		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil, nil)
+		// Override pingRedis to simulate a failing Redis
+		app.pingRedis = func(ctx context.Context) error { return errors.New("redis down") }
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code == http.StatusOK {
+			t.Fatalf("expected failure, got %d", rr.Code)
+		}
+		if !strings.Contains(rr.Body.String(), "redis") {
+			t.Fatalf("expected redis error in body, got %s", rr.Body.String())
+		}
+	})
+
+	t.Run("object store bucket auto-create", func(t *testing.T) {
+		setMail(map[string]string{"host": "", "port": ""})
+		dir := t.TempDir()
+		// Do not create bucket subdir; readyz should mkdir it and succeed
+		app := NewApp(Config{Env: "test", MinIOBucket: "attachments"}, readyzDB{}, nil, &fsObjectStore{base: dir}, nil)
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected success, got %d body=%s", rr.Code, rr.Body.String())
+		}
+	})
 }
 
 func TestMe_BypassAuth(t *testing.T) {
