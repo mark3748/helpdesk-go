@@ -14,10 +14,6 @@ create table if not exists queues (
 
 alter table tickets
     add column if not exists queue_id uuid references queues(id);
-alter table tickets
-    drop constraint if exists tickets_requester_id_fkey;
-alter table tickets
-    add constraint tickets_requester_id_fkey foreign key (requester_id) references requesters(id);
 
 create table if not exists ticket_events (
     id uuid primary key default gen_random_uuid(),
@@ -44,6 +40,5 @@ end; $$ language plpgsql;
  select __drop_if_exists('ticket_events');
  alter table tickets drop column if exists queue_id;
  select __drop_if_exists('queues');
- alter table tickets drop constraint if exists tickets_requester_id_fkey;
  select __drop_if_exists('requesters');
  drop function if exists __drop_if_exists;
