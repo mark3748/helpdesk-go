@@ -513,6 +513,7 @@ func (a *App) routes() {
 	auth.GET("/metrics/resolution", a.requireRole("agent"), a.metricsResolution)
 	auth.GET("/metrics/tickets", a.requireRole("agent"), a.metricsTicketVolume)
 	auth.POST("/exports/tickets", a.requireRole("agent"), a.exportTickets)
+	auth.GET("/exports/tickets/:job_id", a.requireRole("agent"), a.exportTicketsStatus)
 }
 
 func (a *App) docsUI(c *gin.Context) {
@@ -1679,6 +1680,8 @@ func (a *App) metricsTicketVolume(c *gin.Context) {
 }
 
 // ===== Exports =====
+const exportSyncLimit = 100
+
 type exportTicketsReq struct {
 	IDs []string `json:"ids" binding:"required"`
 }
@@ -1699,6 +1702,55 @@ func (a *App) exportTickets(c *gin.Context) {
 	for i, id := range in.IDs {
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 		args[i] = id
+	}
+	countQ := fmt.Sprintf("select count(*) from tickets where id in (%s)", strings.Join(placeholders, ","))
+	var count int
+	if err := a.db.QueryRow(ctx, countQ, args...).Scan(&count); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if count > exportSyncLimit {
+		if a.q == nil {
+			c.JSON(500, gin.H{"error": "queue not configured"})
+			return
+		}
+		u, _ := c.Get("user")
+		auth := u.(AuthUser)
+		jobID := uuid.New().String()
+		job := struct {
+			ID   string      `json:"id"`
+			Type string      `json:"type"`
+			Data interface{} `json:"data"`
+		}{
+			ID:   jobID,
+			Type: "export_tickets",
+			Data: struct {
+				IDs       []string `json:"ids"`
+				Requester string   `json:"requester"`
+			}{in.IDs, auth.ID},
+		}
+		jb, err := json.Marshal(job)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "marshal job"})
+			return
+		}
+		status := struct {
+			Requester string `json:"requester"`
+			Status    string `json:"status"`
+		}{auth.ID, "queued"}
+		sb, _ := json.Marshal(status)
+		if err := a.q.Set(ctx, "export_tickets:"+jobID, sb, 0).Err(); err != nil {
+			c.JSON(500, gin.H{"error": "redis"})
+			return
+		}
+		if err := a.q.RPush(ctx, "jobs", jb).Err(); err != nil {
+			c.JSON(500, gin.H{"error": "enqueue"})
+			return
+		}
+		size, _ := a.q.LLen(ctx, "jobs").Result()
+		handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
+		c.JSON(202, gin.H{"job_id": jobID})
+		return
 	}
 	q := fmt.Sprintf("select id, number, title, status, priority from tickets where id in (%s)", strings.Join(placeholders, ","))
 	rows, err := a.db.Query(ctx, q, args...)
@@ -1741,4 +1793,74 @@ func (a *App) exportTickets(c *gin.Context) {
 	}
 	url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, objectKey)
 	c.JSON(200, gin.H{"url": url})
+}
+
+func (a *App) exportTicketsStatus(c *gin.Context) {
+	if a.q == nil {
+		c.JSON(500, gin.H{"error": "queue not configured"})
+		return
+	}
+	jobID := c.Param("job_id")
+	ctx := c.Request.Context()
+	val, err := a.q.Get(ctx, "export_tickets:"+jobID).Result()
+	if err == redis.Nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(500, gin.H{"error": "redis"})
+		return
+	}
+    var st struct {
+        Requester string `json:"requester"`
+        Status    string `json:"status"`
+        URL       string `json:"url"`
+        ObjectKey string `json:"object_key"`
+        Error     string `json:"error"`
+    }
+	if err := json.Unmarshal([]byte(val), &st); err != nil {
+		c.JSON(500, gin.H{"error": "decode"})
+		return
+	}
+	u, _ := c.Get("user")
+	auth := u.(AuthUser)
+	if st.Requester != auth.ID {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+    if st.Status != "done" {
+        out := gin.H{"status": st.Status}
+        if st.Error != "" {
+            out["error"] = st.Error
+        }
+        c.JSON(200, out)
+        return
+    }
+    // Backward compatibility: if a URL was stored, return it.
+    if st.URL != "" {
+        c.JSON(200, gin.H{"url": st.URL})
+        return
+    }
+    // Prefer on-demand signing using the stored object key.
+    if st.ObjectKey == "" {
+        c.JSON(500, gin.H{"error": "missing object key"})
+        return
+    }
+    if mc, ok := a.m.(*minio.Client); ok {
+        // Use a longer TTL so users have time to download.
+        u, err := mc.PresignedGetObject(ctx, a.cfg.MinIOBucket, st.ObjectKey, 15*time.Minute, nil)
+        if err != nil {
+            c.JSON(500, gin.H{"error": "sign url"})
+            return
+        }
+        c.JSON(200, gin.H{"url": u.String()})
+        return
+    }
+    // Fallback to constructing a static URL when not using MinIO client.
+    scheme := "http"
+    if a.cfg.MinIOUseSSL {
+        scheme = "https"
+    }
+    url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, st.ObjectKey)
+    c.JSON(200, gin.H{"url": url})
 }

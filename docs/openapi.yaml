@@ -140,6 +140,16 @@ components:
         ids:
           type: array
           items: { type: string, format: uuid }
+    ExportJobAccepted:
+      type: object
+      properties:
+        job_id: { type: string }
+    ExportJobStatus:
+      type: object
+      properties:
+        status: { type: string }
+        url: { type: string, format: uri }
+        error: { type: string }
     ValidationError:
       type: object
       properties:
@@ -726,7 +736,32 @@ paths:
                 type: object
                 properties:
                   url: { type: string, format: uri }
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportJobAccepted' }
         '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /exports/tickets/{job_id}:
+    get:
+      tags: [Exports]
+      summary: Check export job status
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportJobStatus' }
+        '404': { description: Not Found }
         '500': { description: Server Error }
       security:
         - bearerAuth: []
