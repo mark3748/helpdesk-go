@@ -19,6 +19,9 @@ tags:
   - name: Metrics
   - name: Exports
   - name: Events
+  - name: Requesters
+  - name: Queues
+  - name: Settings
 components:
   securitySchemes:
     bearerAuth:
@@ -50,14 +53,19 @@ components:
         requester_id: { type: string, format: uuid }
         assignee_id: { type: string, format: uuid, nullable: true }
         team_id: { type: string, format: uuid, nullable: true }
+        queue_id: { type: string, format: uuid, nullable: true }
         priority: { type: integer, minimum: 1, maximum: 4 }
         urgency: { type: integer, minimum: 1, maximum: 4, nullable: true }
         category: { type: string, nullable: true }
         subcategory: { type: string, nullable: true }
-        status: { type: string }
+        status:
+          type: string
+          enum: [open, pending, on_hold, resolved, closed]
         scheduled_at: { type: string, format: date-time, nullable: true }
         due_at: { type: string, format: date-time, nullable: true }
-        source: { type: string }
+        source:
+          type: string
+          enum: [email, web, phone, api]
         custom_json: { type: object }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -88,20 +96,24 @@ components:
         id: { type: string, format: uuid }
         filename: { type: string }
         bytes: { type: integer, format: int64 }
-        mime: { type: string, nullable: true }
+        content_type: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
     CreateTicketRequest:
       type: object
-      required: [title, requester_id, priority]
+      required: [title, priority]
       properties:
         title: { type: string }
         description: { type: string }
         requester_id: { type: string, format: uuid }
+        requester: { $ref: '#/components/schemas/CreateRequesterRequest' }
         priority: { type: integer, minimum: 1, maximum: 4 }
         urgency: { type: integer, minimum: 1, maximum: 4 }
         category: { type: string }
         subcategory: { type: string }
         custom_json: { type: object }
+      oneOf:
+        - required: [requester_id]
+        - required: [requester]
     UpdateTicketRequest:
       type: object
       properties:
@@ -143,6 +155,93 @@ components:
           type: object
           additionalProperties:
             type: string
+    Requester:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email, nullable: true }
+        phone: { type: string, nullable: true }
+        display_name: { type: string }
+        profile: { type: object, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateRequesterRequest:
+      type: object
+      required: [display_name]
+      properties:
+        email: { type: string, format: email }
+        phone: { type: string }
+        display_name: { type: string }
+        profile: { type: object }
+    UpdateRequesterRequest:
+      type: object
+      properties:
+        email: { type: string, format: email, nullable: true }
+        phone: { type: string, nullable: true }
+        display_name: { type: string }
+        profile: { type: object }
+    Queue:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+    EventEnvelope:
+      type: object
+      properties:
+        type: { type: string }
+        ticket_id: { type: string, format: uuid, nullable: true }
+        payload: { type: object }
+        created_at: { type: string, format: date-time }
+    PresignUploadRequest:
+      type: object
+      required: [filename, bytes, mime]
+      properties:
+        filename: { type: string }
+        bytes: { type: integer, format: int64 }
+        mime: { type: string }
+    PresignUploadResponse:
+      type: object
+      properties:
+        upload_url: { type: string }
+        headers:
+          type: object
+          additionalProperties: { type: string }
+        attachment_id: { type: string, format: uuid }
+    PresignDownloadResponse:
+      type: object
+      properties:
+        download_url: { type: string }
+        headers:
+          type: object
+          additionalProperties: { type: string }
+    OIDCSettings:
+      type: object
+      properties:
+        issuer: { type: string }
+        client_id: { type: string }
+        claim_path: { type: string }
+        role_map:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+        default_role: { type: string }
+    MailSettings:
+      type: object
+      properties:
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        from: { type: string }
+    Error:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+        field_errors:
+          type: object
+          additionalProperties: { type: string }
 paths:
   /healthz:
     get:
@@ -205,7 +304,13 @@ paths:
     get:
       tags: [Events]
       summary: Event stream
-      description: Server-sent events for ticket and queue updates.
+      description: >-
+        Server-sent events for ticket and queue updates. Supports `Last-Event-ID` header
+        to resume from a given event. Each event data is an `EventEnvelope` JSON.
+      parameters:
+        - in: header
+          name: Last-Event-ID
+          schema: { type: string }
       responses:
         '200':
           description: OK
@@ -283,10 +388,18 @@ paths:
       parameters:
         - in: query
           name: status
-          schema: { type: string }
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: true
         - in: query
           name: priority
-          schema: { type: integer }
+          schema:
+            type: array
+            items: { type: integer }
+          style: form
+          explode: true
         - in: query
           name: team
           schema: { type: string, format: uuid }
@@ -294,16 +407,36 @@ paths:
           name: assignee
           schema: { type: string, format: uuid }
         - in: query
-          name: search
+          name: q
           schema: { type: string }
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer }
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/Ticket' }
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Ticket' }
+                  next_cursor: { type: string, nullable: true }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '500': { description: Server Error }
       security:
         - bearerAuth: []
@@ -332,6 +465,16 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ValidationError' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '500': { description: Server Error }
       security:
         - bearerAuth: []
@@ -691,3 +834,382 @@ paths:
         - bearerAuth: []
         - cookieAuth: []
 
+
+  /requesters:
+    post:
+      tags: [Requesters]
+      summary: Create requester
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRequesterRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Requester' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /requesters/{id}:
+    get:
+      tags: [Requesters]
+      summary: Get requester
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Requester' }
+        '404': { description: Not Found }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    patch:
+      tags: [Requesters]
+      summary: Update requester
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateRequesterRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Requester' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { description: Not Found }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /queues:
+    get:
+      tags: [Queues]
+      summary: List queues
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Queue' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /tickets/{id}/assign:
+    post:
+      tags: [Tickets]
+      summary: Assign ticket
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assignee_id: { type: string, format: uuid, nullable: true }
+                queue_id: { type: string, format: uuid, nullable: true }
+      responses:
+        '204': { description: No Content }
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /tickets/{id}/attachments/presign-upload:
+    post:
+      tags: [Attachments]
+      summary: Presign attachment upload
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PresignUploadRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PresignUploadResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /tickets/{id}/attachments/{attID}/presign-download:
+    post:
+      tags: [Attachments]
+      summary: Presign attachment download
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: attID
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PresignDownloadResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /settings/oidc:
+    get:
+      tags: [Settings]
+      summary: Get OIDC settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OIDCSettings' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    put:
+      tags: [Settings]
+      summary: Update OIDC settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OIDCSettings' }
+      responses:
+        '200': { description: OK }
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /settings/mail:
+    get:
+      tags: [Settings]
+      summary: Get mail settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MailSettings' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    put:
+      tags: [Settings]
+      summary: Update mail settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MailSettings' }
+      responses:
+        '200': { description: OK }
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /settings/mail/test:
+    post:
+      tags: [Settings]
+      summary: Test outbound mail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                to: { type: string, format: email }
+      responses:
+        '202': { description: Accepted }
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
