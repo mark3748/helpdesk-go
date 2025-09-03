@@ -16,7 +16,6 @@ export type Ticket = components['schemas']['Ticket'];
 export type Comment = components['schemas']['Comment'];
 export type Attachment = components['schemas']['Attachment'];
 
-export type { Ticket, Comment, Attachment };
 
 export async function createTicket(data: {
   title: string;
