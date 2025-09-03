@@ -15,6 +15,7 @@ tags:
   - name: Comments
   - name: Attachments
   - name: Watchers
+  - name: Queues
   - name: CSAT
   - name: Metrics
   - name: Exports
@@ -504,6 +505,38 @@ paths:
       security:
         - bearerAuth: []
         - cookieAuth: []
+  /tickets/{id}/assign:
+    post:
+      tags: [Tickets]
+      summary: Assign ticket
+      description: Requires `agent` role.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignee_id]
+              properties:
+                assignee_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ticket' }
+        '400': { description: Bad Request }
+        '403': { description: Forbidden }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
   /tickets/{id}/comments:
     get:
       tags: [Comments]
@@ -706,6 +739,24 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         '200': { description: OK }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /queues:
+    get:
+      tags: [Queues]
+      summary: List queues
+      description: Requires `agent` role.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Queue' }
+        '403': { description: Forbidden }
         '500': { description: Server Error }
       security:
         - bearerAuth: []

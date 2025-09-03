@@ -39,6 +39,7 @@ Tickets
   - `custom_json` object of additional fields
 - GET `/tickets/:id` → 200 `Ticket` | 404
 - PATCH `/tickets/:id` (agent role) body partial `{ status?, assignee_id?, priority?, urgency?, scheduled_at?, due_at?, custom_json? }` → 200 `{ ok:true }` | 400 | 500
+- POST `/tickets/:id/assign` (agent role) body `{ assignee_id }` → 200 `Ticket` | 400 | 403 | 404
 
 Comments
 - GET `/tickets/:id/comments` → 200 `[Comment]` | 500
@@ -53,6 +54,9 @@ Watchers
 - GET `/tickets/:id/watchers` → 200 `[user_id]` | 500
 - POST `/tickets/:id/watchers` body `{ user_id }` → 201 `{ ok:true }` | 400 | 500
 - DELETE `/tickets/:id/watchers/:userID` → 200 `{ ok:true }` | 500
+
+Queues
+- GET `/queues` (agent role) → 200 `[Queue]` | 403 | 500
 
 Customer Satisfaction (CSAT)
 - GET `/csat/:token?score=good|bad` (public) → 200 `{ ok:true }` | 400 | 404 | 500

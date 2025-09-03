@@ -15,6 +15,7 @@ import (
 
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 	requesterspkg "github.com/mark3748/helpdesk-go/cmd/api/requesters"
 )
 
@@ -319,8 +320,8 @@ func List(a *app.App) gin.HandlerFunc {
 
 		var next string
 		if len(out) > limit {
-			last := out[limit-1]
-			lastUp := ups[limit-1]
+			last := out[limit]
+			lastUp := ups[limit]
 			next = base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s,%s", lastUp.UTC().Format(time.RFC3339Nano), last.ID)))
 			out = out[:limit]
 		}
@@ -401,6 +402,9 @@ func Update(a *app.App) gin.HandlerFunc {
 		}
 		t.Number = number
 		t.AssigneeID = assignee
+		if in.AssigneeID != nil {
+			handlers.PublishEvent(c.Request.Context(), a.Q, handlers.Event{Type: "ticket_updated", Data: map[string]any{"id": t.ID}})
+		}
 		c.JSON(http.StatusOK, t)
 	}
 }
