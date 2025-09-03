@@ -121,6 +121,7 @@ API (cmd/api):
 - `ADMIN_PASSWORD`: initial admin password in dev local-auth mode.
 - `FILESTORE_PATH`: local path for attachments (filesystem store).
 - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`: S3/MinIO settings.
+- `ALLOWED_ORIGINS`: comma-separated origins allowed for cross-origin requests (default none).
 - `TEST_BYPASS_AUTH`: set `true` in tests to bypass JWT and inject a test user.
 - `OPENAPI_SPEC_PATH`: optional path to the OpenAPI spec for serving `/openapi.yaml` in local dev (default packaged in Docker at `/opt/helpdesk/docs/openapi.yaml`).
 - `LOG_PATH`: directory for API log output (default system temp dir, e.g. `/tmp`). Falls back to stdout if unwritable.
