@@ -7,7 +7,7 @@ import (
 
 	apppkg "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
-	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	eventspkg "github.com/mark3748/helpdesk-go/cmd/api/events"
 )
 
 // Assign changes the assignee of a ticket and emits a ticket_updated event.
@@ -57,7 +57,7 @@ func Assign(a *apppkg.App) gin.HandlerFunc {
 		}
 		t.Number = number
 		t.AssigneeID = assignee
-		handlers.PublishEvent(c.Request.Context(), a.Q, handlers.Event{Type: "ticket_updated", Data: map[string]any{"id": t.ID}})
+		eventspkg.Emit(c.Request.Context(), a.DB, t.ID, "ticket_updated", map[string]any{"id": t.ID})
 		c.JSON(http.StatusOK, t)
 	}
 }
