@@ -19,6 +19,8 @@ func TestAttachmentHandlers(t *testing.T) {
 	a.R.POST("/tickets/:id/attachments", authpkg.Middleware(a), Upload(a))
 	a.R.GET("/tickets/:id/attachments/:att", authpkg.Middleware(a), Get(a))
 	a.R.DELETE("/tickets/:id/attachments/:att", authpkg.Middleware(a), Delete(a))
+	a.R.POST("/tickets/:id/attachments/presign-upload", authpkg.Middleware(a), PresignUpload(a))
+	a.R.GET("/tickets/:id/attachments/:att/presign-download", authpkg.Middleware(a), PresignDownload(a))
 
 	tests := []struct {
 		name   string
@@ -30,6 +32,8 @@ func TestAttachmentHandlers(t *testing.T) {
 		{"upload", http.MethodPost, "/tickets/1/attachments", http.StatusCreated},
 		{"get", http.MethodGet, "/tickets/1/attachments/1", http.StatusOK},
 		{"delete", http.MethodDelete, "/tickets/1/attachments/1", http.StatusOK},
+		{"presign upload", http.MethodPost, "/tickets/1/attachments/presign-upload", http.StatusOK},
+		{"presign download", http.MethodGet, "/tickets/1/attachments/1/presign-download", http.StatusOK},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -6,12 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
 	eventspkg "github.com/mark3748/helpdesk-go/cmd/api/events"
+	s3svc "github.com/mark3748/helpdesk-go/internal/s3"
 	"github.com/minio/minio-go/v7"
 )
 
@@ -72,7 +74,7 @@ func Upload(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		const q = `insert into attachments (ticket_id, uploader_id, object_key, filename, bytes) values ($1, $2, $3, $4, $5) returning id::text`
+		const q = `insert into attachments (ticket_id, uploader_id, object_key, filename, bytes, mime) values ($1, $2, $3, $4, $5, $6) returning id::text`
 		var id string
 		// Use current authenticated user's ID as uploader
 		var uploader string
@@ -85,7 +87,7 @@ func Upload(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 			return
 		}
-		if err := a.DB.QueryRow(c.Request.Context(), q, c.Param("id"), uploader, key, header.Filename, size).Scan(&id); err != nil {
+		if err := a.DB.QueryRow(c.Request.Context(), q, c.Param("id"), uploader, key, header.Filename, size, ct).Scan(&id); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -100,10 +102,10 @@ func Get(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusOK, gin.H{"id": c.Param("attID")})
 			return
 		}
-		const q = `select object_key, filename, bytes from attachments where id=$1 and ticket_id=$2`
-		var key, fn string
+		const q = `select object_key, filename, bytes, mime from attachments where id=$1 and ticket_id=$2`
+		var key, fn, mt string
 		var size int64
-		if err := a.DB.QueryRow(c.Request.Context(), q, c.Param("attID"), c.Param("id")).Scan(&key, &fn, &size); err != nil {
+		if err := a.DB.QueryRow(c.Request.Context(), q, c.Param("attID"), c.Param("id")).Scan(&key, &fn, &size, &mt); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
@@ -121,13 +123,77 @@ func Get(a *app.App) gin.HandlerFunc {
 				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 				return
 			}
-			c.Writer.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(fn)))
+			if mt != "" {
+				c.Writer.Header().Set("Content-Type", mt)
+			} else {
+				c.Writer.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(fn)))
+			}
 			c.Writer.Header().Set("Content-Disposition", "attachment; filename=\""+strings.ReplaceAll(fn, "\"", "")+"\"")
 			_, _ = c.Writer.Write(f)
 			return
 		}
 		// Otherwise unimplemented (e.g., MinIO); client may handle 501
 		c.JSON(http.StatusNotImplemented, gin.H{"error": "download not implemented"})
+	}
+}
+
+func PresignUpload(a *app.App) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if a.M == nil {
+			c.JSON(http.StatusOK, gin.H{"url": "", "object_key": "temp"})
+			return
+		}
+		mc, ok := a.M.(*minio.Client)
+		if !ok {
+			c.JSON(http.StatusNotImplemented, gin.H{"error": "presign not supported"})
+			return
+		}
+		var req struct {
+			Filename    string `json:"filename"`
+			ContentType string `json:"content_type"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || req.Filename == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "filename required"})
+			return
+		}
+		key := uuid.New().String()
+		if sn := sanitizeFilename(req.Filename); sn != "" {
+			key += "-" + sn
+		}
+		svc := s3svc.Service{Client: mc, Bucket: a.Cfg.MinIOBucket, MaxTTL: time.Minute}
+		u, err := svc.PresignPut(c.Request.Context(), key, req.ContentType, time.Minute)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"url": u, "object_key": key, "content_type": req.ContentType})
+	}
+}
+
+func PresignDownload(a *app.App) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if a.DB == nil || a.M == nil {
+			c.JSON(http.StatusOK, gin.H{"url": ""})
+			return
+		}
+		mc, ok := a.M.(*minio.Client)
+		if !ok {
+			c.JSON(http.StatusNotImplemented, gin.H{"error": "presign not supported"})
+			return
+		}
+		const q = `select object_key, filename, mime from attachments where id=$1 and ticket_id=$2`
+		var key, fn, mt string
+		if err := a.DB.QueryRow(c.Request.Context(), q, c.Param("attID"), c.Param("id")).Scan(&key, &fn, &mt); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		svc := s3svc.Service{Client: mc, Bucket: a.Cfg.MinIOBucket, MaxTTL: time.Minute}
+		u, err := svc.PresignGet(c.Request.Context(), key, sanitizeFilename(fn), time.Minute)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"url": u, "content_type": mt})
 	}
 }
 
