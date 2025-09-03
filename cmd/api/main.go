@@ -1285,22 +1285,38 @@ func (a *App) getTicket(c *gin.Context) {
 }
 
 type patchTicketReq struct {
-	Status      *string     `json:"status" binding:"omitempty,oneof=New Open Pending Resolved Closed"`
-	AssigneeID  *string     `json:"assignee_id"`
-	Priority    *int16      `json:"priority" binding:"omitempty,oneof=1 2 3 4"`
-	Urgency     *int16      `json:"urgency" binding:"omitempty,oneof=1 2 3 4"`
-	ScheduledAt *time.Time  `json:"scheduled_at"`
-	DueAt       *time.Time  `json:"due_at"`
-	CustomJSON  interface{} `json:"custom_json"`
+    // Accept both title-case and lowercase to avoid breaking existing clients
+    Status      *string     `json:"status" binding:"omitempty,oneof=New new Open open Pending pending Resolved resolved Closed closed"`
+    AssigneeID  *string     `json:"assignee_id"`
+    Priority    *int16      `json:"priority" binding:"omitempty,oneof=1 2 3 4"`
+    Urgency     *int16      `json:"urgency" binding:"omitempty,oneof=1 2 3 4"`
+    ScheduledAt *time.Time  `json:"scheduled_at"`
+    DueAt       *time.Time  `json:"due_at"`
+    CustomJSON  interface{} `json:"custom_json"`
 }
 
 func (a *App) updateTicket(c *gin.Context) {
-	id := c.Param("id")
-	var in patchTicketReq
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
+    id := c.Param("id")
+    var in patchTicketReq
+    if err := c.ShouldBindJSON(&in); err != nil {
+        c.JSON(400, gin.H{"error": err.Error()})
+        return
+    }
+    // Normalize status to Title-case for storage and consistency
+    if in.Status != nil {
+        switch strings.ToLower(*in.Status) {
+        case "new":
+            s := "New"; in.Status = &s
+        case "open":
+            s := "Open"; in.Status = &s
+        case "pending":
+            s := "Pending"; in.Status = &s
+        case "resolved":
+            s := "Resolved"; in.Status = &s
+        case "closed":
+            s := "Closed"; in.Status = &s
+        }
+    }
 	u := c.MustGet("user").(AuthUser)
 	ctx := c.Request.Context()
 	var oldStatus, number, requesterEmail string

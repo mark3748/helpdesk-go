@@ -627,3 +627,50 @@ func TestUpdateTicketInvalidEnums(t *testing.T) {
 		}
 	})
 }
+
+type updateCaptureDB struct{
+    firstExecArgs []any
+}
+
+func (db *updateCaptureDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) { return &fakeRows{}, nil }
+func (db *updateCaptureDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+    // Return oldStatus, number, requesterEmail
+    return &fakeRow{scan: func(dest ...any) error {
+        if len(dest) >= 3 {
+            if p, ok := dest[0].(*string); ok { *p = "Open" }
+            if p, ok := dest[1].(*string); ok { *p = "TKT-1" }
+            if p, ok := dest[2].(*string); ok { *p = "" }
+        }
+        return nil
+    }}
+}
+func (db *updateCaptureDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+    if db.firstExecArgs == nil {
+        db.firstExecArgs = append([]any{}, args...)
+    }
+    return pgconn.CommandTag{}, nil
+}
+
+func TestUpdateTicket_LowercaseStatus_Normalized(t *testing.T) {
+    db := &updateCaptureDB{}
+    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+    rr := httptest.NewRecorder()
+    req := httptest.NewRequest(http.MethodPatch, "/tickets/1", strings.NewReader(`{"status":"open"}`))
+    req.Header.Set("Content-Type", "application/json")
+    app.r.ServeHTTP(rr, req)
+
+    if rr.Code != http.StatusOK {
+        t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+    }
+    if len(db.firstExecArgs) < 1 {
+        t.Fatalf("expected exec args captured")
+    }
+    val := db.firstExecArgs[0]
+    if ps, ok := val.(*string); ok {
+        val = *ps
+    }
+    if val != "Open" {
+        t.Fatalf("expected normalized status 'Open', got %#v", val)
+    }
+}
