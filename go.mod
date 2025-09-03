@@ -5,6 +5,7 @@ go 1.23.0
 toolchain go1.24.6
 
 require (
+	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/emersion/go-imap v1.2.1
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-playground/validator/v10 v10.20.0
@@ -67,6 +68,7 @@ require (
 	github.com/tinylib/msgp v1.3.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/net v0.42.0 // indirect

@@ -125,6 +125,9 @@ API (cmd/api):
 - `TEST_BYPASS_AUTH`: set `true` in tests to bypass JWT and inject a test user.
 - `OPENAPI_SPEC_PATH`: optional path to the OpenAPI spec for serving `/openapi.yaml` in local dev (default packaged in Docker at `/opt/helpdesk/docs/openapi.yaml`).
 - `LOG_PATH`: directory for API log output (default system temp dir, e.g. `/tmp`). Falls back to stdout if unwritable.
+- `RATE_LIMIT_LOGIN`: max login/logout requests per minute per IP (default unlimited).
+- `RATE_LIMIT_TICKETS`: max ticket creation requests per minute per user.
+- `RATE_LIMIT_ATTACHMENTS`: max attachment upload/download requests per minute per user.
 
 Worker (cmd/worker):
 - `DATABASE_URL`, `REDIS_ADDR`, `ENV`.

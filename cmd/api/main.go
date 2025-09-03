@@ -41,6 +41,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	rateln "github.com/mark3748/helpdesk-go/internal/ratelimit"
 )
 
 //go:embed migrations/*.sql
@@ -95,9 +96,12 @@ type Config struct {
 	AuthMode        string // "oidc" or "local"
 	AuthLocalSecret string
 	// Filesystem object store for dev/local
-	FileStorePath   string
-	OpenAPISpecPath string
-	LogPath         string
+	FileStorePath       string
+	OpenAPISpecPath     string
+	LogPath             string
+	LoginRateLimit      int
+	TicketRateLimit     int
+	AttachmentRateLimit int
 }
 
 func getConfig() Config {
@@ -129,12 +133,15 @@ func getConfig() Config {
 			}
 			return out
 		}(),
-		TestBypassAuth:  getEnv("TEST_BYPASS_AUTH", "false") == "true",
-		AuthMode:        getEnv("AUTH_MODE", "oidc"),
-		AuthLocalSecret: getEnv("AUTH_LOCAL_SECRET", ""),
-		FileStorePath:   getEnv("FILESTORE_PATH", ""),
-		OpenAPISpecPath: getEnv("OPENAPI_SPEC_PATH", ""),
-		LogPath:         getEnv("LOG_PATH", "/config/logs"),
+		TestBypassAuth:      getEnv("TEST_BYPASS_AUTH", "false") == "true",
+		AuthMode:            getEnv("AUTH_MODE", "oidc"),
+		AuthLocalSecret:     getEnv("AUTH_LOCAL_SECRET", ""),
+		FileStorePath:       getEnv("FILESTORE_PATH", ""),
+		OpenAPISpecPath:     getEnv("OPENAPI_SPEC_PATH", ""),
+		LogPath:             getEnv("LOG_PATH", "/config/logs"),
+		LoginRateLimit:      getEnvInt("RATE_LIMIT_LOGIN", 0),
+		TicketRateLimit:     getEnvInt("RATE_LIMIT_TICKETS", 0),
+		AttachmentRateLimit: getEnvInt("RATE_LIMIT_ATTACHMENTS", 0),
 	}
 	return cfg
 }
@@ -142,6 +149,15 @@ func getConfig() Config {
 func getEnv(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return def
+}
+
+func getEnvInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
 	}
 	return def
 }
@@ -210,6 +226,9 @@ type App struct {
 	q    *redis.Client
 	// pingRedis allows overriding Redis health check in tests
 	pingRedis func(ctx context.Context) error
+	loginRL   *rateln.Limiter
+	ticketRL  *rateln.Limiter
+	attRL     *rateln.Limiter
 }
 
 // NewApp constructs an App with injected dependencies and registers routes.
@@ -217,41 +236,50 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 	a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
 	if q != nil {
 		a.pingRedis = func(ctx context.Context) error { return q.Ping(ctx).Err() }
+		if cfg.LoginRateLimit > 0 {
+			a.loginRL = rateln.New(q, cfg.LoginRateLimit, time.Minute, "login:")
+		}
+		if cfg.TicketRateLimit > 0 {
+			a.ticketRL = rateln.New(q, cfg.TicketRateLimit, time.Minute, "tickets:")
+		}
+		if cfg.AttachmentRateLimit > 0 {
+			a.attRL = rateln.New(q, cfg.AttachmentRateLimit, time.Minute, "attachments:")
+		}
 	}
 	handlers.InitSettings(cfg.LogPath)
 	a.r.Use(gin.Recovery())
 	a.r.Use(gin.Logger())
-    a.r.Use(func(c *gin.Context) {
-        c.Header("Content-Security-Policy", "default-src 'none'")
-        c.Header("X-Content-Type-Options", "nosniff")
-        origin := c.GetHeader("Origin")
-        if origin != "" && len(cfg.AllowedOrigins) > 0 {
-            allowed := false
-            for _, ao := range cfg.AllowedOrigins {
-                if origin == ao {
-                    allowed = true
-                    break
-                }
-            }
-            if !allowed {
-                c.AbortWithStatus(http.StatusForbidden)
-                return
-            }
-            // CORS headers for allowed origins
-            c.Header("Access-Control-Allow-Origin", origin)
-            c.Header("Vary", "Origin")
-            c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
-            c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With")
-            c.Header("Access-Control-Allow-Credentials", "true")
-            // Handle preflight requests
-            if c.Request.Method == http.MethodOptions {
-                c.Status(http.StatusNoContent)
-                c.Abort()
-                return
-            }
-        }
-        c.Next()
-    })
+	a.r.Use(func(c *gin.Context) {
+		c.Header("Content-Security-Policy", "default-src 'none'")
+		c.Header("X-Content-Type-Options", "nosniff")
+		origin := c.GetHeader("Origin")
+		if origin != "" && len(cfg.AllowedOrigins) > 0 {
+			allowed := false
+			for _, ao := range cfg.AllowedOrigins {
+				if origin == ao {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
+			// CORS headers for allowed origins
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With")
+			c.Header("Access-Control-Allow-Credentials", "true")
+			// Handle preflight requests
+			if c.Request.Method == http.MethodOptions {
+				c.Status(http.StatusNoContent)
+				c.Abort()
+				return
+			}
+		}
+		c.Next()
+	})
 	a.routes()
 	return a
 }
@@ -422,11 +450,15 @@ func (a *App) routes() {
 	a.r.Static("/swagger", "/opt/helpdesk/swagger")
 	a.r.GET("/docs", a.docsUI)
 	a.r.GET("/openapi.yaml", a.openapiSpec)
-
 	// Local auth endpoints
 	if a.cfg.AuthMode == "local" {
-		a.r.POST("/login", a.login)
-		a.r.POST("/logout", a.logout)
+		if a.loginRL != nil {
+			a.r.POST("/login", a.loginRL.Middleware(func(c *gin.Context) string { return c.ClientIP() }), a.login)
+			a.r.POST("/logout", a.loginRL.Middleware(func(c *gin.Context) string { return c.ClientIP() }), a.logout)
+		} else {
+			a.r.POST("/login", a.login)
+			a.r.POST("/logout", a.logout)
+		}
 	}
 
 	auth := a.r.Group("/")
@@ -446,14 +478,32 @@ func (a *App) routes() {
 
 	// Tickets
 	auth.GET("/tickets", a.listTickets)
-	auth.POST("/tickets", a.createTicket)
+	if a.ticketRL != nil {
+		auth.POST("/tickets", a.ticketRL.Middleware(func(c *gin.Context) string {
+			u := c.MustGet("user").(AuthUser)
+			return u.ID
+		}), a.createTicket)
+	} else {
+		auth.POST("/tickets", a.createTicket)
+	}
 	auth.GET("/tickets/:id", a.getTicket)
 	auth.PATCH("/tickets/:id", a.requireRole("agent", "manager"), a.updateTicket)
 	auth.GET("/tickets/:id/comments", a.listComments)
 	auth.POST("/tickets/:id/comments", a.addComment)
 	auth.GET("/tickets/:id/attachments", a.listAttachments)
-	auth.POST("/tickets/:id/attachments", a.uploadAttachment)
-	auth.GET("/tickets/:id/attachments/:attID", a.getAttachment)
+	if a.attRL != nil {
+		auth.POST("/tickets/:id/attachments", a.attRL.Middleware(func(c *gin.Context) string {
+			u := c.MustGet("user").(AuthUser)
+			return u.ID
+		}), a.uploadAttachment)
+		auth.GET("/tickets/:id/attachments/:attID", a.attRL.Middleware(func(c *gin.Context) string {
+			u := c.MustGet("user").(AuthUser)
+			return u.ID
+		}), a.getAttachment)
+	} else {
+		auth.POST("/tickets/:id/attachments", a.uploadAttachment)
+		auth.GET("/tickets/:id/attachments/:attID", a.getAttachment)
+	}
 	auth.DELETE("/tickets/:id/attachments/:attID", a.deleteAttachment)
 	auth.GET("/tickets/:id/watchers", a.listWatchers)
 	auth.POST("/tickets/:id/watchers", a.addWatcher)
