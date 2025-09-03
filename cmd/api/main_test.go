@@ -544,3 +544,133 @@ func TestGetAttachment_MinIOPresign(t *testing.T) {
 		t.Fatalf("expected presigned URL, got %s", loc)
 	}
 }
+
+type statusDB struct{ called bool }
+
+func (db *statusDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return nil, nil
+}
+
+func (db *statusDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return nil
+}
+
+func (db *statusDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	db.called = true
+	return pgconn.CommandTag{}, nil
+}
+
+func TestAddStatusHistory_Invalid(t *testing.T) {
+	db := &statusDB{}
+	app := NewApp(Config{Env: "test"}, db, nil, nil, nil)
+	ctx := context.Background()
+	app.addStatusHistory(ctx, "1", "Open", "Bogus", "u1")
+	if db.called {
+		t.Fatalf("expected no insert for invalid status")
+	}
+	db2 := &statusDB{}
+	app2 := NewApp(Config{Env: "test"}, db2, nil, nil, nil)
+	app2.addStatusHistory(ctx, "1", "Open", "Resolved", "u1")
+	if !db2.called {
+		t.Fatalf("expected insert for valid status")
+	}
+}
+
+func TestCreateTicketInvalidEnums(t *testing.T) {
+	cfg := Config{Env: "test", TestBypassAuth: true}
+	app := NewApp(cfg, nil, nil, nil, nil)
+
+	t.Run("priority", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		body := `{"title":"foo","requester_id":"r1","priority":5,"source":"web"}`
+		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+	})
+
+	t.Run("source", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		body := `{"title":"foo","requester_id":"r1","priority":1,"source":"sms"}`
+		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+	})
+}
+
+func TestUpdateTicketInvalidEnums(t *testing.T) {
+	cfg := Config{Env: "test", TestBypassAuth: true}
+	app := NewApp(cfg, nil, nil, nil, nil)
+
+	t.Run("priority", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPatch, "/tickets/1", strings.NewReader(`{"priority":5}`))
+		req.Header.Set("Content-Type", "application/json")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+	})
+
+	t.Run("status", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPatch, "/tickets/1", strings.NewReader(`{"status":"bogus"}`))
+		req.Header.Set("Content-Type", "application/json")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+	})
+}
+
+type updateCaptureDB struct{
+    firstExecArgs []any
+}
+
+func (db *updateCaptureDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) { return &fakeRows{}, nil }
+func (db *updateCaptureDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+    // Return oldStatus, number, requesterEmail
+    return &fakeRow{scan: func(dest ...any) error {
+        if len(dest) >= 3 {
+            if p, ok := dest[0].(*string); ok { *p = "Open" }
+            if p, ok := dest[1].(*string); ok { *p = "TKT-1" }
+            if p, ok := dest[2].(*string); ok { *p = "" }
+        }
+        return nil
+    }}
+}
+func (db *updateCaptureDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+    if db.firstExecArgs == nil {
+        db.firstExecArgs = append([]any{}, args...)
+    }
+    return pgconn.CommandTag{}, nil
+}
+
+func TestUpdateTicket_LowercaseStatus_Normalized(t *testing.T) {
+    db := &updateCaptureDB{}
+    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+    rr := httptest.NewRecorder()
+    req := httptest.NewRequest(http.MethodPatch, "/tickets/1", strings.NewReader(`{"status":"open"}`))
+    req.Header.Set("Content-Type", "application/json")
+    app.r.ServeHTTP(rr, req)
+
+    if rr.Code != http.StatusOK {
+        t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+    }
+    if len(db.firstExecArgs) < 1 {
+        t.Fatalf("expected exec args captured")
+    }
+    val := db.firstExecArgs[0]
+    if ps, ok := val.(*string); ok {
+        val = *ps
+    }
+    if val != "Open" {
+        t.Fatalf("expected normalized status 'Open', got %#v", val)
+    }
+}
