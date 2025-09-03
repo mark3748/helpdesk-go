@@ -113,7 +113,7 @@ func Update(a *app.App) gin.HandlerFunc {
 		args := []any{}
 		idx := 1
 		if in.Email != nil {
-			if *in.Email == "" || !ValidEmail(*in.Email) {
+			if *in.Email != "" && !ValidEmail(*in.Email) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_email"})
 				return
 			}

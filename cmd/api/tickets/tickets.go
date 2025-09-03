@@ -98,10 +98,6 @@ func Create(a *app.App) gin.HandlerFunc {
 				}
 			}
 		}
-		if in.RequesterID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"requester_id": "required"}})
-			return
-		}
 		// Test mode: no DB attached, mimic previous behavior
 		if a.DB == nil {
 			c.JSON(http.StatusCreated, Ticket{Title: in.Title, Priority: in.Priority})
