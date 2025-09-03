@@ -119,13 +119,15 @@ func TestCreateTicketValidationErrors(t *testing.T) {
 			t.Fatalf("expected 400, got %d", rr.Code)
 		}
 		var resp struct {
-			Errors map[string]string `json:"errors"`
+			Error struct {
+				FieldErrors map[string]string `json:"field_errors"`
+			} `json:"error"`
 		}
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("invalid json: %v", err)
 		}
-		if resp.Errors["urgency"] == "" {
-			t.Fatalf("expected urgency error, got %v", resp.Errors)
+		if resp.Error.FieldErrors["urgency"] == "" {
+			t.Fatalf("expected urgency error, got %v", resp.Error.FieldErrors)
 		}
 	})
 
@@ -139,13 +141,15 @@ func TestCreateTicketValidationErrors(t *testing.T) {
 			t.Fatalf("expected 400, got %d", rr.Code)
 		}
 		var resp struct {
-			Errors map[string]string `json:"errors"`
+			Error struct {
+				FieldErrors map[string]string `json:"field_errors"`
+			} `json:"error"`
 		}
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("invalid json: %v", err)
 		}
-		if resp.Errors["custom_json"] == "" {
-			t.Fatalf("expected custom_json error, got %v", resp.Errors)
+		if resp.Error.FieldErrors["custom_json"] == "" {
+			t.Fatalf("expected custom_json error, got %v", resp.Error.FieldErrors)
 		}
 	})
 

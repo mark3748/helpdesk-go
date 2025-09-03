@@ -64,31 +64,31 @@ func Create(a *app.App) gin.HandlerFunc {
 					errs[strings.ToLower(fe.Field())] = fe.Tag()
 				}
 			}
-			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
+			app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", errs)
 			return
 		}
 		if len(in.CustomJSON) > 0 {
 			var tmp interface{}
 			if err := json.Unmarshal(in.CustomJSON, &tmp); err != nil || (tmp != nil && reflect.ValueOf(tmp).Kind() != reflect.Map) {
-				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"custom_json": "must be object"}})
+				app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"custom_json": "must be object"})
 				return
 			}
 		}
 		if in.RequesterID == "" {
 			if in.Requester == nil {
-				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"requester": "required"}})
+				app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"requester": "required"})
 				return
 			}
 			if in.Requester.Email == "" && in.Requester.Phone == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"requester": "email_or_phone"}})
+				app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"requester": "email_or_phone"})
 				return
 			}
 			if in.Requester.Email != "" && !requesterspkg.ValidEmail(in.Requester.Email) {
-				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"email": "invalid"}})
+				app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"email": "invalid"})
 				return
 			}
 			if in.Requester.Phone != "" && !requesterspkg.ValidPhone(in.Requester.Phone) {
-				c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"phone": "invalid"}})
+				app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"phone": "invalid"})
 				return
 			}
 			if a.DB == nil {
@@ -96,7 +96,7 @@ func Create(a *app.App) gin.HandlerFunc {
 			} else {
 				const rq = `insert into requesters (email, name, phone) values (nullif($1,''), nullif($2,''), nullif($3,'')) returning id::text`
 				if err := a.DB.QueryRow(c.Request.Context(), rq, strings.ToLower(in.Requester.Email), in.Requester.Name, in.Requester.Phone).Scan(&in.RequesterID); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					app.AbortError(c, http.StatusInternalServerError, "db_error", err.Error(), nil)
 					return
 				}
 			}
