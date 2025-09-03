@@ -32,9 +32,9 @@ type Config struct {
 	// Testing helpers
 	TestBypassAuth bool
 	// Local auth
-    AuthMode        string // "oidc" or "local"
-    AuthLocalSecret string
-    AdminPassword   string
+	AuthMode        string // "oidc" or "local"
+	AuthLocalSecret string
+	AdminPassword   string
 	// Filesystem object store for dev/local
 	FileStorePath   string
 	OpenAPISpecPath string
@@ -53,7 +53,7 @@ func GetEnv(key, def string) string {
 
 // GetConfig builds Config from environment.
 func GetConfig() Config {
-    cfg := Config{
+	cfg := Config{
 		Addr:            GetEnv("ADDR", ":8080"),
 		DatabaseURL:     GetEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
 		Env:             GetEnv("ENV", "dev"),
@@ -67,9 +67,9 @@ func GetConfig() Config {
 		MinIOBucket:     GetEnv("MINIO_BUCKET", "attachments"),
 		MinIOUseSSL:     GetEnv("MINIO_USE_SSL", "false") == "true",
 		TestBypassAuth:  GetEnv("TEST_BYPASS_AUTH", "false") == "true",
-        AuthMode:        GetEnv("AUTH_MODE", "oidc"),
-        AuthLocalSecret: GetEnv("AUTH_LOCAL_SECRET", ""),
-        AdminPassword:   GetEnv("ADMIN_PASSWORD", "admin"),
+		AuthMode:        GetEnv("AUTH_MODE", "oidc"),
+		AuthLocalSecret: GetEnv("AUTH_LOCAL_SECRET", ""),
+		AdminPassword:   GetEnv("ADMIN_PASSWORD", "admin"),
 		FileStorePath:   GetEnv("FILESTORE_PATH", ""),
 		OpenAPISpecPath: GetEnv("OPENAPI_SPEC_PATH", ""),
 		LogPath:         GetEnv("LOG_PATH", "/config/logs"),
@@ -158,5 +158,6 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 		a.R.Use(RateLimit(rl))
 	}
 	a.R.Use(Logger())
+	a.R.Use(Errors())
 	return a
 }
