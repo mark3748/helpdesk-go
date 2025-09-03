@@ -213,3 +213,33 @@ func TestMailTestMissingConfig(t *testing.T) {
 		t.Fatalf("expected 400 got %d", w.Code)
 	}
 }
+
+func TestMailTestDefaults(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := &fakeDB{s: Settings{Mail: map[string]string{"smtp_host": "smtp"}}}
+	called := false
+	smtpSendMail = func(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+		called = true
+		if addr != "smtp:25" {
+			t.Fatalf("expected default port, got %s", addr)
+		}
+		if from != "test@example.com" {
+			t.Fatalf("expected default from, got %s", from)
+		}
+		return nil
+	}
+	defer func() { smtpSendMail = smtp.SendMail }()
+
+	r := gin.New()
+	r.POST("/settings/mail/test", TestMailSettings(db))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/settings/mail/test", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", w.Code)
+	}
+	if !called {
+		t.Fatalf("expected smtpSendMail called")
+	}
+}
