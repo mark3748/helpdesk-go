@@ -87,6 +87,48 @@ func TestSecurityHeaders(t *testing.T) {
 	})
 }
 
+func TestCORSPreflight(t *testing.T) {
+    cfg := Config{Env: "test", AllowedOrigins: []string{"http://allowed"}}
+    app := NewApp(cfg, nil, nil, nil, nil)
+
+    t.Run("preflight allowed", func(t *testing.T) {
+        rr := httptest.NewRecorder()
+        req := httptest.NewRequest(http.MethodOptions, "/healthz", nil)
+        req.Header.Set("Origin", "http://allowed")
+        req.Header.Set("Access-Control-Request-Method", "POST")
+        req.Header.Set("Access-Control-Request-Headers", "Authorization, Content-Type")
+        app.r.ServeHTTP(rr, req)
+
+        if rr.Code != http.StatusNoContent {
+            t.Fatalf("expected 204, got %d", rr.Code)
+        }
+        if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "http://allowed" {
+            t.Fatalf("expected Access-Control-Allow-Origin header, got %q", got)
+        }
+        if got := rr.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "POST") || !strings.Contains(got, "OPTIONS") {
+            t.Fatalf("expected Allow-Methods to include POST and OPTIONS, got %q", got)
+        }
+        if got := rr.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Authorization") || !strings.Contains(got, "Content-Type") {
+            t.Fatalf("expected Allow-Headers to include Authorization and Content-Type, got %q", got)
+        }
+        if got := rr.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+            t.Fatalf("expected Allow-Credentials=true, got %q", got)
+        }
+    })
+
+    t.Run("preflight disallowed origin", func(t *testing.T) {
+        rr := httptest.NewRecorder()
+        req := httptest.NewRequest(http.MethodOptions, "/healthz", nil)
+        req.Header.Set("Origin", "http://bad")
+        req.Header.Set("Access-Control-Request-Method", "POST")
+        app.r.ServeHTTP(rr, req)
+
+        if rr.Code != http.StatusForbidden {
+            t.Fatalf("expected 403, got %d", rr.Code)
+        }
+    })
+}
+
 type readyzRow struct{ err error }
 
 func (r readyzRow) Scan(dest ...any) error { return r.err }

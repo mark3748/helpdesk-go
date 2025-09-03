@@ -221,26 +221,37 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 	handlers.InitSettings(cfg.LogPath)
 	a.r.Use(gin.Recovery())
 	a.r.Use(gin.Logger())
-	a.r.Use(func(c *gin.Context) {
-		c.Header("Content-Security-Policy", "default-src 'none'")
-		c.Header("X-Content-Type-Options", "nosniff")
-		origin := c.GetHeader("Origin")
-		if origin != "" && len(cfg.AllowedOrigins) > 0 {
-			allowed := false
-			for _, ao := range cfg.AllowedOrigins {
-				if origin == ao {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				c.AbortWithStatus(http.StatusForbidden)
-				return
-			}
-			c.Header("Access-Control-Allow-Origin", origin)
-		}
-		c.Next()
-	})
+    a.r.Use(func(c *gin.Context) {
+        c.Header("Content-Security-Policy", "default-src 'none'")
+        c.Header("X-Content-Type-Options", "nosniff")
+        origin := c.GetHeader("Origin")
+        if origin != "" && len(cfg.AllowedOrigins) > 0 {
+            allowed := false
+            for _, ao := range cfg.AllowedOrigins {
+                if origin == ao {
+                    allowed = true
+                    break
+                }
+            }
+            if !allowed {
+                c.AbortWithStatus(http.StatusForbidden)
+                return
+            }
+            // CORS headers for allowed origins
+            c.Header("Access-Control-Allow-Origin", origin)
+            c.Header("Vary", "Origin")
+            c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+            c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With")
+            c.Header("Access-Control-Allow-Credentials", "true")
+            // Handle preflight requests
+            if c.Request.Method == http.MethodOptions {
+                c.Status(http.StatusNoContent)
+                c.Abort()
+                return
+            }
+        }
+        c.Next()
+    })
 	a.routes()
 	return a
 }
