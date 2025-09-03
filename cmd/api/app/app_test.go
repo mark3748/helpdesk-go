@@ -47,3 +47,23 @@ func TestRateLimit(t *testing.T) {
 		t.Fatalf("expected 429, got %d", rr.Code)
 	}
 }
+
+// Test that the rate limiter is disabled when no configuration is provided.
+func TestRateLimitDisabledByDefault(t *testing.T) {
+	cfg := Config{Env: "test"}
+	a := NewApp(cfg, nil, nil, nil, nil)
+	a.R.GET("/", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	a.R.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	a.R.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+}
