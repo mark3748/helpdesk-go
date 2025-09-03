@@ -187,8 +187,10 @@ func sendEmail(c Config, j EmailJob) error {
 	if c.SMTPUser != "" {
 		auth = smtp.PlainAuth("", c.SMTPUser, c.SMTPPass, c.SMTPHost)
 	}
-	return smtp.SendMail(addr, auth, sanitizedFrom, []string{sanitizedTo}, msg.Bytes())
+	return smtpSendMail(addr, auth, sanitizedFrom, []string{sanitizedTo}, msg.Bytes())
 }
+
+var smtpSendMail = smtp.SendMail
 
 func main() {
 	c := cfg()
@@ -265,35 +267,37 @@ func main() {
 
 	log.Info().Msg("worker started")
 	for {
-		res, err := rdb.BLPop(ctx, 0, "jobs").Result()
-		if err != nil {
-			log.Error().Err(err).Msg("blpop")
-			continue
-		}
-		if len(res) < 2 {
-			continue
-		}
-		size, _ := rdb.LLen(ctx, "jobs").Result()
-		handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
-		var job Job
-		if err := json.Unmarshal([]byte(res[1]), &job); err != nil {
-			log.Error().Err(err).Msg("unmarshal job")
-			continue
-		}
-		switch job.Type {
-		case "send_email":
-			var ej EmailJob
-			if err := json.Unmarshal(job.Data, &ej); err != nil {
-				log.Error().Err(err).Msg("unmarshal email job")
-				continue
-			}
-			if err := sendEmail(c, ej); err != nil {
-				log.Error().Err(err).Msg("send email")
-			}
-		default:
-			log.Warn().Str("type", job.Type).Msg("unknown job type")
+		if err := processQueueJob(ctx, c, rdb, sendEmail); err != nil {
+			log.Error().Err(err).Msg("process job")
 		}
 	}
+}
+
+func processQueueJob(ctx context.Context, c Config, rdb *redis.Client, send func(Config, EmailJob) error) error {
+	res, err := rdb.BLPop(ctx, 0, "jobs").Result()
+	if err != nil {
+		return err
+	}
+	if len(res) < 2 {
+		return nil
+	}
+	size, _ := rdb.LLen(ctx, "jobs").Result()
+	handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
+	var job Job
+	if err := json.Unmarshal([]byte(res[1]), &job); err != nil {
+		return err
+	}
+	switch job.Type {
+	case "send_email":
+		var ej EmailJob
+		if err := json.Unmarshal(job.Data, &ej); err != nil {
+			return err
+		}
+		return send(c, ej)
+	default:
+		log.Warn().Str("type", job.Type).Msg("unknown job type")
+	}
+	return nil
 }
 
 func updateSLAClocks(ctx context.Context, db *pgxpool.Pool) error {

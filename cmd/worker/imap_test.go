@@ -6,9 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/emersion/go-imap"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/minio/minio-go/v7"
+	"github.com/redis/go-redis/v9"
+
+	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 )
 
 // fakeStore implements app.ObjectStore for tests.
@@ -120,5 +124,82 @@ func TestProcessIMAPMessage_Duplicate(t *testing.T) {
 	}
 	if len(store.objects) != 0 {
 		t.Fatalf("expected no stored objects, got %d", len(store.objects))
+	}
+}
+
+type bytesLiteral struct {
+	data []byte
+	idx  int
+}
+
+func (l *bytesLiteral) Read(p []byte) (int, error) {
+	if l.idx >= len(l.data) {
+		return 0, io.EOF
+	}
+	n := copy(p, l.data[l.idx:])
+	l.idx += n
+	return n, nil
+}
+
+func (l *bytesLiteral) Len() int { return len(l.data) - l.idx }
+
+type fakeIMAPClient struct {
+	raw    []byte
+	stored bool
+}
+
+func (f *fakeIMAPClient) Login(username, password string) error { return nil }
+func (f *fakeIMAPClient) Select(mailbox string, readOnly bool) (*imap.MailboxStatus, error) {
+	return &imap.MailboxStatus{Messages: 1}, nil
+}
+func (f *fakeIMAPClient) Search(criteria *imap.SearchCriteria) ([]uint32, error) {
+	return []uint32{1}, nil
+}
+func (f *fakeIMAPClient) Fetch(seqset *imap.SeqSet, items []imap.FetchItem, ch chan *imap.Message) error {
+	// Use the same body section requested by pollIMAP so msg.GetBody can find it.
+	var section *imap.BodySectionName
+	for _, it := range items {
+		if s, err := imap.ParseBodySectionName(it); err == nil {
+			section = s
+			break
+		}
+	}
+	if section == nil {
+		section = &imap.BodySectionName{}
+	}
+	msg := &imap.Message{SeqNum: 1, Body: map[*imap.BodySectionName]imap.Literal{section: &bytesLiteral{data: f.raw}}}
+	ch <- msg
+	close(ch)
+	return nil
+}
+func (f *fakeIMAPClient) Store(seqset *imap.SeqSet, item imap.StoreItem, value interface{}, ch chan *imap.Message) error {
+	f.stored = true
+	return nil
+}
+func (f *fakeIMAPClient) Logout() error { return nil }
+
+func TestPollIMAP(t *testing.T) {
+	raw := []byte(sampleEmail)
+	cli := &fakeIMAPClient{raw: raw}
+	dialOrig := dialIMAP
+	dialIMAP = func(addr string) (imapClient, error) { return cli, nil }
+	defer func() { dialIMAP = dialOrig }()
+
+	var processed []byte
+	procOrig := processIMAP
+	processIMAP = func(ctx context.Context, c Config, db app.DB, store app.ObjectStore, rdb *redis.Client, r []byte) error {
+		processed = r
+		return nil
+	}
+	defer func() { processIMAP = procOrig }()
+
+	if err := pollIMAP(context.Background(), Config{IMAPHost: "host", IMAPUser: "u", IMAPPass: "p", IMAPFolder: "INBOX"}, nil, nil, nil); err != nil {
+		t.Fatalf("pollIMAP: %v", err)
+	}
+	if string(processed) != string(raw) {
+		t.Fatalf("processIMAP called with wrong data")
+	}
+	if !cli.stored {
+		t.Fatalf("expected store called")
 	}
 }

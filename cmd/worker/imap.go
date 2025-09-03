@@ -22,13 +22,28 @@ import (
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 )
 
+type imapClient interface {
+	Login(username, password string) error
+	Select(mailbox string, readOnly bool) (*imap.MailboxStatus, error)
+	Search(criteria *imap.SearchCriteria) ([]uint32, error)
+	Fetch(seqset *imap.SeqSet, items []imap.FetchItem, ch chan *imap.Message) error
+	Store(seqset *imap.SeqSet, item imap.StoreItem, value interface{}, ch chan *imap.Message) error
+	Logout() error
+}
+
+var dialIMAP = func(addr string) (imapClient, error) {
+	return imapclient.DialTLS(addr, nil)
+}
+
+var processIMAP = processIMAPMessage
+
 // pollIMAP connects to an IMAP inbox, retrieves new messages and stores them.
 func pollIMAP(ctx context.Context, c Config, db app.DB, store app.ObjectStore, rdb *redis.Client) error {
 	if c.MinIOBucket != "" && store == nil {
 		return fmt.Errorf("object store is nil")
 	}
 	addr := fmt.Sprintf("%s:993", c.IMAPHost)
-	cli, err := imapclient.DialTLS(addr, nil)
+	cli, err := dialIMAP(addr)
 	if err != nil {
 		return err
 	}
@@ -76,7 +91,7 @@ func pollIMAP(ctx context.Context, c Config, db app.DB, store app.ObjectStore, r
 			continue
 		}
 
-		if err := processIMAPMessage(ctx, c, db, store, rdb, raw); err != nil {
+		if err := processIMAP(ctx, c, db, store, rdb, raw); err != nil {
 			log.Error().Err(err).Msg("process message")
 		}
 
