@@ -210,6 +210,8 @@ func main() {
 	auth.POST("/tickets/:id/attachments", attachmentspkg.Upload(a))
 	auth.GET("/tickets/:id/attachments/:attID", attachmentspkg.Get(a))
 	auth.DELETE("/tickets/:id/attachments/:attID", attachmentspkg.Delete(a))
+	auth.POST("/tickets/:id/attachments/presign-upload", attachmentspkg.PresignUpload(a))
+	auth.GET("/tickets/:id/attachments/:attID/presign-download", attachmentspkg.PresignDownload(a))
 	auth.GET("/tickets/:id/watchers", watcherspkg.List(a))
 	auth.POST("/tickets/:id/watchers", watcherspkg.Add(a))
 	auth.DELETE("/tickets/:id/watchers/:userID", watcherspkg.Remove(a))
