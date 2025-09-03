@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Table, Button, Space, Tag } from 'antd';
+import { Table, Button, Space, Tag, Segmented } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useTickets, subscribeEvents } from '../../api';
+import { useMe } from '../../shared/auth';
 import type { AppEvent } from '../../api';
 import CreateTicketModal from './CreateTicketModal';
 
 export default function QueueList() {
   const navigate = useNavigate();
   const [connected, setConnected] = useState(true);
+  const [mineOnly, setMineOnly] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  const { data: me } = useMe();
+  const params = mineOnly && me?.id ? { assignee_id: String(me.id) } : undefined;
   const { data: tickets, refetch } = useTickets({
     refetchInterval: connected ? false : 5000,
+    params,
   });
 
   useEffect(() => {
@@ -40,6 +45,12 @@ export default function QueueList() {
       ),
     },
     {
+      title: 'Requester',
+      dataIndex: 'requester',
+      key: 'requester',
+      width: 220,
+    },
+    {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
@@ -66,7 +77,14 @@ export default function QueueList() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
-      <div>Events: {connected ? 'connected' : 'disconnected'}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div>Events: {connected ? 'connected' : 'disconnected'}</div>
+        <Segmented
+          options={[{ label: 'My Tickets', value: 'mine' }, { label: 'All', value: 'all' }]}
+          value={mineOnly ? 'mine' : 'all'}
+          onChange={(v) => setMineOnly(v === 'mine')}
+        />
+      </div>
       <Button type="primary" onClick={() => setShowNew(true)}>
         New Ticket
       </Button>

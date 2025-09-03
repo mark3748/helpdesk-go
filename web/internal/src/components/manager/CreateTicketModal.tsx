@@ -1,4 +1,6 @@
 import { Modal, Form, Input, Select, message } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { apiFetch } from '../../shared/api';
 import { useMutation } from '@tanstack/react-query';
 import { createTicket } from '../../shared/api';
 
@@ -10,6 +12,28 @@ interface Props {
 
 export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const [form] = Form.useForm();
+  const [userOpts, setUserOpts] = useState<{ value: string; label: string }[]>([]);
+  const [fetching, setFetching] = useState(false);
+  const doSearch = useMemo(() => {
+    let t: number | undefined;
+    const runner = async (q: string) => {
+      if (!q) { setUserOpts([]); return; }
+      setFetching(true);
+      try {
+        const users = await apiFetch<any[]>(`/users?q=${encodeURIComponent(q)}`);
+        setUserOpts(users.map(u => ({ value: String(u.id), label: u.display_name || u.email || u.username || u.id })));
+      } catch {
+        setUserOpts([]);
+      } finally { setFetching(false); }
+    };
+    const debounced = (q: string) => {
+      if (t) window.clearTimeout(t);
+      t = window.setTimeout(() => runner(q), 300) as unknown as number;
+    };
+    (debounced as any).cancel = () => { if (t) window.clearTimeout(t); };
+    return debounced as ((q: string) => void) & { cancel?: () => void };
+  }, []);
+  useEffect(() => () => { (doSearch as any).cancel?.(); }, [doSearch]);
   const create = useMutation({
     mutationFn: (values: {
       title: string;
@@ -50,12 +74,15 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
         <Form.Item name="description" label="Description">
           <Input.TextArea rows={4} />
         </Form.Item>
-        <Form.Item
-          name="requester_id"
-          label="Requester ID"
-          rules={[{ required: true }]}
-        >
-          <Input />
+        <Form.Item name="requester_id" label="Requester" rules={[{ required: true }]}>
+          <Select
+            showSearch
+            filterOption={false}
+            onSearch={doSearch}
+            options={userOpts}
+            loading={fetching}
+            placeholder="Search users by name/email"
+          />
         </Form.Item>
         <Form.Item
           name="priority"

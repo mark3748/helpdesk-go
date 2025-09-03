@@ -66,6 +66,7 @@ export default function TicketDetail() {
           onProgress: (e) => onProgress?.({ percent: e.percent }),
         });
         onSuccess?.({});
+        message.success('Attachment uploaded');
         attachments.refetch();
       } catch (err) {
         onError?.(err as Error);

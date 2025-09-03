@@ -1,4 +1,6 @@
 import { Modal, Form, Input, Select, message } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { apiFetch } from '../../shared/api';
 import { useMutation } from '@tanstack/react-query';
 import { createTicket } from '../../shared/api';
 import { useMe } from '../../shared/auth';
@@ -12,14 +14,32 @@ interface Props {
 export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const { data: me } = useMe();
   const [form] = Form.useForm();
+  const [userOpts, setUserOpts] = useState<{ value: string; label: string }[]>([]);
+  const [fetching, setFetching] = useState(false);
+  const doSearch = useMemo(() => {
+    let t: number | undefined;
+    const runner = async (q: string) => {
+      if (!q) { setUserOpts([]); return; }
+      setFetching(true);
+      try {
+        const users = await apiFetch<any[]>(`/users?q=${encodeURIComponent(q)}`);
+        setUserOpts(users.map(u => ({ value: String(u.id), label: u.display_name || u.email || u.username || u.id })));
+      } catch {
+        setUserOpts([]);
+      } finally { setFetching(false); }
+    };
+    const deb = (q: string) => { if (t) window.clearTimeout(t); t = window.setTimeout(() => runner(q), 300) as unknown as number; };
+    return deb;
+  }, []);
   const create = useMutation({
     mutationFn: (values: { title: string; description?: string; priority: number }) => {
       if (!me) throw new Error('not authenticated');
       return createTicket({
         title: values.title,
         description: values.description || '',
-        requester_id: String(me.id),
+        requester_id: String(values.requester_id || me?.id),
         priority: values.priority,
+        assignee_id: me?.id ? String(me.id) : undefined,
       });
     },
     onSuccess: () => {
@@ -44,6 +64,17 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
         </Form.Item>
         <Form.Item name="description" label="Description">
           <Input.TextArea rows={4} />
+        </Form.Item>
+        <Form.Item name="requester_id" label="Requester">
+          <Select
+            showSearch
+            allowClear
+            filterOption={false}
+            onSearch={doSearch}
+            options={userOpts}
+            loading={fetching}
+            placeholder="Defaults to yourself; search to choose another"
+          />
         </Form.Item>
         <Form.Item name="priority" label="Priority" initialValue={2} rules={[{ required: true }]}> 
           <Select

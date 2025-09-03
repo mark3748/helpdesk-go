@@ -50,11 +50,14 @@ export function subscribeEvents(
 
 export type { Ticket };
 
-export function useTickets(opts: { refetchInterval?: number | false } = {}) {
+export function useTickets(opts: { refetchInterval?: number | false; params?: Record<string, string> } = {}) {
   type Resp = Ticket[];
   return useQuery({
-    queryKey: ['tickets'],
-    queryFn: () => apiFetch<Resp>('/tickets'),
+    queryKey: ['tickets', opts.params || null],
+    queryFn: () => {
+      const qs = opts.params ? '?' + new URLSearchParams(opts.params).toString() : '';
+      return apiFetch<Resp>(`/tickets${qs}`);
+    },
     ...opts,
   });
 }
