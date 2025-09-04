@@ -24,8 +24,9 @@ export function subscribeEvents(onStatus?: (connected: boolean) => void) {
   };
 
   const connect = () => {
-    const headers = lastEventId ? { 'Last-Event-ID': lastEventId } : undefined;
-    es = new EventSource('/api/events', { withCredentials: true, headers });
+    // EventSource does not support custom headers in browsers; pass last id via query
+    const url = lastEventId ? `/api/events?last_event_id=${encodeURIComponent(lastEventId)}` : '/api/events';
+    es = new EventSource(url, { withCredentials: true });
     es.onopen = () => {
       onStatus?.(true);
       backoff = 1000;
