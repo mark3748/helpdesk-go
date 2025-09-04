@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/smtp"
+    "net/smtp"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -126,6 +126,9 @@ type ObjectStore interface {
 // Email address validation regex based on RFC 5322 simplified pattern
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 
+// allow tests to override SMTP send
+var smtpSendMail = smtp.SendMail
+
 // HTML sanitization policy for email bodies
 var htmlPolicy = bluemonday.UGCPolicy()
 
@@ -206,7 +209,29 @@ func sendEmail(c Config, j EmailJob) error {
 	if c.SMTPUser != "" {
 		auth = smtp.PlainAuth("", c.SMTPUser, c.SMTPPass, c.SMTPHost)
 	}
-	return smtp.SendMail(addr, auth, sanitizedFrom, []string{sanitizedTo}, msg.Bytes())
+    return smtpSendMail(addr, auth, sanitizedFrom, []string{sanitizedTo}, msg.Bytes())
+}
+
+// processQueueJob pops one job and processes it (test helper)
+func processQueueJob(ctx context.Context, c Config, rdb *redis.Client, send func(Config, EmailJob) error) error {
+    res, err := rdb.LPop(ctx, "jobs").Result()
+    if err != nil {
+        return err
+    }
+    var job Job
+    if err := json.Unmarshal([]byte(res), &job); err != nil {
+        return err
+    }
+    switch job.Type {
+    case "send_email":
+        var ej EmailJob
+        if err := json.Unmarshal(job.Data, &ej); err != nil {
+            return err
+        }
+        return send(c, ej)
+    default:
+        return fmt.Errorf("unknown job type: %s", job.Type)
+    }
 }
 
 // exportTickets generates the CSV and uploads it to the object store, returning the object key.
