@@ -51,7 +51,11 @@ func Stream(a *apppkg.App) gin.HandlerFunc {
 
         // Helper to send all events newer than the provided cursor.
         send := func(since time.Time, sinceID string) (time.Time, string) {
-            rows, err := a.DB.Query(ctx, `select id::text, event_type, payload, created_at from ticket_events where (created_at, id) > ($1, $2) order by created_at asc, id asc`, since, sinceID)
+            rows, err := a.DB.Query(ctx, `
+                select id::text, event_type, payload, created_at
+                from ticket_events
+                where created_at > $1 or (created_at = $1 and id <> $2)
+                order by created_at asc, id asc`, since, sinceID)
             if err != nil {
                 return since, sinceID
             }

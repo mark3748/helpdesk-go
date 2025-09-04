@@ -89,7 +89,7 @@ func (db *fakeEventDB) Query(ctx context.Context, sql string, args ...interface{
     sinceID, _ := args[1].(string)
     out := []event{}
     for _, e := range db.events {
-        if e.createdAt.After(since) || (e.createdAt.Equal(since) && e.id > sinceID) {
+        if e.createdAt.After(since) || (e.createdAt.Equal(since) && e.id != sinceID) {
             out = append(out, e)
         }
     }
