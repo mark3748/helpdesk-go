@@ -16,25 +16,25 @@ export default function TicketDetail() {
 
   const ticketQuery = useQuery<Ticket>({
     queryKey: ['ticket', id],
-    queryFn: () => getTicket(id!, auth.user!.access_token),
+    queryFn: () => getTicket(id!, auth.user!.access_token!),
     enabled: !!id && !!auth.user,
   });
 
   const commentsQuery = useQuery<Comment[]>({
     queryKey: ['comments', id],
-    queryFn: () => listComments(id!, auth.user!.access_token),
+    queryFn: () => listComments(id!, auth.user!.access_token!),
     enabled: !!id && !!auth.user,
   });
 
   const attachmentsQuery = useQuery<Attachment[]>({
     queryKey: ['attachments', id],
-    queryFn: () => listAttachments(id!, auth.user!.access_token),
+    queryFn: () => listAttachments(id!, auth.user!.access_token!),
     enabled: !!id && !!auth.user,
   });
 
   const addCommentMutation = useMutation({
     mutationFn: (content: string) =>
-      addComment(id!, content, auth.user!.access_token),
+      addComment(id!, content, auth.user!.access_token!),
     onSuccess: () => {
       setBody('');
       qc.invalidateQueries({ queryKey: ['comments', id] });
@@ -52,7 +52,7 @@ export default function TicketDetail() {
     if (!e.target.files || !e.target.files[0] || !id || !auth.user) return;
     setUploading(true);
     try {
-      await uploadAttachment(id, e.target.files[0], auth.user.access_token, {
+      await uploadAttachment(id!, e.target.files[0], auth.user.access_token!, {
         onProgress: (evt) => setProgress(evt.percent),
       });
       alert('Uploaded');
@@ -94,11 +94,11 @@ export default function TicketDetail() {
                   {a.filename} <span className="text-gray-500 text-sm">({Math.round(((a.bytes || 0) / 1024))} KB)</span>
                 </span>
                 <span className="space-x-2">
-                  <button className="rounded bg-gray-200 px-2 py-1" onClick={() => downloadAttachment(id!, a.id, auth.user!.access_token)}>Download</button>
+                  <button className="rounded bg-gray-200 px-2 py-1" onClick={() => downloadAttachment(id!, a.id, auth.user!.access_token!)}>Download</button>
                   <button
                     className="rounded bg-red-600 px-2 py-1 text-white"
                     onClick={async () => {
-                      await deleteAttachment(id!, a.id, auth.user!.access_token);
+                      await deleteAttachment(id!, a.id, auth.user!.access_token!);
                       qc.invalidateQueries({ queryKey: ['attachments', id] });
                     }}
                   >

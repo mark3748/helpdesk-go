@@ -439,8 +439,8 @@ func TestListTickets(t *testing.T) {
 		wantSQLParts []string
 		wantArgs     []any
 	}{
-		{
-			name: "filtering and search",
+        {
+            name: "filtering and search",
 			url:  "/tickets?status=open&priority=2&team=team1&assignee=user1&search=foo+++bar",
 			wantSQLParts: []string{
 				"t.status = $1",
@@ -463,12 +463,18 @@ func TestListTickets(t *testing.T) {
 			wantSQLParts: []string{"t.status = $1", "t.priority = $2"},
 			wantArgs:     []any{"open", 1},
 		},
-		{
-			name:         "with cursor",
-			url:          "/tickets?cursor=2024-01-02T03:04:05Z",
-			wantSQLParts: []string{"t.created_at < $1"},
-			wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
-		},
+        {
+            name:         "with cursor (timestamp only)",
+            url:          "/tickets?cursor=2024-01-02T03:04:05Z",
+            wantSQLParts: []string{"t.created_at <= $1"},
+            wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
+        },
+        {
+            name:         "with composite cursor",
+            url:          "/tickets?cursor=2024-01-02T03:04:05Z|abc123",
+            wantSQLParts: []string{"(t.created_at < $1 OR (t.created_at = $1 AND t.id < $2))"},
+            wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC), "abc123"},
+        },
 	}
 
 	for _, tc := range cases {
