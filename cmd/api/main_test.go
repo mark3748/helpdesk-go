@@ -439,8 +439,8 @@ func TestListTickets(t *testing.T) {
 		wantSQLParts []string
 		wantArgs     []any
 	}{
-        {
-            name: "filtering and search",
+		{
+			name: "filtering and search",
 			url:  "/tickets?status=open&priority=2&team=team1&assignee=user1&search=foo+++bar",
 			wantSQLParts: []string{
 				"t.status = $1",
@@ -463,18 +463,18 @@ func TestListTickets(t *testing.T) {
 			wantSQLParts: []string{"t.status = $1", "t.priority = $2"},
 			wantArgs:     []any{"open", 1},
 		},
-        {
-            name:         "with cursor (timestamp only)",
-            url:          "/tickets?cursor=2024-01-02T03:04:05Z",
-            wantSQLParts: []string{"t.created_at <= $1"},
-            wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
-        },
-        {
-            name:         "with composite cursor",
-            url:          "/tickets?cursor=2024-01-02T03:04:05Z|abc123",
-            wantSQLParts: []string{"(t.created_at < $1 OR (t.created_at = $1 AND t.id < $2))"},
-            wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC), "abc123"},
-        },
+		{
+			name:         "with cursor (timestamp only)",
+			url:          "/tickets?cursor=2024-01-02T03:04:05Z",
+			wantSQLParts: []string{"t.created_at <= $1"},
+			wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
+		},
+		{
+			name:         "with composite cursor",
+			url:          "/tickets?cursor=2024-01-02T03:04:05Z|abc123",
+			wantSQLParts: []string{"(t.created_at < $1 OR (t.created_at = $1 AND t.id < $2))"},
+			wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC), "abc123"},
+		},
 	}
 
 	for _, tc := range cases {
@@ -559,61 +559,61 @@ func TestGetAttachment_MinIOPresign(t *testing.T) {
 }
 
 func TestFinalizeAttachment_RejectsInvalidID(t *testing.T) {
-    // Set up app with fake object store and bypass auth
-    store := newFakeObjectStore()
-    defer store.Close()
-    cfg := Config{Env: "test", TestBypassAuth: true, MinIOBucket: "bucket"}
-    app := NewApp(cfg, readyzDB{}, nil, store, nil)
+	// Set up app with fake object store and bypass auth
+	store := newFakeObjectStore()
+	defer store.Close()
+	cfg := Config{Env: "test", TestBypassAuth: true, MinIOBucket: "bucket"}
+	app := NewApp(cfg, readyzDB{}, nil, store, nil)
 
-    // Finalize with a path-traversal style ID should be rejected before StatObject/DB
-    body := `{"attachment_id":"../../etc/passwd","filename":"x","bytes":5}`
-    rr := httptest.NewRecorder()
-    req := httptest.NewRequest(http.MethodPost, "/tickets/1/attachments", strings.NewReader(body))
-    req.Header.Set("Content-Type", "application/json")
-    app.r.ServeHTTP(rr, req)
+	// Finalize with a path-traversal style ID should be rejected before StatObject/DB
+	body := `{"attachment_id":"../../etc/passwd","filename":"x","bytes":5}`
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/tickets/1/attachments", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
 
-    if rr.Code != http.StatusBadRequest {
-        t.Fatalf("expected 400, got %d body=%s", rr.Code, rr.Body.String())
-    }
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rr.Code, rr.Body.String())
+	}
 }
 
 type traversalAttachmentDB struct{}
 
 func (db *traversalAttachmentDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
-    return &fakeRows{}, nil
+	return &fakeRows{}, nil
 }
 func (db *traversalAttachmentDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
-    // Return a malicious object_key to simulate prior bad data
-    return &fakeRow{scan: func(dest ...any) error {
-        if p, ok := dest[0].(*string); ok {
-            *p = "../../etc/passwd"
-        }
-        if p, ok := dest[1].(*string); ok {
-            *p = "passwd"
-        }
-        if p, ok := dest[2].(**string); ok {
-            *p = nil
-        }
-        return nil
-    }}
+	// Return a malicious object_key to simulate prior bad data
+	return &fakeRow{scan: func(dest ...any) error {
+		if p, ok := dest[0].(*string); ok {
+			*p = "../../etc/passwd"
+		}
+		if p, ok := dest[1].(*string); ok {
+			*p = "passwd"
+		}
+		if p, ok := dest[2].(**string); ok {
+			*p = nil
+		}
+		return nil
+	}}
 }
 func (db *traversalAttachmentDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
-    return pgconn.CommandTag{}, nil
+	return pgconn.CommandTag{}, nil
 }
 
 func TestGetAttachment_FileStoreTraversalBlocked(t *testing.T) {
-    dir := t.TempDir()
-    // Configure file store path (no MinIO), and DB returns a traversal key
-    cfg := Config{Env: "test", TestBypassAuth: true, FileStorePath: dir, MinIOBucket: "attachments"}
-    app := NewApp(cfg, &traversalAttachmentDB{}, nil, &fsObjectStore{base: dir}, nil)
+	dir := t.TempDir()
+	// Configure file store path (no MinIO), and DB returns a traversal key
+	cfg := Config{Env: "test", TestBypassAuth: true, FileStorePath: dir, MinIOBucket: "attachments"}
+	app := NewApp(cfg, &traversalAttachmentDB{}, nil, &fsObjectStore{base: dir}, nil)
 
-    rr := httptest.NewRecorder()
-    req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/att", nil)
-    app.r.ServeHTTP(rr, req)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/att", nil)
+	app.r.ServeHTTP(rr, req)
 
-    if rr.Code != http.StatusNotFound {
-        t.Fatalf("expected 404, got %d body=%s", rr.Code, rr.Body.String())
-    }
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d body=%s", rr.Code, rr.Body.String())
+	}
 }
 
 type statusDB struct{ called bool }
@@ -849,4 +849,144 @@ func TestAddWatcher_EventRecorded(t *testing.T) {
 	if !found {
 		t.Fatalf("expected ticket_events insert, got %v", db.execs)
 	}
+}
+
+type requesterDB struct {
+	execs []string
+}
+
+func (db *requesterDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
+
+func (db *requesterDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	s := strings.ToLower(sql)
+	switch {
+	case strings.Contains(s, "insert into users"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if p, ok := dest[0].(*string); ok {
+				*p = "req-1"
+			}
+			return nil
+		}}
+	case strings.Contains(s, "update users"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if p, ok := dest[0].(*string); ok {
+				*p = "req-1"
+			}
+			if p, ok := dest[1].(*string); ok {
+				*p = "new@example.com"
+			}
+			if p, ok := dest[2].(*string); ok {
+				*p = "New Name"
+			}
+			return nil
+		}}
+	case strings.Contains(s, "select id"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if p, ok := dest[0].(*string); ok {
+				*p = "req-1"
+			}
+			if p, ok := dest[1].(*string); ok {
+				*p = "user@example.com"
+			}
+			if p, ok := dest[2].(*string); ok {
+				*p = "User"
+			}
+			return nil
+		}}
+	default:
+		return &fakeRow{}
+	}
+}
+
+func (db *requesterDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	db.execs = append(db.execs, sql)
+	return pgconn.CommandTag{}, nil
+}
+
+func TestCreateRequester(t *testing.T) {
+	db := &requesterDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	body := `{"email":"u@example.com","display_name":"User"}`
+	req := httptest.NewRequest(http.MethodPost, "/requesters", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rr.Code)
+	}
+	found := false
+	for _, sql := range db.execs {
+		if strings.Contains(strings.ToLower(sql), "user_roles") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected role insert, got %v", db.execs)
+	}
+}
+
+func TestGetRequester(t *testing.T) {
+	db := &requesterDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/requesters/req-1", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+}
+
+func TestUpdateRequester(t *testing.T) {
+    db := &requesterDB{}
+    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	body := `{"email":"new@example.com","display_name":"New Name"}`
+	req := httptest.NewRequest(http.MethodPatch, "/requesters/req-1", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+    if rr.Code != http.StatusOK {
+        t.Fatalf("expected 200, got %d", rr.Code)
+    }
+}
+
+type nonRequesterDB struct{}
+
+func (db *nonRequesterDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+    return &fakeRows{}, nil
+}
+
+func (db *nonRequesterDB) QueryRow(ctx context.Context, s string, args ...interface{}) pgx.Row {
+    // Simulate update failing due to missing requester role by returning no rows
+    if strings.Contains(strings.ToLower(s), "update users") {
+        return &fakeRow{scan: func(dest ...any) error { return pgx.ErrNoRows }}
+    }
+    return &fakeRow{}
+}
+
+func (db *nonRequesterDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+    return pgconn.CommandTag{}, nil
+}
+
+func TestUpdateRequester_OnlyRequesterRole(t *testing.T) {
+    db := &nonRequesterDB{}
+    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+    rr := httptest.NewRecorder()
+    body := `{"email":"new@example.com","display_name":"New Name"}`
+    req := httptest.NewRequest(http.MethodPatch, "/requesters/target-user", strings.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    app.r.ServeHTTP(rr, req)
+
+    if rr.Code != http.StatusNotFound {
+        t.Fatalf("expected 404 for non-requester, got %d body=%s", rr.Code, rr.Body.String())
+    }
 }
