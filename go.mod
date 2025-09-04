@@ -2,8 +2,6 @@ module github.com/mark3748/helpdesk-go
 
 go 1.25.0
 
-toolchain go1.25.0
-
 require (
 	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/emersion/go-imap v1.2.1

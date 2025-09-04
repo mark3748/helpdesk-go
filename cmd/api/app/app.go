@@ -7,6 +7,8 @@ import (
     "path/filepath"
     "strconv"
     "strings"
+    "net/url"
+    "time"
 
     "github.com/gin-gonic/gin"
     "github.com/golang-jwt/jwt/v5"
@@ -150,6 +152,33 @@ func (f *FsObjectStore) RemoveObject(ctx context.Context, bucketName, objectName
         return os.ErrPermission
     }
     return os.Remove(clean)
+}
+
+// PresignedPutObject is not supported for the filesystem store.
+func (f *FsObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
+    _ = ctx
+    return nil, os.ErrPermission
+}
+
+// StatObject returns basic info for a stored object.
+func (f *FsObjectStore) StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error) {
+    _ = ctx
+    _ = opts
+    base := filepath.Clean(f.Base)
+    dir := base
+    if bucketName != "" {
+        dir = filepath.Join(base, bucketName)
+    }
+    fp := filepath.Join(dir, objectName)
+    clean := filepath.Clean(fp)
+    if !strings.HasPrefix(clean, dir+string(os.PathSeparator)) && clean != dir {
+        return minio.ObjectInfo{}, os.ErrPermission
+    }
+    fi, err := os.Stat(clean)
+    if err != nil {
+        return minio.ObjectInfo{}, err
+    }
+    return minio.ObjectInfo{Key: objectName, Size: fi.Size()}, nil
 }
 
 // App wires dependencies and the Gin router.

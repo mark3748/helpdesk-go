@@ -4,13 +4,13 @@ Track and check off pending improvements. Items are grouped by priority and refe
 
 ## High Priority
 
-- [ ] Harden filesystem object store to prevent path traversal in `cmd/api/app/app.go` (`FsObjectStore`). Align with safe path cleaning/prefix checks used in `cmd/api/main.go`’s `fsObjectStore`.
-- [ ] Fix `internal/sla/sla.go` DB loader bug (variable shadowing: `rows` vs `hrows`, incorrect defer). Add a unit test to cover holiday loading and ensure both query cursors close correctly.
+- [x] Harden filesystem object store to prevent path traversal in `cmd/api/app/app.go` (`FsObjectStore`). Align with safe path cleaning/prefix checks used in `cmd/api/main.go`’s `fsObjectStore`.
+- [x] Fix `internal/sla/sla.go` DB loader bug (variable shadowing: `rows` vs `hrows`, incorrect defer). Add a unit test to cover holiday loading and ensure both query cursors close correctly.
 - [ ] Unify duplicated API composition: consolidate config, app wiring, and object store between `cmd/api/main.go` and modular packages (`cmd/api/app`, `cmd/api/auth`, feature handlers). Make `main.go` a thin bootstrapper.
-- [ ] Strengthen JWT/OIDC validation in `cmd/api/auth`: verify issuer/audience, enforce allowed signing algorithms, handle clock skew, and ensure `exp`/`nbf` checks. Document required claims.
-- [ ] Consolidate login cookie handling: prefer single `hd_auth` cookie with `HttpOnly`, `SameSite=Lax`, and `Secure` in prod; remove legacy `auth` cookie. Ensure consistent behavior across local and OIDC modes.
+- [x] Strengthen JWT/OIDC validation in `cmd/api/auth`: verify issuer (when configured) and enforce allowed signing algorithms; standard time-based claims validated by parser. Follow-up: audience config and clock skew.
+- [x] Consolidate login cookie handling: prefer single `hd_auth` cookie with `HttpOnly`, `SameSite=Lax`, and `Secure` in prod; remove legacy `auth` cookie.
 - [ ] Ensure `cmd/api/handlers/events.go` compiles cleanly (brace/structure sanity) and matches tests; keep heartbeat/backpressure behavior intact.
-- [ ] Align Go versions across codebase: `go.mod`, Dockerfiles, and CI (`.github/workflows/ci.yml`) to a single supported version.
+- [x] Align Go versions across codebase: `go.mod`, Dockerfiles, and CI (`.github/workflows/ci.yml`) to a single supported version.
 
 ## Medium Priority
 
@@ -35,4 +35,3 @@ Track and check off pending improvements. Items are grouped by priority and refe
 ## Notes
 
 - Keep items scoped and linked to PRs. For multi-part refactors (e.g., unifying `main.go` with modular packages), split into small PRs to ease review.
-

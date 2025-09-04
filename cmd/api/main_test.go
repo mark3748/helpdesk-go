@@ -1,24 +1,25 @@
 package main
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
+    "bytes"
+    "context"
+    "encoding/json"
+    "errors"
+    "fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
+    "time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+    "github.com/gin-gonic/gin"
+    "github.com/jackc/pgx/v5"
+    "github.com/jackc/pgx/v5/pgconn"
+    appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
+    handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+    "github.com/minio/minio-go/v7"
+    "github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 func TestHealthz(t *testing.T) {
@@ -169,7 +170,7 @@ func TestReadyzFailures(t *testing.T) {
 
 	t.Run("object store", func(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
-		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, &fsObjectStore{base: "/dev/null"}, nil)
+    app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, &appcore.FsObjectStore{Base: "/dev/null"}, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
@@ -209,7 +210,7 @@ func TestReadyzFailures(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
 		dir := t.TempDir()
 		// Do not create bucket subdir; readyz should mkdir it and succeed
-		app := NewApp(Config{Env: "test", MinIOBucket: "attachments"}, readyzDB{}, nil, &fsObjectStore{base: dir}, nil)
+    app := NewApp(Config{Env: "test", MinIOBucket: "attachments"}, readyzDB{}, nil, &appcore.FsObjectStore{Base: dir}, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
@@ -605,7 +606,7 @@ func TestGetAttachment_FileStoreTraversalBlocked(t *testing.T) {
 	dir := t.TempDir()
 	// Configure file store path (no MinIO), and DB returns a traversal key
 	cfg := Config{Env: "test", TestBypassAuth: true, FileStorePath: dir, MinIOBucket: "attachments"}
-	app := NewApp(cfg, &traversalAttachmentDB{}, nil, &fsObjectStore{base: dir}, nil)
+    app := NewApp(cfg, &traversalAttachmentDB{}, nil, &appcore.FsObjectStore{Base: dir}, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/att", nil)

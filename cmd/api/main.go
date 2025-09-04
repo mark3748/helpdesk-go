@@ -1,11 +1,11 @@
 package main
 
 import (
-	"bytes"
-	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"database/sql"
+    "bytes"
+    "context"
+    "crypto/rand"
+    "crypto/sha256"
+    "database/sql"
 	"embed"
 	"encoding/csv"
 	"encoding/hex"
@@ -21,11 +21,11 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
+    "time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
-	"github.com/golang-jwt/jwt/v5"
+    "github.com/gin-gonic/gin"
+    "github.com/go-playground/validator/v10"
+    "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -35,16 +35,17 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/pressly/goose/v3"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"golang.org/x/crypto/bcrypt"
+    "github.com/pressly/goose/v3"
+    "github.com/prometheus/client_golang/prometheus/promhttp"
+    "github.com/redis/go-redis/v9"
+    "github.com/rs/zerolog"
+    "github.com/rs/zerolog/log"
+    "golang.org/x/crypto/bcrypt"
 
-	appevents "github.com/mark3748/helpdesk-go/cmd/api/events"
-	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
-	rateln "github.com/mark3748/helpdesk-go/internal/ratelimit"
+    appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
+    appevents "github.com/mark3748/helpdesk-go/cmd/api/events"
+    handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+    rateln "github.com/mark3748/helpdesk-go/internal/ratelimit"
 )
 
 //go:embed migrations/*.sql
@@ -202,89 +203,13 @@ type DB interface {
 
 // ObjectStore wraps the subset of MinIO we need for tests.
 type ObjectStore interface {
-	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
-	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
-	PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error)
-	StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error)
+    PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+    RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+    PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error)
+    StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error)
 }
 
-// fsObjectStore implements ObjectStore on the local filesystem for development/testing.
-type fsObjectStore struct {
-	base string
-}
-
-func (f *fsObjectStore) PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
-	_ = ctx
-	dir := f.base
-	if bucketName != "" {
-		dir = filepath.Join(dir, bucketName)
-	}
-	base := filepath.Clean(dir)
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return minio.UploadInfo{}, err
-	}
-	fp := filepath.Join(base, objectName)
-	clean := filepath.Clean(fp)
-	if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
-		return minio.UploadInfo{}, errors.New("invalid object name")
-	}
-	tmp := clean + ".tmp"
-	out, err := os.Create(tmp)
-	if err != nil {
-		return minio.UploadInfo{}, err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, reader); err != nil {
-		_ = os.Remove(tmp)
-		return minio.UploadInfo{}, err
-	}
-	if err := os.Rename(tmp, clean); err != nil {
-		return minio.UploadInfo{}, err
-	}
-	return minio.UploadInfo{Bucket: bucketName, Key: objectName, Size: objectSize}, nil
-}
-
-func (f *fsObjectStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
-	_ = ctx
-	_ = opts
-	dir := f.base
-	if bucketName != "" {
-		dir = filepath.Join(dir, bucketName)
-	}
-	base := filepath.Clean(dir)
-	fp := filepath.Join(base, objectName)
-	clean := filepath.Clean(fp)
-	if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
-		return errors.New("invalid object name")
-	}
-	return os.Remove(clean)
-}
-
-func (f *fsObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
-	_ = ctx
-	_ = expiry
-	return nil, errors.New("presign not supported")
-}
-
-func (f *fsObjectStore) StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error) {
-	_ = ctx
-	_ = opts
-	dir := f.base
-	if bucketName != "" {
-		dir = filepath.Join(dir, bucketName)
-	}
-	base := filepath.Clean(dir)
-	fp := filepath.Join(base, objectName)
-	clean := filepath.Clean(fp)
-	if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
-		return minio.ObjectInfo{}, errors.New("invalid object name")
-	}
-	fi, err := os.Stat(clean)
-	if err != nil {
-		return minio.ObjectInfo{}, err
-	}
-	return minio.ObjectInfo{Key: objectName, Size: fi.Size()}, nil
-}
+// Note: Filesystem object store is provided by appcore.FsObjectStore when MinIO is not configured.
 
 type App struct {
 	cfg  Config
@@ -496,28 +421,28 @@ func main() {
 	var store ObjectStore
 	if mc != nil {
 		store = mc
-	} else if cfg.FileStorePath != "" {
-		base := mkdirWithFallback(
-			cfg.FileStorePath,
-			filepath.Join(os.TempDir(), "helpdesk-data"),
-			cfg.Env,
-			"using /tmp filestore path",
-			"create filestore path",
-		)
-		if cfg.MinIOBucket != "" {
-			bucketPath := filepath.Join(base, cfg.MinIOBucket)
-			bucketPath = mkdirWithFallback(
-				bucketPath,
-				filepath.Join(os.TempDir(), "helpdesk-data", cfg.MinIOBucket),
-				cfg.Env,
-				"using /tmp filestore bucket path",
-				"create filestore bucket path",
-			)
-			base = filepath.Dir(bucketPath)
-		}
-		cfg.FileStorePath = base
-		store = &fsObjectStore{base: base}
-	}
+    } else if cfg.FileStorePath != "" {
+        base := mkdirWithFallback(
+            cfg.FileStorePath,
+            filepath.Join(os.TempDir(), "helpdesk-data"),
+            cfg.Env,
+            "using /tmp filestore path",
+            "create filestore path",
+        )
+        if cfg.MinIOBucket != "" {
+            bucketPath := filepath.Join(base, cfg.MinIOBucket)
+            bucketPath = mkdirWithFallback(
+                bucketPath,
+                filepath.Join(os.TempDir(), "helpdesk-data", cfg.MinIOBucket),
+                cfg.Env,
+                "using /tmp filestore bucket path",
+                "create filestore bucket path",
+            )
+            base = filepath.Dir(bucketPath)
+        }
+        cfg.FileStorePath = base
+        store = &appcore.FsObjectStore{Base: base}
+    }
 
 	// Seed a dev admin for local auth
 	if cfg.AuthMode == "local" && cfg.Env == "dev" {
@@ -689,35 +614,38 @@ func (a *App) readyz(c *gin.Context) {
 		}
 	}
 
-	if a.m != nil {
-		switch s := a.m.(type) {
-		case *minio.Client:
-			ok, err := s.BucketExists(ctx, a.cfg.MinIOBucket)
-			if err != nil || !ok {
-				log.Error().Err(err).Str("bucket", a.cfg.MinIOBucket).Msg("readyz minio")
-				c.JSON(500, gin.H{"error": "object_store"})
-				return
-			}
-		case *fsObjectStore:
-			dir := s.base
-			if a.cfg.MinIOBucket != "" {
-				dir = filepath.Join(dir, a.cfg.MinIOBucket)
-			}
-			// Ensure directory exists so WriteFile does not fail on fresh deploys
-			if err := os.MkdirAll(dir, 0o755); err != nil {
-				log.Error().Err(err).Str("dir", dir).Msg("readyz filestore mkdir")
-				c.JSON(500, gin.H{"error": "object_store"})
-				return
-			}
-			testFile := filepath.Join(dir, ".readyz")
-			if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
-				log.Error().Err(err).Msg("readyz filestore")
-				c.JSON(500, gin.H{"error": "object_store"})
-				return
-			}
-			_ = os.Remove(testFile)
-		}
-	}
+    if a.m != nil {
+        switch s := a.m.(type) {
+        case *minio.Client:
+            ok, err := s.BucketExists(ctx, a.cfg.MinIOBucket)
+            if err != nil || !ok {
+                log.Error().Err(err).Str("bucket", a.cfg.MinIOBucket).Msg("readyz minio")
+                c.JSON(500, gin.H{"error": "object_store"})
+                return
+            }
+        default:
+            // Filesystem store: ensure directory exists and is writable
+            dir := a.cfg.FileStorePath
+            if fs, ok := a.m.(*appcore.FsObjectStore); ok && fs.Base != "" {
+                dir = fs.Base
+            }
+            if a.cfg.MinIOBucket != "" {
+                dir = filepath.Join(dir, a.cfg.MinIOBucket)
+            }
+            if err := os.MkdirAll(dir, 0o755); err != nil {
+                log.Error().Err(err).Str("dir", dir).Msg("readyz filestore mkdir")
+                c.JSON(500, gin.H{"error": "object_store"})
+                return
+            }
+            testFile := filepath.Join(dir, ".readyz")
+            if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
+                log.Error().Err(err).Msg("readyz filestore")
+                c.JSON(500, gin.H{"error": "object_store"})
+                return
+            }
+            _ = os.Remove(testFile)
+        }
+    }
 
 	if ms := handlers.MailSettings(); ms != nil {
 		host := ms["host"]
@@ -2000,11 +1928,11 @@ func (a *App) uploadAttachmentObject(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "object store not configured"})
 		return
 	}
-	// Only support when using filesystem store; MinIO uses presigned URLs directly
-	if _, ok := a.m.(*fsObjectStore); !ok {
-		c.JSON(400, gin.H{"error": "invalid upload target"})
-		return
-	}
+    // Only support when using filesystem store; MinIO uses presigned URLs directly
+    if _, ok := a.m.(*minio.Client); ok {
+        c.JSON(400, gin.H{"error": "invalid upload target"})
+        return
+    }
 	objectKey := strings.TrimSpace(c.Param("objectKey"))
 	if _, err := uuid.Parse(objectKey); err != nil {
 		c.JSON(400, gin.H{"error": "invalid object key"})

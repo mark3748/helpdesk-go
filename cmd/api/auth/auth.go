@@ -146,7 +146,7 @@ where u.external_id=$1`, u.ExternalID)
 		}
 		tokenStr := strings.TrimPrefix(auth, "Bearer ")
     // Enforce acceptable algorithms and validate standard time-based claims
-    parser := jwt.NewParser(jwt.WithValidMethods([]string{"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}))
+    parser := jwt.NewParser(jwt.WithValidMethods([]string{"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "HS256", "HS384", "HS512"}))
     token, err := parser.Parse(tokenStr, a.Keyf)
 		if err != nil || !token.Valid {
 			app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
