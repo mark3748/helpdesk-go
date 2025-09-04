@@ -1,9 +1,9 @@
 package auth
 
 import (
-	"net/http"
-	"strings"
-	"time"
+    "net/http"
+    "strings"
+    "time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -145,21 +145,42 @@ where u.external_id=$1`, u.ExternalID)
 			return
 		}
 		tokenStr := strings.TrimPrefix(auth, "Bearer ")
-		token, err := jwt.Parse(tokenStr, a.Keyf)
-		if err != nil || !token.Valid {
-			app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
-			return
-		}
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
-			return
-		}
-		u := AuthUser{
-			ExternalID:  getStringClaim(claims, "sub"),
-			Email:       getStringClaim(claims, "email"),
-			DisplayName: getStringClaim(claims, "name"),
-		}
+        // Enforce acceptable algorithms and validate standard time-based claims;
+        // allow optional leeway when configured.
+        opts := []jwt.ParserOption{jwt.WithValidMethods([]string{"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "HS256", "HS384", "HS512"})}
+        if a.Cfg.JWTClockSkewSeconds > 0 {
+            opts = append(opts, jwt.WithLeeway(time.Duration(a.Cfg.JWTClockSkewSeconds)*time.Second))
+        }
+        parser := jwt.NewParser(opts...)
+        token, err := parser.Parse(tokenStr, a.Keyf)
+        if err != nil || !token.Valid {
+            app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
+            return
+        }
+    claims, ok := token.Claims.(jwt.MapClaims)
+    if !ok {
+        app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
+        return
+    }
+        // Optional issuer validation when configured
+        if iss := a.Cfg.OIDCIssuer; iss != "" {
+            if got := getStringClaim(claims, "iss"); got != iss {
+                app.AbortError(c, http.StatusUnauthorized, "invalid_issuer", "invalid issuer", nil)
+                return
+            }
+        }
+        // Optional audience validation when configured
+        if aud := a.Cfg.OIDCAudience; aud != "" {
+            if !audienceContains(claims, aud) {
+                app.AbortError(c, http.StatusUnauthorized, "invalid_audience", "invalid audience", nil)
+                return
+            }
+        }
+        u := AuthUser{
+            ExternalID:  getStringClaim(claims, "sub"),
+            Email:       getStringClaim(claims, "email"),
+            DisplayName: getStringClaim(claims, "name"),
+        }
 		if u.DisplayName == "" {
 			u.DisplayName = getStringClaim(claims, "preferred_username")
 		}
@@ -217,10 +238,30 @@ where u.external_id=$1`, u.ExternalID)
 }
 
 func getStringClaim(c jwt.MapClaims, key string) string {
-	if v, ok := c[key].(string); ok {
-		return v
-	}
-	return ""
+    if v, ok := c[key].(string); ok {
+        return v
+    }
+    return ""
+}
+
+func audienceContains(c jwt.MapClaims, want string) bool {
+    if v, ok := c["aud"]; ok {
+        switch t := v.(type) {
+        case string:
+            return t == want
+        case []interface{}:
+            for _, e := range t {
+                if s, ok := e.(string); ok && s == want {
+                    return true
+                }
+            }
+        case []string:
+            for _, s := range t {
+                if s == want { return true }
+            }
+        }
+    }
+    return false
 }
 
 // Me returns the authenticated user.

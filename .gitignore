@@ -26,5 +26,6 @@ node_modules/
 dist/
 .next/
 out/
+web/**/.vite/
 cmd/worker/worker
 cmd/api/api
