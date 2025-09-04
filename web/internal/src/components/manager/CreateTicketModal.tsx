@@ -1,6 +1,6 @@
 import { Modal, Form, Input, Select, message } from 'antd';
 import { useMutation } from '@tanstack/react-query';
-import { createTicket } from '../../shared/api';
+import { createTicket, createRequester } from '../../shared/api';
 
 interface Props {
   open: boolean;
@@ -11,18 +11,29 @@ interface Props {
 export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const [form] = Form.useForm();
   const create = useMutation({
-    mutationFn: (values: {
+    mutationFn: async (values: {
       title: string;
       description?: string;
       priority: number;
-      requester_id: string;
-    }) =>
-      createTicket({
+      requester_id?: string;
+      requester_email?: string;
+      requester_name?: string;
+    }) => {
+      let requesterId = values.requester_id;
+      if (!requesterId) {
+        const r = await createRequester({
+          email: String(values.requester_email),
+          display_name: String(values.requester_name),
+        });
+        requesterId = r.id;
+      }
+      return createTicket({
         title: values.title,
         description: values.description || '',
-        requester_id: values.requester_id,
+        requester_id: String(requesterId),
         priority: values.priority,
-      }),
+      });
+    },
     onSuccess: () => {
       message.success('Ticket created');
       form.resetFields();
@@ -53,8 +64,22 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
         <Form.Item
           name="requester_id"
           label="Requester ID"
-          rules={[{ required: true }]}
+          rules={[
+            ({ getFieldValue }) => ({
+              validator(_, value) {
+                if (value || (getFieldValue('requester_email') && getFieldValue('requester_name')))
+                  return Promise.resolve();
+                return Promise.reject(new Error('Provide requester ID or name and email'));
+              },
+            }),
+          ]}
         >
+          <Input />
+        </Form.Item>
+        <Form.Item name="requester_email" label="Requester Email">
+          <Input />
+        </Form.Item>
+        <Form.Item name="requester_name" label="Requester Name">
           <Input />
         </Form.Item>
         <Form.Item

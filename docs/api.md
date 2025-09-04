@@ -29,6 +29,11 @@ Auth (local mode only)
 User
 - GET `/me` → 200 `{ id, external_id, email, display_name, roles }` | 401
 
+Requesters
+- POST `/requesters` body `{ email, display_name }` → 201 `{ id, email, display_name }` | 400 | 500
+- GET `/requesters/:id` → 200 `{ id, email, display_name }` | 404
+- PATCH `/requesters/:id` body `{ email?, display_name? }` → 200 `{ id, email, display_name }` | 400 | 404 | 500
+
 Tickets
 - GET `/tickets` query `status,priority,team,assignee,search` → 200 `[Ticket]` | 500
 - POST `/tickets` body `{ title, description, requester_id, priority, urgency?, category?, subcategory?, custom_json? }` → 201 `{ id, number, status }` | 400 | 500
@@ -78,4 +83,7 @@ Ticket
 
 Comment
 - Fields: `id, ticket_id, author_id, body_md, is_internal, created_at`
+
+Requester
+- Fields: `id, email, display_name`
 

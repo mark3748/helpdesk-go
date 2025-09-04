@@ -3,6 +3,7 @@ import type { components } from './types/openapi';
 export type Ticket = components['schemas']['Ticket'];
 export type Comment = components['schemas']['Comment'];
 export type Attachment = components['schemas']['Attachment'];
+export type Requester = components['schemas']['Requester'];
 
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
@@ -60,6 +61,37 @@ export async function addComment(id: string | number, content: string, token: st
 
 export async function listAttachments(id: string, token: string): Promise<Attachment[]> {
   return apiFetch<Attachment[]>(`/tickets/${id}/attachments`, {}, token);
+}
+
+export async function createRequester(
+  data: { email: string; display_name: string },
+  token: string,
+): Promise<Requester> {
+  return apiFetch<Requester>(
+    '/requesters',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+    token,
+  );
+}
+
+export async function updateRequester(
+  id: string,
+  data: { email?: string; display_name?: string },
+  token: string,
+): Promise<Requester> {
+  return apiFetch<Requester>(
+    `/requesters/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+    token,
+  );
 }
 
 export async function deleteAttachment(id: string | number, attID: string | number, token: string): Promise<void> {

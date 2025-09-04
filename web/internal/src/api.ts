@@ -95,6 +95,7 @@ export function subscribeEvents(onStatus?: (connected: boolean) => void) {
 }
 
 export type Ticket = components['schemas']['Ticket'];
+export type Requester = components['schemas']['Requester'];
 
 export function useTickets(
   opts: {
@@ -114,6 +115,16 @@ export function useTickets(
       return apiFetch<Resp>(`/tickets${qs ? `?${qs}` : ''}`);
     },
     ...rest,
+  });
+}
+
+export function useRequester(id: string, opts: { refetchInterval?: number | false } = {}) {
+  type Resp = Requester;
+  return useQuery({
+    queryKey: ['requester', id],
+    queryFn: () => apiFetch<Resp>(`/requesters/${id}`),
+    enabled: Boolean(id),
+    ...opts,
   });
 }
 
