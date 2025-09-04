@@ -238,13 +238,26 @@ type App struct {
 
 // core returns a lightweight adapter to the modular app.App for feature handlers.
 func (a *App) core() *appcore.App {
-    // Map only commonly used fields; zero values are fine for unused ones.
+    // Map required fields so modular handlers (auth, etc.) receive the same config.
     cfg := appcore.Config{
-        Env:             a.cfg.Env,
-        TestBypassAuth:  a.cfg.TestBypassAuth,
-        MinIOBucket:     a.cfg.MinIOBucket,
-        MinIOEndpoint:   a.cfg.MinIOEndpoint,
-        MinIOUseSSL:     a.cfg.MinIOUseSSL,
+        // Environment and testing
+        Env:                a.cfg.Env,
+        TestBypassAuth:     a.cfg.TestBypassAuth,
+        // Auth configuration
+        AuthMode:           a.cfg.AuthMode,
+        AuthLocalSecret:    a.cfg.AuthLocalSecret,
+        AdminPassword:      os.Getenv("ADMIN_PASSWORD"),
+        OIDCIssuer:         a.cfg.OIDCIssuer,
+        OIDCGroupClaim:     a.cfg.OIDCGroupClaim,
+        OIDCAudience:       a.cfg.OIDCAudience,
+        JWTClockSkewSeconds: a.cfg.JWTClockSkewSeconds,
+        // Object storage
+        MinIOBucket:        a.cfg.MinIOBucket,
+        MinIOEndpoint:      a.cfg.MinIOEndpoint,
+        MinIOUseSSL:        a.cfg.MinIOUseSSL,
+        // Filesystem store path (used by FsObjectStore when MinIO is not set)
+        FileStorePath:      a.cfg.FileStorePath,
+        LogPath:            a.cfg.LogPath,
     }
     return &appcore.App{Cfg: cfg, DB: a.db, R: a.r, Keyf: a.keyf, M: a.m, Q: a.q}
 }
