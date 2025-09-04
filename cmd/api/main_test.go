@@ -944,8 +944,8 @@ func TestGetRequester(t *testing.T) {
 }
 
 func TestUpdateRequester(t *testing.T) {
-	db := &requesterDB{}
-	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+    db := &requesterDB{}
+    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
 
 	rr := httptest.NewRecorder()
 	body := `{"email":"new@example.com","display_name":"New Name"}`
@@ -953,7 +953,40 @@ func TestUpdateRequester(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	app.r.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
+    if rr.Code != http.StatusOK {
+        t.Fatalf("expected 200, got %d", rr.Code)
+    }
+}
+
+type nonRequesterDB struct{}
+
+func (db *nonRequesterDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+    return &fakeRows{}, nil
+}
+
+func (db *nonRequesterDB) QueryRow(ctx context.Context, s string, args ...interface{}) pgx.Row {
+    // Simulate update failing due to missing requester role by returning no rows
+    if strings.Contains(strings.ToLower(s), "update users") {
+        return &fakeRow{scan: func(dest ...any) error { return pgx.ErrNoRows }}
+    }
+    return &fakeRow{}
+}
+
+func (db *nonRequesterDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+    return pgconn.CommandTag{}, nil
+}
+
+func TestUpdateRequester_OnlyRequesterRole(t *testing.T) {
+    db := &nonRequesterDB{}
+    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+    rr := httptest.NewRecorder()
+    body := `{"email":"new@example.com","display_name":"New Name"}`
+    req := httptest.NewRequest(http.MethodPatch, "/requesters/target-user", strings.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    app.r.ServeHTTP(rr, req)
+
+    if rr.Code != http.StatusNotFound {
+        t.Fatalf("expected 404 for non-requester, got %d body=%s", rr.Code, rr.Body.String())
+    }
 }

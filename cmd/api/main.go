@@ -1789,20 +1789,38 @@ func (a *App) getRequester(c *gin.Context) {
 }
 
 func (a *App) updateRequester(c *gin.Context) {
-	id := c.Param("id")
-	var in updateRequesterReq
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	ctx := c.Request.Context()
-	var out Requester
-	err := a.db.QueryRow(ctx, `update users set email=coalesce($1,email), display_name=coalesce($2,display_name), updated_at=now() where id=$3 returning id, coalesce(email,''), coalesce(display_name,'')`, in.Email, in.DisplayName, id).Scan(&out.ID, &out.Email, &out.DisplayName)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(200, out)
+    id := c.Param("id")
+    var in updateRequesterReq
+    if err := c.ShouldBindJSON(&in); err != nil {
+        c.JSON(400, gin.H{"error": err.Error()})
+        return
+    }
+    ctx := c.Request.Context()
+    var out Requester
+    // Only allow updating users who have the requester role
+    err := a.db.QueryRow(ctx, `
+        update users
+        set email = coalesce($1, email),
+            display_name = coalesce($2, display_name),
+            updated_at = now()
+        where id = $3
+          and exists (
+            select 1
+            from user_roles ur
+            join roles r on r.id = ur.role_id
+            where ur.user_id = $3 and r.name = 'requester'
+          )
+        returning id, coalesce(email,''), coalesce(display_name,'')
+    `, in.Email, in.DisplayName, id).Scan(&out.ID, &out.Email, &out.DisplayName)
+    if err != nil {
+        if errors.Is(err, pgx.ErrNoRows) {
+            c.JSON(404, gin.H{"error": "not found"})
+            return
+        }
+        c.JSON(500, gin.H{"error": err.Error()})
+        return
+    }
+    c.JSON(200, out)
 }
 
 // ===== Watchers =====
