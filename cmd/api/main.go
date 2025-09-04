@@ -302,6 +302,7 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 		}
 	}
 	handlers.InitSettings(cfg.LogPath)
+	handlers.EnqueueEmail = a.enqueueEmail
 	a.r.Use(gin.Recovery())
 	a.r.Use(gin.Logger())
 	a.r.Use(func(c *gin.Context) {
@@ -528,6 +529,7 @@ func (a *App) routes() {
 	auth.POST("/settings/storage", a.requireRole("admin"), handlers.SaveStorageSettings)
 	auth.POST("/settings/oidc", a.requireRole("admin"), handlers.SaveOIDCSettings)
 	auth.POST("/settings/mail", a.requireRole("admin"), handlers.SaveMailSettings)
+	auth.POST("/settings/mail/send-test", a.requireRole("admin"), handlers.SendTestMail)
 
 	auth.GET("/users/:id/roles", a.requireRole("admin"), a.listUserRoles)
 	auth.POST("/users/:id/roles", a.requireRole("admin"), a.addUserRole)
@@ -1789,16 +1791,16 @@ func (a *App) getRequester(c *gin.Context) {
 }
 
 func (a *App) updateRequester(c *gin.Context) {
-    id := c.Param("id")
-    var in updateRequesterReq
-    if err := c.ShouldBindJSON(&in); err != nil {
-        c.JSON(400, gin.H{"error": err.Error()})
-        return
-    }
-    ctx := c.Request.Context()
-    var out Requester
-    // Only allow updating users who have the requester role
-    err := a.db.QueryRow(ctx, `
+	id := c.Param("id")
+	var in updateRequesterReq
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	ctx := c.Request.Context()
+	var out Requester
+	// Only allow updating users who have the requester role
+	err := a.db.QueryRow(ctx, `
         update users
         set email = coalesce($1, email),
             display_name = coalesce($2, display_name),
@@ -1812,15 +1814,15 @@ func (a *App) updateRequester(c *gin.Context) {
           )
         returning id, coalesce(email,''), coalesce(display_name,'')
     `, in.Email, in.DisplayName, id).Scan(&out.ID, &out.Email, &out.DisplayName)
-    if err != nil {
-        if errors.Is(err, pgx.ErrNoRows) {
-            c.JSON(404, gin.H{"error": "not found"})
-            return
-        }
-        c.JSON(500, gin.H{"error": err.Error()})
-        return
-    }
-    c.JSON(200, out)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(404, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, out)
 }
 
 // ===== Watchers =====

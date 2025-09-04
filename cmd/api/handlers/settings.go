@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -8,10 +9,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// OIDCSettings holds OpenID Connect configuration.
+type OIDCSettings struct {
+	Issuer       string              `json:"issuer"`
+	ClientID     string              `json:"client_id"`
+	ClaimPath    string              `json:"claim_path"`
+	ValueToRoles map[string][]string `json:"value_to_roles"`
+}
+
 // Settings holds configuration values stored in memory.
 type Settings struct {
 	Storage  map[string]string `json:"storage"`
-	OIDC     map[string]string `json:"oidc"`
+	OIDC     OIDCSettings      `json:"oidc"`
 	Mail     map[string]string `json:"mail"`
 	LogPath  string            `json:"log_path"`
 	LastTest string            `json:"last_test"`
@@ -21,11 +30,14 @@ var (
 	mu       sync.RWMutex
 	cfgStore = Settings{
 		Storage:  map[string]string{},
-		OIDC:     map[string]string{},
+		OIDC:     OIDCSettings{},
 		Mail:     map[string]string{},
 		LogPath:  "/config/logs",
 		LastTest: "",
 	}
+
+	// EnqueueEmail is set by the API to enqueue email jobs.
+	EnqueueEmail func(ctx context.Context, to, template string, data interface{})
 )
 
 // InitSettings sets initial values like log path.
@@ -59,7 +71,7 @@ func SaveStorageSettings(c *gin.Context) {
 
 // SaveOIDCSettings stores OIDC configuration.
 func SaveOIDCSettings(c *gin.Context) {
-	var data map[string]string
+	var data OIDCSettings
 	if err := c.ShouldBindJSON(&data); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -92,6 +104,20 @@ func MailSettings() map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+// SendTestMail enqueues a test email via the worker.
+func SendTestMail(c *gin.Context) {
+	if EnqueueEmail == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "mail queue unavailable"})
+		return
+	}
+	to := c.Query("to")
+	if to == "" {
+		to = MailSettings()["smtp_from"]
+	}
+	EnqueueEmail(c.Request.Context(), to, "test_email", nil)
+	c.JSON(http.StatusOK, gin.H{"queued": true})
 }
 
 // TestConnection records a test run and returns log path and last result.
