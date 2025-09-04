@@ -742,25 +742,6 @@ paths:
       security:
         - bearerAuth: []
         - cookieAuth: []
-  /users/{id}:
-    get:
-      tags: [Users]
-      summary: Get user (admin)
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/UserSummary' }
-        '404': { description: Not Found }
-      security:
-        - bearerAuth: []
-        - cookieAuth: []
     post:
       tags: [Users]
       summary: Create local user (admin)
@@ -783,6 +764,26 @@ paths:
       security:
         - bearerAuth: []
         - cookieAuth: []
+  /users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSummary' }
+        '404': { description: Not Found }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  # (POST /users section merged under /users above)
   /roles:
     get:
       tags: [Users]
