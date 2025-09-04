@@ -37,14 +37,18 @@ export default function TicketDetail() {
   });
 
   useEffect(() => {
-    const stop = subscribeEvents((ev: AppEvent) => {
-      if (ev.type === 'ticket_updated' && String((ev.data as any)?.id) === id) {
+    const sub = subscribeEvents(setConnected);
+    const off = sub.on('ticket_updated', (ev: AppEvent) => {
+      if (String((ev.data as any)?.id) === id) {
         refetchTicket();
         comments.refetch();
         attachments.refetch();
       }
-    }, setConnected);
-    return stop;
+    });
+    return () => {
+      off();
+      sub.close();
+    };
   }, [id, refetchTicket, comments, attachments]);
 
   const updateStatus = useMutation({

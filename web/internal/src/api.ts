@@ -11,40 +11,54 @@ export interface AppEvent {
  * Subscribe to server sent events and automatically reconnect on failure.
  * Returns a cleanup function to close the connection.
  */
-export function subscribeEvents(
-  onEvent: (ev: AppEvent) => void,
-  onStatus?: (connected: boolean) => void,
-): () => void {
+export function subscribeEvents(onStatus?: (connected: boolean) => void) {
+  const handlers = new Map<string, Set<(ev: AppEvent) => void>>();
   let es: EventSource | null = null;
   let timer: number | null = null;
+  let backoff = 1000;
+  let lastEventId: string | undefined;
 
   const connect = () => {
-    es = new EventSource('/api/events', { withCredentials: true });
-    es.onopen = () => onStatus?.(true);
-    const handler = (e: MessageEvent<string>) => {
+    const headers = lastEventId ? { 'Last-Event-ID': lastEventId } : undefined;
+    es = new EventSource('/api/events', { withCredentials: true, headers });
+    es.onopen = () => {
+      onStatus?.(true);
+      backoff = 1000;
+    };
+    es.onmessage = (e: MessageEvent<string>) => {
+      lastEventId = e.lastEventId || lastEventId;
       try {
         const parsed = JSON.parse(e.data) as AppEvent;
-        onEvent(parsed);
+        const cbs = handlers.get(parsed.type);
+        cbs?.forEach((cb) => cb(parsed));
       } catch {
         // ignore malformed events
       }
     };
-    ['ticket_created', 'ticket_updated', 'queue_changed'].forEach((evt) => {
-      es?.addEventListener(evt, handler);
-    });
     es.onerror = () => {
       onStatus?.(false);
       if (timer) window.clearTimeout(timer);
       es?.close();
-      timer = window.setTimeout(connect, 3000);
+      timer = window.setTimeout(connect, backoff);
+      backoff = Math.min(backoff * 2, 30000);
     };
   };
 
   connect();
 
-  return () => {
-    if (timer) window.clearTimeout(timer);
-    es?.close();
+  const on = (type: string, handler: (ev: AppEvent) => void) => {
+    const set = handlers.get(type);
+    if (set) set.add(handler);
+    else handlers.set(type, new Set([handler]));
+    return () => handlers.get(type)?.delete(handler);
+  };
+
+  return {
+    on,
+    close: () => {
+      if (timer) window.clearTimeout(timer);
+      es?.close();
+    },
   };
 }
 
