@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "gen:api": "openapi-typescript http://localhost:8080/openapi.yaml -o src/types/openapi.ts",
+    "gen:api:file": "openapi-typescript ./openapi.yaml -o src/types/openapi.ts",
     "gen:api:container": "openapi-typescript http://api:8080/openapi.yaml -o src/types/openapi.ts",
     "test": "vitest"
   },
