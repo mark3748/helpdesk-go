@@ -3,7 +3,6 @@ import { Table, Button, Space, Tag, Select, Input, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useTickets, subscribeEvents } from '../../api';
-import type { AppEvent } from '../../api';
 import { updateTicket } from '../../shared/api';
 import CreateTicketModal from './CreateTicketModal';
 
@@ -17,12 +16,15 @@ export default function QueueManager() {
   const tickets = data?.items || [];
 
   useEffect(() => {
-    const stop = subscribeEvents((ev: AppEvent) => {
-      if (['ticket_created', 'ticket_updated', 'queue_changed'].includes(ev.type)) {
-        refetch();
-      }
-    }, setConnected);
-    return stop;
+    const sub = subscribeEvents(setConnected);
+    const handler = () => refetch();
+    const offs = ['ticket_created', 'ticket_updated', 'queue_changed'].map((t) =>
+      sub.on(t, handler),
+    );
+    return () => {
+      offs.forEach((off) => off());
+      sub.close();
+    };
   }, [refetch]);
 
   const mutate = useMutation({
