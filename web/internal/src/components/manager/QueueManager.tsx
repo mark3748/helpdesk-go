@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Table, Button, Space, Tag, Select, Input, Typography } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { Table, Button, Space, Tag, Select, Typography } from 'antd';
+import { apiFetch } from '../../shared/api';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useTickets, subscribeEvents } from '../../api';
@@ -33,6 +34,8 @@ export default function QueueManager() {
     onSuccess: () => refetch(),
   });
 
+  const truncate = (s: string, n: number) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s);
+
   const columns = [
     {
       title: 'Number',
@@ -51,6 +54,13 @@ export default function QueueManager() {
       ),
     },
     {
+      title: 'Description',
+      dataIndex: 'description',
+      key: 'description',
+      ellipsis: true as any,
+      render: (v?: string) => (v ? <span title={v}>{truncate(String(v), 120)}</span> : null),
+    },
+    {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
@@ -61,18 +71,13 @@ export default function QueueManager() {
       title: 'Assignee',
       dataIndex: 'assignee_id',
       key: 'assignee_id',
-      render: (v: string, record: any) => (
-        <Input
-          defaultValue={v || ''}
-          placeholder="user id"
-          onBlur={(e) =>
-            mutate.mutate({
-              id: String(record.id),
-              data: { assignee_id: e.target.value || null },
-            })
-          }
-        />
-      ),
+      render: (v: string | undefined, record: any) => <AssigneePicker value={v} onChange={(val) => mutate.mutate({ id: String(record.id), data: { assignee_id: val || null } })} />,
+    },
+    {
+      title: 'Requester',
+      dataIndex: 'requester',
+      key: 'requester',
+      width: 220,
     },
     {
       title: 'Priority',
@@ -130,5 +135,48 @@ export default function QueueManager() {
         </div>
       </div>
     </Space>
+  );
+}
+
+function AssigneePicker({ value, onChange }: { value?: string; onChange: (v?: string) => void }) {
+  const [opts, setOpts] = useState<{ value: string; label: string }[]>([]);
+  const [fetching, setFetching] = useState(false);
+  useEffect(() => {
+    (async () => {
+      if (value) {
+        try {
+          const u = await apiFetch<any>(`/users/${encodeURIComponent(value)}`);
+          const label = u.display_name || u.email || u.username || u.id;
+          setOpts([{ value: String(u.id), label }]);
+        } catch {}
+      }
+    })();
+  }, [value]);
+  const search = useMemo(() => {
+    let t: number | undefined;
+    const run = async (q: string) => {
+      if (!q) { setOpts([]); return; }
+      setFetching(true);
+      try {
+        const users = await apiFetch<any[]>(`/users?q=${encodeURIComponent(q)}`);
+        setOpts(users.map(u => ({ value: String(u.id), label: u.display_name || u.email || u.username || u.id })));
+      } finally { setFetching(false); }
+    };
+    const deb = (q: string) => { if (t) window.clearTimeout(t); t = window.setTimeout(() => run(q), 300) as unknown as number; };
+    return deb;
+  }, []);
+  return (
+    <Select
+      showSearch
+      allowClear
+      value={value}
+      filterOption={false}
+      onSearch={search}
+      options={opts}
+      loading={fetching}
+      placeholder="Search user"
+      style={{ minWidth: 220 }}
+      onChange={(v) => onChange(v || undefined)}
+    />
   );
 }

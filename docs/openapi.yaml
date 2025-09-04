@@ -35,6 +35,17 @@ components:
       in: cookie
       name: auth
   schemas:
+    UserSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        external_id: { type: string }
+        username: { type: string }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        roles:
+          type: array
+          items: { type: string }
     AuthUser:
       type: object
       properties:
@@ -244,6 +255,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthUser'
+        '401': { description: Unauthorized }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /me/profile:
+    get:
+      tags: [Users]
+      summary: Current user's profile (local auth)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  email: { type: string, format: email }
+                  display_name: { type: string }
+        '401': { description: Unauthorized }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    patch:
+      tags: [Users]
+      summary: Update current user's profile (local auth)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                display_name: { type: string }
+      responses:
+        '200': { description: OK }
+        '409': { description: Profile managed by identity provider }
+        '401': { description: Unauthorized }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /me/password:
+    post:
+      tags: [Users]
+      summary: Change password (local auth)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_password, new_password]
+              properties:
+                old_password: { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        '200': { description: OK }
+        '409': { description: Password managed by identity provider }
         '401': { description: Unauthorized }
       security:
         - bearerAuth: []
@@ -615,6 +684,9 @@ paths:
     post:
       tags: [Attachments]
       summary: Presign attachment upload
+      description: |
+        Returns an upload URL and headers. When using MinIO/S3, `upload_url` is a presigned S3 URL.
+        When using filesystem storage in dev, `upload_url` is an internal API path under `/api/attachments/upload/{attachment_id}`.
       parameters:
         - in: path
           name: id
@@ -646,6 +718,114 @@ paths:
                   attachment_id: { type: string, format: uuid }
         '400': { description: Bad Request }
         '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /users:
+    get:
+      tags: [Users]
+      summary: List users (admin)
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Case-insensitive substring match on email, username, or display_name.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/UserSummary' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    post:
+      tags: [Users]
+      summary: Create local user (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                email: { type: string, format: email }
+                display_name: { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        '201': { description: Created }
+        '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSummary' }
+        '404': { description: Not Found }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  # (POST /users section merged under /users above)
+  /roles:
+    get:
+      tags: [Users]
+      summary: List available roles (admin)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: string }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /metrics/agent:
+    get:
+      tags: [Metrics]
+      summary: Agent metrics (per-status counts for current user)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: { type: integer }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /metrics/manager:
+    get:
+      tags: [Metrics]
+      summary: Manager metrics (global per-status counts)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: { type: integer }
       security:
         - bearerAuth: []
         - cookieAuth: []

@@ -1,20 +1,17 @@
 import { Link } from 'react-router-dom';
-import { useAuth } from 'react-oidc-context';
 import { useState, useEffect } from 'react';
 import { listTickets } from '../api';
 import type { Ticket } from '../api';
 
 export default function TicketList() {
-  const auth = useAuth();
   const [items, setItems] = useState<Ticket[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
 
   const load = async (c?: string, reset = false) => {
-    if (!auth.user) return;
     setLoading(true);
     try {
-      const data = await listTickets(auth.user.access_token, c);
+      const data = await listTickets(undefined, c);
       setItems((prev) => (reset ? data.items : [...prev, ...data.items]));
       setNextCursor(data.next_cursor);
     } finally {
@@ -23,10 +20,8 @@ export default function TicketList() {
   };
 
   useEffect(() => {
-    if (auth.user) {
-      load(undefined, true);
-    }
-  }, [auth.user]);
+    load(undefined, true);
+  }, []);
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4">

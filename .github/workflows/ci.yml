@@ -22,10 +22,8 @@ jobs:
         run: |
           git diff --exit-code go.mod go.sum
       - name: Run full test suite
-        env:
-          TEST_BYPASS_AUTH: true
         run: |
-          go test -v -cover ./...
+          TEST_BYPASS_AUTH=true go test -cover ./...
       - name: Build API image
         run: docker build -f Dockerfile.api -t helpdesk-api .
       - name: Build worker image

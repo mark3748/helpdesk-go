@@ -108,6 +108,80 @@ export interface paths {
       };
     };
   };
+  "/me/profile": {
+    /** Current user's profile (local auth) */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              /** Format: email */
+              email?: string;
+              display_name?: string;
+            };
+          };
+        };
+        /** @description Unauthorized */
+        401: {
+          content: never;
+        };
+      };
+    };
+    /** Update current user's profile (local auth) */
+    patch: {
+      requestBody: {
+        content: {
+          "application/json": {
+            /** Format: email */
+            email?: string;
+            display_name?: string;
+          };
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
+        };
+        /** @description Unauthorized */
+        401: {
+          content: never;
+        };
+        /** @description Profile managed by identity provider */
+        409: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/me/password": {
+    /** Change password (local auth) */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": {
+            old_password: string;
+            new_password: string;
+          };
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
+        };
+        /** @description Unauthorized */
+        401: {
+          content: never;
+        };
+        /** @description Password managed by identity provider */
+        409: {
+          content: never;
+        };
+      };
+    };
+  };
   "/events": {
     /**
      * Event stream
@@ -514,7 +588,11 @@ export interface paths {
     };
   };
   "/tickets/{id}/attachments/presign": {
-    /** Presign attachment upload */
+    /**
+     * Presign attachment upload
+     * @description Returns an upload URL and headers. When using MinIO/S3, `upload_url` is a presigned S3 URL.
+     * When using filesystem storage in dev, `upload_url` is an internal API path under `/api/attachments/upload/{attachment_id}`.
+     */
     post: {
       parameters: {
         path: {
@@ -552,6 +630,122 @@ export interface paths {
         /** @description Server Error */
         500: {
           content: never;
+        };
+      };
+    };
+  };
+  "/users": {
+    /** List users (admin) */
+    get: {
+      parameters: {
+        query?: {
+          /** @description Case-insensitive substring match on email, username, or display_name. */
+          q?: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["UserSummary"][];
+          };
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/users/{id}": {
+    /** Get user (admin) */
+    get: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["UserSummary"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+      };
+    };
+    /** Create local user (admin) */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": {
+            username: string;
+            /** Format: email */
+            email?: string;
+            display_name?: string;
+            password: string;
+          };
+        };
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          content: never;
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/roles": {
+    /** List available roles (admin) */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": string[];
+          };
+        };
+      };
+    };
+  };
+  "/metrics/agent": {
+    /** Agent metrics (per-status counts for current user) */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              [key: string]: number;
+            };
+          };
+        };
+      };
+    };
+  };
+  "/metrics/manager": {
+    /** Manager metrics (global per-status counts) */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              [key: string]: number;
+            };
+          };
         };
       };
     };
@@ -880,6 +1074,16 @@ export type webhooks = Record<string, never>;
 
 export interface components {
   schemas: {
+    UserSummary: {
+      /** Format: uuid */
+      id?: string;
+      external_id?: string;
+      username?: string;
+      /** Format: email */
+      email?: string;
+      display_name?: string;
+      roles?: string[];
+    };
     AuthUser: {
       /** Format: uuid */
       id?: string;

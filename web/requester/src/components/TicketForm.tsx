@@ -1,10 +1,9 @@
-import { useState } from 'react';
-import type { FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from 'react-oidc-context';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createTicket, uploadAttachment } from '../api';
-import type { Ticket } from '../api';
+import { useState } from "react";
+import type { FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createTicket, uploadAttachment } from "../api";
+import type { Ticket } from "../api";
 
 interface Props {
   initial?: Partial<Ticket>;
@@ -12,16 +11,19 @@ interface Props {
   hideCategory?: boolean;
 }
 
-export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Props) {
-  const [title, setTitle] = useState(initial.title || '');
-  const [description, setDescription] = useState(initial.description || '');
-  const [category, setCategory] = useState(initial.category || '');
-  const [subcategory, setSubcategory] = useState(initial.subcategory || '');
+export default function TicketForm({
+  initial = {},
+  hideTitle,
+  hideCategory,
+}: Props) {
+  const [title, setTitle] = useState(initial.title || "");
+  const [description, setDescription] = useState(initial.description || "");
+  const [category, setCategory] = useState(initial.category || "");
+  const [subcategory, setSubcategory] = useState(initial.subcategory || "");
   const [priority, setPriority] = useState(initial.priority ?? 3);
   const [urgency, setUrgency] = useState(initial.urgency ?? 3);
   const [attachment, setAttachment] = useState<File | null>(null);
   const nav = useNavigate();
-  const auth = useAuth();
   const qc = useQueryClient();
 
   const createMutation = useMutation({
@@ -30,38 +32,37 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
         {
           title,
           description,
-          status: 'New',
+          status: "New",
           category,
           subcategory,
-          requester_id: auth.user?.profile.sub || '',
           priority,
           urgency,
         },
-        auth.user?.access_token || '',
+        undefined,
       );
       if (attachment) {
         try {
-          await uploadAttachment(t.id!, attachment, auth.user?.access_token || '');
+          await uploadAttachment(t.id!, attachment, undefined);
         } catch {
-          alert('Failed to upload attachment');
+          alert("Failed to upload attachment");
         }
       }
       return t;
     },
     onSuccess: (t) => {
-      alert('Ticket submitted');
-      setTitle('');
-      setDescription('');
-      setCategory('');
-      setSubcategory('');
+      alert("Ticket submitted");
+      setTitle("");
+      setDescription("");
+      setCategory("");
+      setSubcategory("");
       setPriority(3);
       setUrgency(3);
       setAttachment(null);
-      qc.invalidateQueries({ queryKey: ['tickets'] });
+      qc.invalidateQueries({ queryKey: ["tickets"] });
       nav(`/tickets/${t.id}`);
     },
     onError: () => {
-      alert('Failed to create ticket');
+      alert("Failed to create ticket");
     },
   });
 
@@ -153,7 +154,7 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
         type="submit"
         disabled={createMutation.isPending}
       >
-        {createMutation.isPending ? 'Submitting…' : 'Submit'}
+        {createMutation.isPending ? "Submitting…" : "Submit"}
       </button>
     </form>
   );

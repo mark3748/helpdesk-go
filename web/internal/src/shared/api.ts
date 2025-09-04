@@ -49,6 +49,7 @@ export async function createTicket(data: {
   description?: string;
   requester_id: string;
   priority: number;
+  assignee_id?: string;
 }): Promise<Ticket> {
   return apiFetch<Ticket>('/tickets', {
     method: 'POST',
@@ -58,6 +59,7 @@ export async function createTicket(data: {
       description: data.description || '',
       requester_id: data.requester_id,
       priority: data.priority,
+      assignee_id: data.assignee_id,
     }),
   });
 }

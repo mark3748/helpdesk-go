@@ -81,6 +81,18 @@ See `docs/api.md` for detailed status codes, request/response bodies, and models
    helm upgrade --install helpdesk ./helm/helpdesk -n helpdesk --create-namespace
    ```
 
+Examples:
+- Local auth, both frontends, /api proxy for requester:
+  ```bash
+  helm upgrade --install helpdesk ./helm/helpdesk -n helpdesk \
+    -f helm/helpdesk/examples/values-local-auth.yaml
+  ```
+- OIDC (Authentik/Keycloak), both frontends, CORS + JWKS configured:
+  ```bash
+  helm upgrade --install helpdesk ./helm/helpdesk -n helpdesk \
+    -f helm/helpdesk/examples/values-oidc.yaml
+  ```
+
 ### Notes
 - Auth supports OIDC (JWKS) and a dev-friendly local mode (`AUTH_MODE=local`). `TEST_BYPASS_AUTH=true` bypasses JWTs in tests.
 - Worker consumes Redis jobs, sends SMTP email using templates in `cmd/worker/templates/`, updates SLA clocks, and can poll IMAP if configured.
@@ -91,6 +103,7 @@ See `docs/api.md` for detailed status codes, request/response bodies, and models
 - Unit tests can bypass JWT validation by setting `TEST_BYPASS_AUTH=true`. This injects a synthetic user with the `agent` role so auth-protected routes can be exercised without a JWKS.
 - Handlers depend on database and object storage interfaces, enabling fakes in tests without external services.
 - Run all tests from repo root: `go test ./...`
+- The project targets **≥70%** test coverage across packages; pull requests should not drop below this threshold.
 
 ## Continuous Integration
 
@@ -105,6 +118,15 @@ GitHub Actions builds the API and worker images, runs tests (`TEST_BYPASS_AUTH=t
   ```bash
   docker compose up internal
   ```
+  Runs at http://localhost:5175 with an `/api` proxy to the API service.
+
+- Requester UI (dev server):
+  ```bash
+  docker compose up requester
+  ```
+  Runs at http://localhost:5174 with an `/api` proxy to the API service.
+  - OIDC: set `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` to enable real login.
+  - Local auth fallback: when OIDC is unset, a simple login form posts to `/api/login` and uses cookie auth.
 - Default ports: API `http://localhost:8080`, Internal UI `http://localhost:5175`, Postgres `5432`, Redis `6379`.
 - Filesystem attachments are stored under `./data` (mounted to `/data`) when `FILESTORE_PATH` is used.
 - Compose uses `AUTH_MODE=local` for quick start and seeds an admin (set `ADMIN_PASSWORD`).
@@ -164,8 +186,9 @@ Requester Portal (React):
   cd web/requester
   npm install
   export VITE_API_BASE=/api
-  export VITE_OIDC_AUTHORITY=... 
-  export VITE_OIDC_CLIENT_ID=...
+  # OIDC mode
+  # export VITE_OIDC_AUTHORITY=...
+  # export VITE_OIDC_CLIENT_ID=...
   npm run dev
   ```
   See `web/requester/README.md` for details.
@@ -176,7 +199,18 @@ Compose-based UI:
 ## Troubleshooting
 - Postgres connection/migrations: ensure `DATABASE_URL` is correct and the DB is reachable. Migrations auto-run at startup; logs will show goose errors if any.
 - Redis unavailable: the API/worker log a ping error but continue; features that enqueue/process jobs may be no-ops until Redis is up.
-- Attachments/uploads: configure either MinIO (`MINIO_*`) or a local path via `FILESTORE_PATH`. Permission issues on `FILESTORE_PATH` can cause 500s.
+- Attachments/uploads: configure either MinIO (`MINIO_*`) or a local path via `FILESTORE_PATH`. Permission issues on `FILESTORE_PATH` can cause 500s. In local dev without MinIO, the API uses an internal upload URL for presigned uploads.
+- Compose data dir permissions (uploads 500): the API image runs as a nonroot user (UID 65532). If `./data` is owned by `root:root`, the API can’t write and uploads will 500. Fix by aligning ownership:
+  ```bash
+  mkdir -p data
+  sudo chown -R 65532:65532 data
+  sudo chmod -R u+rwX data
+  ```
+  Dev-only quick fix:
+  ```bash
+  chmod -R 777 data
+  ```
+  Ephemeral alternative: set `FILESTORE_PATH=/tmp/files` for the `api` service and remove the `./data:/data` volume (attachments won’t persist across restarts). On SELinux, keep the `:Z` label on bind mounts.
 - Compose data dir permissions (uploads 500): the API image runs as a nonroot user (UID 65532). If `./data` is owned by `root:root`, the API can’t write and uploads will 500. Fix by aligning ownership:
   ```bash
   mkdir -p data
@@ -189,5 +223,20 @@ Compose-based UI:
   ```
   Ephemeral alternative: set `FILESTORE_PATH=/tmp/files` for the `api` service and remove the `./data:/data` volume (attachments won’t persist across restarts). On SELinux, keep the `:Z` label on bind mounts.
 - Exports URL: ticket export uploads require an object store. With MinIO configured, the response includes a URL. With filesystem store, a public URL is not generated.
+
+## Recent Changes / Merge Notes
+- Migrations: removed duplicate goose migration `0006_ticket_events.sql`; `ticket_events` unified to `(event_type, payload, created_at)`.
+- Requesters: `tickets.requester_id` now references `requesters(id)`. The API auto-creates a matching `requesters` row for the current user when `requester_id` is omitted (requester portal flow).
+- Events: SSE endpoint (`/events`) heartbeats even when Redis is unavailable.
+- Attachments: filesystem store now supports presign + direct upload via an internal endpoint; MinIO continues to use S3 presigned URLs.
+- Admin endpoints: `/users`, `/roles`, `/users/:id`, `/users/:id/roles` wired for internal UI.
+- User settings: `/me/profile` (GET/PATCH) and `/me/password` (POST) for local auth.
+- API prefix: all routes are mounted at both `/...` and `/api/...` for dev proxies and clients.
+
+Breaking considerations:
+- If you have a pre-existing DB, run the migrations in order. Ensure `0007_requesters_queues_ticket_events.sql` applies cleanly and `tickets.requester_id` points to `requesters`. For dev data, a fresh compose up is easiest.
+
+Security/config:
+- In prod, set `ALLOWED_ORIGINS` to allow UIs to call the API. Set `LOG_PATH` to a writable directory. Use secure cookies and OIDC.
 - Auth errors: for OIDC, set `OIDC_JWKS_URL` (and `OIDC_ISSUER` if enforcing issuer). For local auth, set `AUTH_LOCAL_SECRET` and optionally `ADMIN_PASSWORD`.
 - Port conflicts: default ports are 8080 (API), 5173 (Internal UI dev), 5175 (Compose internal UI), 5432 (Postgres), 6379 (Redis). Adjust `ADDR` or container port mappings as needed.
