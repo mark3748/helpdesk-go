@@ -1041,12 +1041,41 @@ func (a *App) listTickets(c *gin.Context) {
 		args = append(args, v)
 		i++
 	}
+    if v := c.Query("cursor"); v != "" {
+        // Support composite cursor: "<RFC3339Nano>|<id>" to avoid skipping rows with equal timestamps
+        var ts time.Time
+        var haveTS bool
+        var idPart string
+        if parts := strings.SplitN(v, "|", 2); len(parts) == 2 {
+            if tsv, err := time.Parse(time.RFC3339Nano, parts[0]); err == nil {
+                ts = tsv
+                haveTS = true
+                idPart = parts[1]
+            }
+        } else if tsv, err := time.Parse(time.RFC3339Nano, v); err == nil {
+            ts = tsv
+            haveTS = true
+        }
+        if haveTS {
+            if idPart != "" {
+                // Keyset pagination with tie-breaker on id (both desc)
+                where = append(where, fmt.Sprintf("(t.created_at < $%d OR (t.created_at = $%d AND t.id < $%d))", i, i, i+1))
+                args = append(args, ts, idPart)
+                i += 2
+            } else {
+                // Backward-compatible: timestamp-only cursor; use <= to prevent skipping ties (may include duplicates)
+                where = append(where, fmt.Sprintf("t.created_at <= $%d", i))
+                args = append(args, ts)
+                i++
+            }
+        }
+    }
 
 	if len(where) > 0 {
 		base += "\n       where " + strings.Join(where, " and ")
 	}
 
-	base += "\n       order by t.created_at desc\n       limit 200"
+    base += "\n       order by t.created_at desc, t.id desc\n       limit 200"
 
 	rows, err := a.db.Query(ctx, base, args...)
 	if err != nil {
@@ -1083,7 +1112,12 @@ func (a *App) listTickets(c *gin.Context) {
 		}
 		out = append(out, t)
 	}
-	c.JSON(200, out)
+	resp := gin.H{"items": out}
+    if len(out) == 200 {
+        last := out[len(out)-1]
+        resp["next_cursor"] = last.CreatedAt.Format(time.RFC3339Nano) + "|" + last.ID
+    }
+	c.JSON(200, resp)
 }
 
 type jsonRaw []byte

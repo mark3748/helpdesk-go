@@ -41,7 +41,7 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
       );
       if (attachment) {
         try {
-          await uploadAttachment(t.id, attachment, auth.user?.access_token || '');
+          await uploadAttachment(t.id!, attachment, auth.user?.access_token || '');
         } catch {
           alert('Failed to upload attachment');
         }

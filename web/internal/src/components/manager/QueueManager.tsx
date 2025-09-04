@@ -11,9 +11,10 @@ export default function QueueManager() {
   const navigate = useNavigate();
   const [connected, setConnected] = useState(true);
   const [showNew, setShowNew] = useState(false);
-  const { data: tickets, refetch } = useTickets({
+  const { data, refetch } = useTickets({
     refetchInterval: connected ? false : 5000,
   });
+  const tickets = data?.items || [];
 
   useEffect(() => {
     const stop = subscribeEvents((ev: AppEvent) => {
