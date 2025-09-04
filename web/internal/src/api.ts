@@ -158,6 +158,28 @@ export function useSaveMailSettings() {
   });
 }
 
+export function useSaveOIDCSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      apiFetch('/settings/oidc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  });
+}
+
+export function useSendTestEmail() {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch('/settings/mail/send-test', {
+        method: 'POST',
+      }),
+  });
+}
+
 export function useTestConnection() {
   const qc = useQueryClient();
   return useMutation({
