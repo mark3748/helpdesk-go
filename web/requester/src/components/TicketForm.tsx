@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from 'react-oidc-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createTicket, uploadAttachment } from '../api';
 import type { Ticket } from '../api';
@@ -21,7 +20,6 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
   const [urgency, setUrgency] = useState(initial.urgency ?? 3);
   const [attachment, setAttachment] = useState<File | null>(null);
   const nav = useNavigate();
-  const auth = useAuth();
   const qc = useQueryClient();
 
   const createMutation = useMutation({
@@ -33,15 +31,15 @@ export default function TicketForm({ initial = {}, hideTitle, hideCategory }: Pr
           status: 'New',
           category,
           subcategory,
-          requester_id: auth.user?.profile.sub || '',
+          requester_id: '',
           priority,
           urgency,
         },
-        auth.user?.access_token || '',
+        undefined,
       );
       if (attachment) {
         try {
-          await uploadAttachment(t.id!, attachment, auth.user?.access_token || '');
+          await uploadAttachment(t.id!, attachment, undefined);
         } catch {
           alert('Failed to upload attachment');
         }

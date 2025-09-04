@@ -13,14 +13,14 @@ async function apiFetch<T = unknown>(path: string, opts: RequestInit = {}, token
     ...(opts.headers as Record<string, string>),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers, credentials: 'include' });
   if (!res.ok) throw new Error(await res.text());
   if (res.status === 204) return null as T;
   return (await res.json()) as T;
 }
 
 export async function listTickets(
-  token: string,
+  token?: string,
   cursor?: string,
   query: Record<string, string> = {},
 ): Promise<{ items: Ticket[]; next_cursor?: string }> {
@@ -34,11 +34,11 @@ export async function listTickets(
   );
 }
 
-export async function getTicket(id: string, token: string): Promise<Ticket> {
+export async function getTicket(id: string, token?: string): Promise<Ticket> {
   return apiFetch<Ticket>(`/tickets/${id}`, {}, token);
 }
 
-export async function createTicket(data: Partial<Ticket>, token: string): Promise<Ticket> {
+export async function createTicket(data: Partial<Ticket>, token?: string): Promise<Ticket> {
   return apiFetch<Ticket>('/tickets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -46,11 +46,11 @@ export async function createTicket(data: Partial<Ticket>, token: string): Promis
   }, token);
 }
 
-export async function listComments(id: string, token: string): Promise<Comment[]> {
+export async function listComments(id: string, token?: string): Promise<Comment[]> {
   return apiFetch<Comment[]>(`/tickets/${id}/comments`, {}, token);
 }
 
-export async function addComment(id: string | number, content: string, token: string): Promise<{ id: string }> {
+export async function addComment(id: string | number, content: string, token?: string): Promise<{ id: string }> {
   const body = { body_md: content, is_internal: false } as any;
   return apiFetch<{ id: string }>(`/tickets/${String(id)}/comments`, {
     method: 'POST',
@@ -59,13 +59,13 @@ export async function addComment(id: string | number, content: string, token: st
   }, token);
 }
 
-export async function listAttachments(id: string, token: string): Promise<Attachment[]> {
+export async function listAttachments(id: string, token?: string): Promise<Attachment[]> {
   return apiFetch<Attachment[]>(`/tickets/${id}/attachments`, {}, token);
 }
 
 export async function createRequester(
   data: { email: string; display_name: string },
-  token: string,
+  token?: string,
 ): Promise<Requester> {
   return apiFetch<Requester>(
     '/requesters',
@@ -81,7 +81,7 @@ export async function createRequester(
 export async function updateRequester(
   id: string,
   data: { email?: string; display_name?: string },
-  token: string,
+  token?: string,
 ): Promise<Requester> {
   return apiFetch<Requester>(
     `/requesters/${id}`,
@@ -94,14 +94,17 @@ export async function updateRequester(
   );
 }
 
-export async function deleteAttachment(id: string | number, attID: string | number, token: string): Promise<void> {
+export async function deleteAttachment(id: string | number, attID: string | number, token?: string): Promise<void> {
   await apiFetch(`/tickets/${String(id)}/attachments/${String(attID)}`, { method: 'DELETE' }, token);
 }
 
-export async function downloadAttachment(id: string | number, attID: string | number, token: string): Promise<void> {
+export async function downloadAttachment(id: string | number, attID: string | number, token?: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${API_BASE}/tickets/${String(id)}/attachments/${String(attID)}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
     redirect: 'follow',
+    credentials: 'include',
   });
   if (!res.ok) throw new Error(await res.text());
   const blob = await res.blob();
@@ -126,7 +129,7 @@ export interface UploadOptions {
 export function uploadAttachment(
   id: string | number,
   file: File,
-  token: string,
+  token?: string,
   opts: UploadOptions = {},
 ): Promise<void> {
   return (async () => {

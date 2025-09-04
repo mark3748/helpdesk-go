@@ -101,6 +101,11 @@ export default function TicketDetail() {
         {(ticket as any).title || (ticket as any).number}{' '}
         {ticket.status && <Tag>{String(ticket.status)}</Tag>}
       </Typography.Title>
+      {String((ticket as any).description || '').trim() && (
+        <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginTop: -8 }}>
+          {String((ticket as any).description || '')}
+        </Typography.Paragraph>
+      )}
       <Select
         value={(ticket as any).status}
         style={{ width: 160, marginBottom: 16 }}

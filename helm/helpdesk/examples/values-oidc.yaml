@@ -1,0 +1,68 @@
+image:
+  repository: ghcr.io/mark3748/helpdesk-go-api
+  tag: "0.4.0"
+
+workerImage:
+  repository: ghcr.io/mark3748/helpdesk-go-worker
+  tag: "0.4.0"
+
+frontendInternal:
+  enabled: true
+  image:
+    repository: ghcr.io/mark3748/helpdesk-go-internal-frontend
+    tag: "0.4.0"
+
+frontendRequester:
+  enabled: true
+  image:
+    repository: ghcr.io/mark3748/helpdesk-go-requester-frontend
+    tag: "0.4.0"
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: helpdesk.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+        - path: /api
+          pathType: Prefix
+        - path: /swagger
+          pathType: Prefix
+
+ingressRequester:
+  enabled: true
+  className: nginx
+  apiProxy: true
+  hosts:
+    - host: requester.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+env:
+  ENV: "prod"
+  ADDR: ":8080"
+  # Allow browser apps to call API across hostnames
+  ALLOWED_ORIGINS: "https://helpdesk.example.com,https://requester.example.com"
+
+  # External services
+  DATABASE_URL: "postgres://user:pass@postgres:5432/helpdesk?sslmode=disable"
+  REDIS_ADDR: "redis:6379"
+
+  # OIDC (JWKS)
+  AUTH_MODE: "oidc"
+  AUTH_LOCAL_SECRET: ""
+  OIDC_ISSUER: "https://auth.example.com/realms/acme"
+  OIDC_JWKS_URL: "https://auth.example.com/realms/acme/protocol/openid-connect/certs"
+
+  # MinIO/S3 (optional)
+  MINIO_ENDPOINT: "minio.example.com:9000"
+  MINIO_ACCESS_KEY: "minio"
+  MINIO_SECRET_KEY: "minio123"
+  MINIO_BUCKET: "attachments"
+  MINIO_USE_SSL: "true"

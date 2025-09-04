@@ -1,0 +1,68 @@
+image:
+  repository: ghcr.io/mark3748/helpdesk-go-api
+  tag: "0.4.0"
+
+workerImage:
+  repository: ghcr.io/mark3748/helpdesk-go-worker
+  tag: "0.4.0"
+
+frontendInternal:
+  enabled: true
+  image:
+    repository: ghcr.io/mark3748/helpdesk-go-internal-frontend
+    tag: "0.4.0"
+
+frontendRequester:
+  enabled: true
+  image:
+    repository: ghcr.io/mark3748/helpdesk-go-requester-frontend
+    tag: "0.4.0"
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: helpdesk.local
+      paths:
+        - path: /
+          pathType: Prefix
+        - path: /api
+          pathType: Prefix
+        - path: /swagger
+          pathType: Prefix
+
+ingressRequester:
+  enabled: true
+  className: nginx
+  apiProxy: true
+  hosts:
+    - host: requester.helpdesk.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+env:
+  ENV: "prod"
+  ADDR: ":8080"
+  # Allow browser apps to call API across hostnames
+  ALLOWED_ORIGINS: "http://helpdesk.local,http://requester.helpdesk.local"
+
+  # External services
+  DATABASE_URL: "postgres://user:pass@postgres:5432/helpdesk?sslmode=disable"
+  REDIS_ADDR: "redis:6379"
+
+  # Local auth (no OIDC)
+  AUTH_MODE: "local"
+  AUTH_LOCAL_SECRET: "change-me"
+  OIDC_ISSUER: ""
+  OIDC_JWKS_URL: ""
+
+  # Object storage (optional) — leave empty for filesystem attachments
+  MINIO_ENDPOINT: ""
+  MINIO_ACCESS_KEY: ""
+  MINIO_SECRET_KEY: ""
+  MINIO_BUCKET: "attachments"
+  MINIO_USE_SSL: "false"

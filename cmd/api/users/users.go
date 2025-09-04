@@ -228,3 +228,25 @@ returning id::text`
         c.JSON(http.StatusCreated, gin.H{"id": id})
     }
 }
+
+// ListRoles returns all role names.
+func ListRoles(a *apppkg.App) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        rows, err := a.DB.Query(c.Request.Context(), `select name from roles order by name`)
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        defer rows.Close()
+        out := []string{}
+        for rows.Next() {
+            var name *string
+            if err := rows.Scan(&name); err == nil {
+                if name != nil && *name != "" {
+                    out = append(out, *name)
+                }
+            }
+        }
+        c.JSON(http.StatusOK, out)
+    }
+}

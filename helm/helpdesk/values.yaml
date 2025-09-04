@@ -1,5 +1,5 @@
 image:
-  repository: your-registry/helpdesk-api
+  repository: ghcr.io/mark3748/helpdesk-go-api
   tag: latest
   pullPolicy: IfNotPresent
 
@@ -7,7 +7,7 @@ image:
 frontendInternal:
   enabled: true
   image:
-    repository: your-registry/helpdesk-internal-frontend
+    repository: ghcr.io/mark3748/helpdesk-go-internal-frontend
     tag: latest
     pullPolicy: IfNotPresent
   service:
@@ -18,7 +18,7 @@ frontendInternal:
 frontendRequester:
   enabled: false
   image:
-    repository: your-registry/helpdesk-requester-frontend
+    repository: ghcr.io/mark3748/helpdesk-go-requester-frontend
     tag: latest
     pullPolicy: IfNotPresent
   service:
@@ -26,7 +26,7 @@ frontendRequester:
     port: 80
 
 workerImage:
-  repository: your-registry/helpdesk-worker
+  repository: ghcr.io/mark3748/helpdesk-go-worker
   tag: latest
   pullPolicy: IfNotPresent
 
@@ -63,10 +63,14 @@ ingressRequester:
 env:
   ENV: "prod"
   ADDR: ":8080"
+  # CORS: allow origins for UIs calling the API (comma-separated)
+  ALLOWED_ORIGINS: ""
   # External services (set to your endpoints)
   DATABASE_URL: "postgres://user:pass@postgres:5432/helpdesk?sslmode=disable"
   REDIS_ADDR: "redis:6379"
   # API auth (optional)
+  AUTH_MODE: "oidc"
+  AUTH_LOCAL_SECRET: ""
   OIDC_ISSUER: ""
   OIDC_JWKS_URL: ""
   # Object storage (optional)

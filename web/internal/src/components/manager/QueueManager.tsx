@@ -34,6 +34,8 @@ export default function QueueManager() {
     onSuccess: () => refetch(),
   });
 
+  const truncate = (s: string, n: number) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s);
+
   const columns = [
     {
       title: 'Number',
@@ -50,6 +52,13 @@ export default function QueueManager() {
           {(record as any).title || (record as any).number}
         </Button>
       ),
+    },
+    {
+      title: 'Description',
+      dataIndex: 'description',
+      key: 'description',
+      ellipsis: true as any,
+      render: (v?: string) => (v ? <span title={v}>{truncate(String(v), 120)}</span> : null),
     },
     {
       title: 'Status',
