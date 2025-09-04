@@ -1,4 +1,4 @@
-import type { Ticket, Comment, Attachment } from '../types/api';
+import type { components } from '../types/openapi';
 
 const API_BASE = '/api';
 
@@ -12,7 +12,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return (await res.json()) as T;
 }
 
-export type { Ticket, Comment, Attachment };
+export type Ticket = components['schemas']['Ticket'];
+export type Comment = components['schemas']['Comment'];
+export type Attachment = components['schemas']['Attachment'];
+
 
 export async function createTicket(data: {
   title: string;

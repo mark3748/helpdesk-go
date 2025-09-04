@@ -2,25 +2,51 @@ import { useEffect, useState } from 'react';
 import { Table, Button, Space, Tag } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useTickets, subscribeEvents } from '../../api';
-import type { AppEvent } from '../../api';
+import type { AppEvent, Ticket } from '../../api';
 import CreateTicketModal from './CreateTicketModal';
 
 export default function QueueList() {
   const navigate = useNavigate();
   const [connected, setConnected] = useState(true);
   const [showNew, setShowNew] = useState(false);
-  const { data: tickets, refetch } = useTickets({
+  const [items, setItems] = useState<Ticket[]>([]);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const { data, refetch, isFetching } = useTickets({
+    cursor,
+    query: filters,
     refetchInterval: connected ? false : 5000,
   });
 
   useEffect(() => {
+    if (data) {
+      setItems((prev) => (cursor ? [...prev, ...data.items] : data.items));
+      setNextCursor(data.next_cursor);
+    }
+  }, [data, cursor]);
+
+  useEffect(() => {
     const stop = subscribeEvents((ev: AppEvent) => {
       if (['ticket_created', 'ticket_updated', 'queue_changed'].includes(ev.type)) {
+        setItems([]);
+        setCursor(undefined);
         refetch();
       }
     }, setConnected);
     return stop;
   }, [refetch]);
+
+  const loadMore = () => {
+    if (nextCursor) setCursor(nextCursor);
+  };
+
+  const applyFilter = (params: Record<string, string>) => {
+    setFilters(params);
+    setItems([]);
+    setCursor(undefined);
+    refetch();
+  };
 
   const columns = [
     {
@@ -67,21 +93,35 @@ export default function QueueList() {
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
       <div>Events: {connected ? 'connected' : 'disconnected'}</div>
+      <Space>
+        <Button onClick={() => applyFilter({ status: 'open|pending' })}>
+          Open|Pending
+        </Button>
+        <Button onClick={() => applyFilter({ assignee: 'me' })}>Mine</Button>
+        <Button onClick={() => applyFilter({ aging: '3d' })}>Aging&gt;3d</Button>
+      </Space>
       <Button type="primary" onClick={() => setShowNew(true)}>
         New Ticket
       </Button>
       <Table
         rowKey={(r: any) => String((r as any).id)}
         columns={columns as any}
-        dataSource={tickets || []}
-        pagination={{ pageSize: 10 }}
+        dataSource={items}
+        pagination={false}
         style={{ background: '#fff' }}
       />
+      {nextCursor && (
+        <Button onClick={loadMore} disabled={isFetching}>
+          Load more
+        </Button>
+      )}
       <CreateTicketModal
         open={showNew}
         onClose={() => setShowNew(false)}
         onCreated={() => {
           setShowNew(false);
+          setItems([]);
+          setCursor(undefined);
           refetch();
         }}
       />
