@@ -5,7 +5,8 @@ import (
     "strings"
     "time"
 
-	"github.com/gin-gonic/gin"
+    "github.com/gin-gonic/gin"
+    "github.com/jackc/pgx/v5"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
@@ -110,25 +111,54 @@ func Middleware(a *app.App) gin.HandlerFunc {
 					}
 				}
 			}
-			// Augment roles with stored DB roles (union)
-			if a.DB != nil && u.ExternalID != "" {
-				rows, err := a.DB.Query(c.Request.Context(), `
-select r.name from users u
-left join user_roles ur on ur.user_id=u.id
-left join roles r on r.id=ur.role_id
-where u.external_id=$1`, u.ExternalID)
-				if err == nil {
-					defer rows.Close()
-					for rows.Next() {
-						var name *string
-						if err := rows.Scan(&name); err == nil {
-							if name != nil && *name != "" && !hasRole(u.Roles, *name) {
-								u.Roles = append(u.Roles, *name)
-							}
-						}
-					}
-				}
-			}
+            // Augment roles with stored DB roles (union). Prefer querying by
+            // resolved user ID; fall back to external_id, then username/email.
+            if a.DB != nil {
+                ctx := c.Request.Context()
+                var rows pgx.Rows
+                var err error
+                switch {
+                case u.ID != "":
+                    rows, err = a.DB.Query(ctx, `
+select r.name
+from users u
+left join user_roles ur on ur.user_id = u.id
+left join roles r on r.id = ur.role_id
+where u.id::text = $1`, u.ID)
+                case u.ExternalID != "":
+                    rows, err = a.DB.Query(ctx, `
+select r.name
+from users u
+left join user_roles ur on ur.user_id = u.id
+left join roles r on r.id = ur.role_id
+where u.external_id = $1`, u.ExternalID)
+                case u.Email != "":
+                    rows, err = a.DB.Query(ctx, `
+select r.name
+from users u
+left join user_roles ur on ur.user_id = u.id
+left join roles r on r.id = ur.role_id
+where lower(u.email) = lower($1)`, u.Email)
+                default:
+                    rows, err = nil, nil
+                }
+                if err == nil && rows != nil {
+                    defer rows.Close()
+                    for rows.Next() {
+                        var name *string
+                        if err := rows.Scan(&name); err == nil {
+                            if name != nil && *name != "" && !hasRole(u.Roles, *name) {
+                                u.Roles = append(u.Roles, *name)
+                            }
+                        }
+                    }
+                }
+                // Ensure local admin always retains baseline roles even if DB links are missing
+                if strings.HasPrefix(u.ExternalID, "local:") && strings.EqualFold(strings.TrimPrefix(u.ExternalID, "local:"), "admin") {
+                    if !hasRole(u.Roles, "admin") { u.Roles = append(u.Roles, "admin") }
+                    if !hasRole(u.Roles, "agent") { u.Roles = append(u.Roles, "agent") }
+                }
+            }
 			c.Set("user", u)
 			c.Next()
 			return

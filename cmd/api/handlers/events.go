@@ -65,11 +65,14 @@ func events(rdb *redis.Client, hbInterval time.Duration, chSize int) gin.Handler
 		c.Writer.Header().Set("Content-Type", "text/event-stream")
 		c.Writer.Header().Set("Cache-Control", "no-cache")
 		c.Writer.Header().Set("Connection", "keep-alive")
-		flusher, ok := c.Writer.(http.Flusher)
-		if !ok {
-			c.Status(http.StatusInternalServerError)
-			return
-		}
+        flusher, ok := c.Writer.(http.Flusher)
+        if !ok {
+            // Some proxy chains/dev servers wrap the writer without Flusher.
+            // Gracefully degrade by returning 200 and closing so the client
+            // can fall back to polling instead of surfacing a 500.
+            c.Status(http.StatusOK)
+            return
+        }
 
 		ctx := c.Request.Context()
 		var ch <-chan *redis.Message

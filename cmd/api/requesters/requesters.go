@@ -66,7 +66,11 @@ func Create(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusCreated, Requester{Email: in.Email, Name: in.Name, Phone: in.Phone})
 			return
 		}
-		const q = `insert into requesters (email, name, phone) values (nullif($1,''), nullif($2,''), nullif($3,'')) returning id::text, coalesce(email,''), coalesce(name,''), coalesce(phone,'')`
+    const q = `
+        insert into requesters (email, name, phone)
+        values (nullif(lower($1),''), nullif($2,''), nullif($3,''))
+        on conflict (email) do update set name = coalesce(excluded.name, requesters.name)
+        returning id::text, coalesce(email,''), coalesce(name,''), coalesce(phone,'')`
 		var r Requester
 		if err := a.DB.QueryRow(c.Request.Context(), q, strings.ToLower(in.Email), in.Name, in.Phone).Scan(&r.ID, &r.Email, &r.Name, &r.Phone); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

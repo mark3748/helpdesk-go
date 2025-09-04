@@ -108,8 +108,8 @@ export default function QueueList() {
     <Space direction="vertical" style={{ width: '100%' }}>
       <div>Events: {connected ? 'connected' : 'disconnected'}</div>
       <Space>
-        <Button onClick={() => applyFilter({ status: 'open|pending' })}>
-          Open|Pending
+        <Button onClick={() => applyFilter({ status: 'new|open|pending' })}>
+          Active
         </Button>
         <Button onClick={() => applyFilter({ assignee: 'me' })}>Mine</Button>
         <Button onClick={() => applyFilter({ aging: '3d' })}>Aging&gt;3d</Button>

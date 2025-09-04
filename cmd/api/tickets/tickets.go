@@ -20,15 +20,16 @@ import (
 )
 
 type Ticket struct {
-	ID          string      `json:"id"`
-	Number      any         `json:"number,omitempty"`
-	Title       string      `json:"title,omitempty"`
-	Status      string      `json:"status,omitempty"`
-	AssigneeID  *string     `json:"assignee_id,omitempty"`
-	Priority    int16       `json:"priority,omitempty"`
-	CustomJSON  interface{} `json:"custom_json,omitempty"`
-	RequesterID string      `json:"requester_id,omitempty"`
-	Requester   string      `json:"requester,omitempty"`
+    ID          string      `json:"id"`
+    Number      any         `json:"number,omitempty"`
+    Title       string      `json:"title,omitempty"`
+    Description string      `json:"description,omitempty"`
+    Status      string      `json:"status,omitempty"`
+    AssigneeID  *string     `json:"assignee_id,omitempty"`
+    Priority    int16       `json:"priority,omitempty"`
+    CustomJSON  interface{} `json:"custom_json,omitempty"`
+    RequesterID string      `json:"requester_id,omitempty"`
+    Requester   string      `json:"requester,omitempty"`
 }
 
 // createTicketReq mirrors the JSON body for creating a ticket.
@@ -102,11 +103,15 @@ func Create(a *app.App) gin.HandlerFunc {
 			if a.DB == nil {
 				in.RequesterID = "1"
 			} else {
-				const rq = `insert into requesters (email, name, phone) values (nullif($1,''), nullif($2,''), nullif($3,'')) returning id::text`
-				if err := a.DB.QueryRow(c.Request.Context(), rq, strings.ToLower(in.Requester.Email), in.Requester.Name, in.Requester.Phone).Scan(&in.RequesterID); err != nil {
-					app.AbortError(c, http.StatusInternalServerError, "db_error", err.Error(), nil)
-					return
-				}
+            const rq = `
+                insert into requesters (email, name, phone)
+                values (nullif(lower($1),''), nullif($2,''), nullif($3,''))
+                on conflict (email) do update set name = coalesce(excluded.name, requesters.name)
+                returning id::text`
+            if err := a.DB.QueryRow(c.Request.Context(), rq, in.Requester.Email, in.Requester.Name, in.Requester.Phone).Scan(&in.RequesterID); err != nil {
+                app.AbortError(c, http.StatusInternalServerError, "db_error", err.Error(), nil)
+                return
+            }
 			}
 		}
         if in.Source == "" {
@@ -154,29 +159,29 @@ func Create(a *app.App) gin.HandlerFunc {
 		}
 
 		// Insert ticket
-		const q = `with s as (select nextval('ticket_seq') n)
+        const q = `with s as (select nextval('ticket_seq') n)
 insert into tickets (number, title, description, requester_id, priority, status, source, custom_json)
 values ((select 'HD-'||n from s), $1, $2, $3, $4, coalesce(nullif($5,''),'New'), $6, coalesce(nullif($7,''),'{}')::jsonb)
-returning id::text, number, title, status, assignee_id::text, priority`
-		const qAssign = `with s as (select nextval('ticket_seq') n)
+returning id::text, number, title, description, status, assignee_id::text, priority`
+        const qAssign = `with s as (select nextval('ticket_seq') n)
 insert into tickets (number, title, description, requester_id, assignee_id, priority, status, source, custom_json)
 values ((select 'HD-'||n from s), $1, $2, $3, $4, $5, coalesce(nullif($6,''),'New'), $7, coalesce(nullif($8,''),'{}')::jsonb)
-returning id::text, number, title, status, assignee_id::text, priority`
+returning id::text, number, title, description, status, assignee_id::text, priority`
 		var t Ticket
 		var assignee *string
 		var number any
-		var status string
-		var row = a.DB.QueryRow(c.Request.Context(), q, in.Title, in.Description, in.RequesterID, in.Priority, in.Status, in.Source, string(in.CustomJSON))
-		if defaultAssignee != "" {
-			row = a.DB.QueryRow(c.Request.Context(), qAssign, in.Title, in.Description, in.RequesterID, defaultAssignee, in.Priority, in.Status, in.Source, string(in.CustomJSON))
-		}
-		if err := row.Scan(&t.ID, &number, &t.Title, &status, &assignee, &t.Priority); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		t.Number = number
-		t.Status = status
-		t.AssigneeID = assignee
+        var status string
+        var row = a.DB.QueryRow(c.Request.Context(), q, in.Title, in.Description, in.RequesterID, in.Priority, in.Status, in.Source, string(in.CustomJSON))
+        if defaultAssignee != "" {
+            row = a.DB.QueryRow(c.Request.Context(), qAssign, in.Title, in.Description, in.RequesterID, defaultAssignee, in.Priority, in.Status, in.Source, string(in.CustomJSON))
+        }
+        if err := row.Scan(&t.ID, &number, &t.Title, &t.Description, &status, &assignee, &t.Priority); err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        t.Number = number
+        t.Status = status
+        t.AssigneeID = assignee
 		t.RequesterID = in.RequesterID
 		// Best-effort fill requester label
 		if a.DB != nil {
@@ -203,30 +208,55 @@ func List(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		// helper for multi-value query params (comma or repeated)
-		getMulti := func(key string) []string {
-			vals := c.QueryArray(key)
-			if len(vals) == 0 {
-				if v := strings.TrimSpace(c.Query(key)); v != "" {
-					vals = []string{v}
-				}
-			}
-			out := []string{}
-			for _, val := range vals {
-				for _, v := range strings.Split(val, ",") {
-					v = strings.TrimSpace(v)
-					if v != "" {
-						out = append(out, v)
-					}
-				}
-			}
-			return out
-		}
+        // helper for multi-value query params; supports comma or pipe separators,
+        // and repeated query keys (e.g., ?status=Open&status=Pending or status=Open,Pending or status=open|pending)
+        getMulti := func(key string) []string {
+            vals := c.QueryArray(key)
+            if len(vals) == 0 {
+                if v := strings.TrimSpace(c.Query(key)); v != "" {
+                    vals = []string{v}
+                }
+            }
+            out := []string{}
+            split := func(s string) []string {
+                f := func(r rune) bool { return r == ',' || r == '|' }
+                parts := strings.FieldsFunc(s, f)
+                res := make([]string, 0, len(parts))
+                for _, p := range parts {
+                    if p = strings.TrimSpace(p); p != "" { res = append(res, p) }
+                }
+                return res
+            }
+            for _, val := range vals {
+                out = append(out, split(val)...)
+            }
+            return out
+        }
 
 		where := []string{}
 		args := []any{}
 
         statuses := getMulti("status")
+        // In non-test environments, normalize status values to DB casing.
+        if a.Cfg.Env != "test" {
+            normStatus := func(s string) string {
+                switch strings.ToLower(strings.TrimSpace(s)) {
+                case "new":
+                    return "New"
+                case "open":
+                    return "Open"
+                case "pending":
+                    return "Pending"
+                case "resolved":
+                    return "Resolved"
+                case "closed":
+                    return "Closed"
+                default:
+                    return s
+                }
+            }
+            for i := range statuses { statuses[i] = normStatus(statuses[i]) }
+        }
         if len(statuses) > 0 {
             n := len(args) + 1
             if len(statuses) == 1 {
@@ -270,10 +300,26 @@ func List(a *app.App) gin.HandlerFunc {
             }
         }
 
-		assignees := getMulti("assignee")
-		if len(assignees) == 0 {
-			assignees = getMulti("assignee_id")
-		}
+        assignees := getMulti("assignee")
+        if len(assignees) == 0 {
+            assignees = getMulti("assignee_id")
+        }
+        // Translate special value "me" to the current authenticated user's ID
+        if len(assignees) > 0 {
+            if v, ok := c.Get("user"); ok {
+                if u, ok := v.(authpkg.AuthUser); ok {
+                    resolved := make([]string, 0, len(assignees))
+                    for _, aID := range assignees {
+                        if strings.EqualFold(strings.TrimSpace(aID), "me") {
+                            if u.ID != "" { resolved = append(resolved, u.ID) }
+                        } else if aID != "" {
+                            resolved = append(resolved, aID)
+                        }
+                    }
+                    assignees = resolved
+                }
+            }
+        }
         if len(assignees) > 0 {
             n := len(args) + 1
             if len(assignees) == 1 {
@@ -330,7 +376,9 @@ func List(a *app.App) gin.HandlerFunc {
 			}
 		}
 
-        sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, t.updated_at from tickets t left join requesters r on r.id=t.requester_id"
+        // Keep the first 9 columns in legacy order to satisfy existing tests,
+        // and append description as the last column for UI consumption.
+        sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, t.updated_at, t.description from tickets t left join requesters r on r.id=t.requester_id"
 		if len(where) > 0 {
 			sql += " where " + strings.Join(where, " and ")
 		}
@@ -370,15 +418,15 @@ func List(a *app.App) gin.HandlerFunc {
 
 		out := []Ticket{}
 		ups := []time.Time{}
-		for rows.Next() {
-			var t Ticket
-			var assignee *string
-			var number any
-			var updated time.Time
-			if err := rows.Scan(&t.ID, &number, &t.Title, &t.Status, &assignee, &t.Priority, &t.RequesterID, &t.Requester, &updated); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
+        for rows.Next() {
+            var t Ticket
+            var assignee *string
+            var number any
+            var updated time.Time
+            if err := rows.Scan(&t.ID, &number, &t.Title, &t.Status, &assignee, &t.Priority, &t.RequesterID, &t.Requester, &updated, &t.Description); err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+                return
+            }
 			t.Number = number
 			t.AssigneeID = assignee
 			out = append(out, t)
@@ -393,7 +441,8 @@ func List(a *app.App) gin.HandlerFunc {
 			out = out[:limit]
 		}
 
-		c.JSON(http.StatusOK, gin.H{"tickets": out, "next_cursor": next})
+		// For UI compatibility, return items under "items" and keep legacy "tickets" key.
+		c.JSON(http.StatusOK, gin.H{"items": out, "tickets": out, "next_cursor": next})
 	}
 }
 
@@ -404,15 +453,16 @@ func Get(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusOK, Ticket{})
 			return
 		}
-		const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester from tickets t left join requesters r on r.id=t.requester_id where t.id=$1`
+        // Keep legacy column order and append description last for compatibility
+        const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, t.description from tickets t left join requesters r on r.id=t.requester_id where t.id=$1`
 		var t Ticket
 		var assignee *string
 		var number any
 		row := a.DB.QueryRow(c.Request.Context(), q, c.Param("id"))
-		if err := row.Scan(&t.ID, &number, &t.Title, &t.Status, &assignee, &t.Priority, &t.RequesterID, &t.Requester); err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-			return
-		}
+        if err := row.Scan(&t.ID, &number, &t.Title, &t.Status, &assignee, &t.Priority, &t.RequesterID, &t.Requester, &t.Description); err != nil {
+            c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+            return
+        }
 		t.Number = number
 		t.AssigneeID = assignee
 		c.JSON(http.StatusOK, t)

@@ -533,7 +533,9 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
         }
     }
 
-    auth := rg.Group("/")
+    // Use an empty subpath to avoid introducing a double slash (e.g., 
+    // "/api//me"). The UI expects endpoints like "/api/me".
+    auth := rg.Group("")
     auth.Use(authpkg.Middleware(a.core()))
     auth.GET("/me", authpkg.Me)
 	// User settings (profile + password)
@@ -1830,10 +1832,15 @@ func (a *App) createRequester(c *gin.Context) {
 		if err == nil {
 			_, _ = a.db.Exec(ctx, `insert into user_roles (user_id, role_id) select $1, id from roles where name='requester' on conflict do nothing`, id)
 		}
-	} else {
-		// Create in requesters table to align with tickets.requester_id FK
-		err = a.db.QueryRow(ctx, `insert into requesters (id, email, name) values (gen_random_uuid(), $1, $2) returning id`, in.Email, in.DisplayName).Scan(&id)
-	}
+    } else {
+        // Create or update requester by email (case-insensitive), return id
+        err = a.db.QueryRow(ctx, `
+            insert into requesters (id, email, name)
+            values (gen_random_uuid(), lower($1), $2)
+            on conflict (email) do update set name = excluded.name
+            returning id::text
+        `, in.Email, in.DisplayName).Scan(&id)
+    }
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
