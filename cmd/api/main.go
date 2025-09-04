@@ -15,6 +15,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -189,6 +190,8 @@ type DB interface {
 type ObjectStore interface {
 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
 	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+	PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error)
+	StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error)
 }
 
 // fsObjectStore implements ObjectStore on the local filesystem for development/testing.
@@ -197,40 +200,76 @@ type fsObjectStore struct {
 }
 
 func (f *fsObjectStore) PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
-	_ = ctx
-	dir := f.base
-	if bucketName != "" {
-		dir = dir + string(os.PathSeparator) + bucketName
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return minio.UploadInfo{}, err
-	}
-	fp := dir + string(os.PathSeparator) + objectName
-	tmp := fp + ".tmp"
-	out, err := os.Create(tmp)
-	if err != nil {
-		return minio.UploadInfo{}, err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, reader); err != nil {
-		_ = os.Remove(tmp)
-		return minio.UploadInfo{}, err
-	}
-	if err := os.Rename(tmp, fp); err != nil {
-		return minio.UploadInfo{}, err
-	}
-	return minio.UploadInfo{Bucket: bucketName, Key: objectName, Size: objectSize}, nil
+    _ = ctx
+    dir := f.base
+    if bucketName != "" {
+        dir = filepath.Join(dir, bucketName)
+    }
+    base := filepath.Clean(dir)
+    if err := os.MkdirAll(base, 0o755); err != nil {
+        return minio.UploadInfo{}, err
+    }
+    fp := filepath.Join(base, objectName)
+    clean := filepath.Clean(fp)
+    if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
+        return minio.UploadInfo{}, errors.New("invalid object name")
+    }
+    tmp := clean + ".tmp"
+    out, err := os.Create(tmp)
+    if err != nil {
+        return minio.UploadInfo{}, err
+    }
+    defer out.Close()
+    if _, err := io.Copy(out, reader); err != nil {
+        _ = os.Remove(tmp)
+        return minio.UploadInfo{}, err
+    }
+    if err := os.Rename(tmp, clean); err != nil {
+        return minio.UploadInfo{}, err
+    }
+    return minio.UploadInfo{Bucket: bucketName, Key: objectName, Size: objectSize}, nil
 }
 
 func (f *fsObjectStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
+    _ = ctx
+    _ = opts
+    dir := f.base
+    if bucketName != "" {
+        dir = filepath.Join(dir, bucketName)
+    }
+    base := filepath.Clean(dir)
+    fp := filepath.Join(base, objectName)
+    clean := filepath.Clean(fp)
+    if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
+        return errors.New("invalid object name")
+    }
+    return os.Remove(clean)
+}
+
+func (f *fsObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
 	_ = ctx
-	_ = opts
-	dir := f.base
-	if bucketName != "" {
-		dir = dir + string(os.PathSeparator) + bucketName
-	}
-	fp := dir + string(os.PathSeparator) + objectName
-	return os.Remove(fp)
+	_ = expiry
+	return nil, errors.New("presign not supported")
+}
+
+func (f *fsObjectStore) StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error) {
+    _ = ctx
+    _ = opts
+    dir := f.base
+    if bucketName != "" {
+        dir = filepath.Join(dir, bucketName)
+    }
+    base := filepath.Clean(dir)
+    fp := filepath.Join(base, objectName)
+    clean := filepath.Clean(fp)
+    if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
+        return minio.ObjectInfo{}, errors.New("invalid object name")
+    }
+    fi, err := os.Stat(clean)
+    if err != nil {
+        return minio.ObjectInfo{}, err
+    }
+    return minio.ObjectInfo{Key: objectName, Size: fi.Size()}, nil
 }
 
 type App struct {
@@ -510,16 +549,21 @@ func (a *App) routes() {
 	auth.POST("/tickets/:id/comments", a.addComment)
 	auth.GET("/tickets/:id/attachments", a.listAttachments)
 	if a.attRL != nil {
+		auth.POST("/tickets/:id/attachments/presign", a.attRL.Middleware(func(c *gin.Context) string {
+			u := c.MustGet("user").(AuthUser)
+			return u.ID
+		}), a.presignAttachment)
 		auth.POST("/tickets/:id/attachments", a.attRL.Middleware(func(c *gin.Context) string {
 			u := c.MustGet("user").(AuthUser)
 			return u.ID
-		}), a.uploadAttachment)
+		}), a.finalizeAttachment)
 		auth.GET("/tickets/:id/attachments/:attID", a.attRL.Middleware(func(c *gin.Context) string {
 			u := c.MustGet("user").(AuthUser)
 			return u.ID
 		}), a.getAttachment)
 	} else {
-		auth.POST("/tickets/:id/attachments", a.uploadAttachment)
+		auth.POST("/tickets/:id/attachments/presign", a.presignAttachment)
+		auth.POST("/tickets/:id/attachments", a.finalizeAttachment)
 		auth.GET("/tickets/:id/attachments/:attID", a.getAttachment)
 	}
 	auth.DELETE("/tickets/:id/attachments/:attID", a.deleteAttachment)
@@ -1041,41 +1085,41 @@ func (a *App) listTickets(c *gin.Context) {
 		args = append(args, v)
 		i++
 	}
-    if v := c.Query("cursor"); v != "" {
-        // Support composite cursor: "<RFC3339Nano>|<id>" to avoid skipping rows with equal timestamps
-        var ts time.Time
-        var haveTS bool
-        var idPart string
-        if parts := strings.SplitN(v, "|", 2); len(parts) == 2 {
-            if tsv, err := time.Parse(time.RFC3339Nano, parts[0]); err == nil {
-                ts = tsv
-                haveTS = true
-                idPart = parts[1]
-            }
-        } else if tsv, err := time.Parse(time.RFC3339Nano, v); err == nil {
-            ts = tsv
-            haveTS = true
-        }
-        if haveTS {
-            if idPart != "" {
-                // Keyset pagination with tie-breaker on id (both desc)
-                where = append(where, fmt.Sprintf("(t.created_at < $%d OR (t.created_at = $%d AND t.id < $%d))", i, i, i+1))
-                args = append(args, ts, idPart)
-                i += 2
-            } else {
-                // Backward-compatible: timestamp-only cursor; use <= to prevent skipping ties (may include duplicates)
-                where = append(where, fmt.Sprintf("t.created_at <= $%d", i))
-                args = append(args, ts)
-                i++
-            }
-        }
-    }
+	if v := c.Query("cursor"); v != "" {
+		// Support composite cursor: "<RFC3339Nano>|<id>" to avoid skipping rows with equal timestamps
+		var ts time.Time
+		var haveTS bool
+		var idPart string
+		if parts := strings.SplitN(v, "|", 2); len(parts) == 2 {
+			if tsv, err := time.Parse(time.RFC3339Nano, parts[0]); err == nil {
+				ts = tsv
+				haveTS = true
+				idPart = parts[1]
+			}
+		} else if tsv, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			ts = tsv
+			haveTS = true
+		}
+		if haveTS {
+			if idPart != "" {
+				// Keyset pagination with tie-breaker on id (both desc)
+				where = append(where, fmt.Sprintf("(t.created_at < $%d OR (t.created_at = $%d AND t.id < $%d))", i, i, i+1))
+				args = append(args, ts, idPart)
+				i += 2
+			} else {
+				// Backward-compatible: timestamp-only cursor; use <= to prevent skipping ties (may include duplicates)
+				where = append(where, fmt.Sprintf("t.created_at <= $%d", i))
+				args = append(args, ts)
+				i++
+			}
+		}
+	}
 
 	if len(where) > 0 {
 		base += "\n       where " + strings.Join(where, " and ")
 	}
 
-    base += "\n       order by t.created_at desc, t.id desc\n       limit 200"
+	base += "\n       order by t.created_at desc, t.id desc\n       limit 200"
 
 	rows, err := a.db.Query(ctx, base, args...)
 	if err != nil {
@@ -1113,10 +1157,10 @@ func (a *App) listTickets(c *gin.Context) {
 		out = append(out, t)
 	}
 	resp := gin.H{"items": out}
-    if len(out) == 200 {
-        last := out[len(out)-1]
-        resp["next_cursor"] = last.CreatedAt.Format(time.RFC3339Nano) + "|" + last.ID
-    }
+	if len(out) == 200 {
+		last := out[len(out)-1]
+		resp["next_cursor"] = last.CreatedAt.Format(time.RFC3339Nano) + "|" + last.ID
+	}
 	c.JSON(200, resp)
 }
 
@@ -1522,36 +1566,74 @@ func (a *App) addComment(c *gin.Context) {
 }
 
 // ===== Attachments =====
-func (a *App) uploadAttachment(c *gin.Context) {
+type presignReq struct {
+	Filename string `json:"filename" binding:"required"`
+	Bytes    int64  `json:"bytes" binding:"required"`
+	Mime     string `json:"mime"`
+}
+
+func (a *App) presignAttachment(c *gin.Context) {
 	if a.m == nil {
 		c.JSON(500, gin.H{"error": "minio not configured"})
 		return
 	}
-	ticketID := c.Param("id")
-	u := c.MustGet("user").(AuthUser)
-	file, header, err := c.Request.FormFile("file")
-	if err != nil {
+	var in presignReq
+	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	defer file.Close()
 	objectKey := uuid.New().String()
-	_, err = a.m.PutObject(c.Request.Context(), a.cfg.MinIOBucket, objectKey, file, header.Size, minio.PutObjectOptions{ContentType: header.Header.Get("Content-Type")})
+	url, err := a.m.PresignedPutObject(c.Request.Context(), a.cfg.MinIOBucket, objectKey, time.Minute)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	ctx := c.Request.Context()
-	var id string
-	err = a.db.QueryRow(ctx, `insert into attachments (id, ticket_id, uploader_id, object_key, filename, bytes, mime) values ($1,$2,$3,$4,$5,$6,$7) returning id`,
-		objectKey, ticketID, u.ID, objectKey, header.Filename, header.Size, header.Header.Get("Content-Type")).Scan(&id)
+	headers := map[string]string{}
+	if in.Mime != "" {
+		headers["Content-Type"] = in.Mime
+	}
+	c.JSON(201, gin.H{"upload_url": url.String(), "headers": headers, "attachment_id": objectKey})
+}
+
+type finalizeReq struct {
+	AttachmentID string `json:"attachment_id" binding:"required"`
+	Filename     string `json:"filename" binding:"required"`
+	Bytes        int64  `json:"bytes" binding:"required"`
+	Mime         string `json:"mime"`
+}
+
+func (a *App) finalizeAttachment(c *gin.Context) {
+    if a.m == nil {
+        c.JSON(500, gin.H{"error": "minio not configured"})
+        return
+    }
+    ticketID := c.Param("id")
+    u := c.MustGet("user").(AuthUser)
+    var in finalizeReq
+    if err := c.ShouldBindJSON(&in); err != nil {
+        c.JSON(400, gin.H{"error": err.Error()})
+        return
+    }
+    // Validate that the attachment ID is a UUID to prevent path traversal
+    if _, err := uuid.Parse(strings.TrimSpace(in.AttachmentID)); err != nil {
+        c.JSON(400, gin.H{"error": "invalid attachment_id"})
+        return
+    }
+    ctx := c.Request.Context()
+    info, err := a.m.StatObject(ctx, a.cfg.MinIOBucket, in.AttachmentID, minio.StatObjectOptions{})
+    if err != nil || info.Size != in.Bytes {
+        c.JSON(400, gin.H{"error": "upload incomplete"})
+        return
+    }
+	_, err = a.db.Exec(ctx, `insert into attachments (id, ticket_id, uploader_id, object_key, filename, bytes, mime) values ($1,$2,$3,$4,$5,$6,$7)`,
+		in.AttachmentID, ticketID, u.ID, in.AttachmentID, in.Filename, in.Bytes, in.Mime)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	a.audit(c, "user", u.ID, "ticket", ticketID, "attachment_add", gin.H{"attachment_id": id})
-	a.recordTicketEvent(ctx, ticketID, "attachment_add", u.ID, gin.H{"attachment_id": id})
-	c.JSON(201, gin.H{"id": id})
+	a.audit(c, "user", u.ID, "ticket", ticketID, "attachment_add", gin.H{"attachment_id": in.AttachmentID})
+	a.recordTicketEvent(ctx, ticketID, "attachment_add", u.ID, gin.H{"attachment_id": in.AttachmentID})
+	c.JSON(201, gin.H{"id": in.AttachmentID})
 }
 
 func (a *App) listAttachments(c *gin.Context) {
@@ -1605,21 +1687,28 @@ func (a *App) getAttachment(c *gin.Context) {
 		}
 	}
 	// Serve from filesystem store when configured
-	if a.cfg.FileStorePath != "" {
-		dir := a.cfg.FileStorePath
-		if a.cfg.MinIOBucket != "" {
-			dir = dir + string(os.PathSeparator) + a.cfg.MinIOBucket
-		}
-		fp := dir + string(os.PathSeparator) + objectKey
-		if mime != nil && *mime != "" {
-			c.Header("Content-Type", *mime)
-		} else {
-			c.Header("Content-Type", "application/octet-stream")
-		}
-		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-		c.File(fp)
-		return
-	}
+    if a.cfg.FileStorePath != "" {
+        dir := a.cfg.FileStorePath
+        if a.cfg.MinIOBucket != "" {
+            dir = filepath.Join(dir, a.cfg.MinIOBucket)
+        }
+        // Safely join and ensure the final path stays within the base directory
+        base := filepath.Clean(dir)
+        fp := filepath.Join(base, objectKey)
+        clean := filepath.Clean(fp)
+        if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
+            c.JSON(404, gin.H{"error": "not found"})
+            return
+        }
+        if mime != nil && *mime != "" {
+            c.Header("Content-Type", *mime)
+        } else {
+            c.Header("Content-Type", "application/octet-stream")
+        }
+        c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+        c.File(clean)
+        return
+    }
 	c.JSON(500, gin.H{"error": "object store not configured"})
 }
 

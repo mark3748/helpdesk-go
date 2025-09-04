@@ -441,6 +441,11 @@ export interface paths {
                     team?: string;
                     assignee?: string;
                     search?: string;
+                    /** @description Pagination cursor. Accepts either:
+                     *     - A timestamp in RFC3339/RFC3339Nano (legacy form), or
+                     *     - A composite value "<RFC3339Nano>|<id>" returned by the API, which
+                     *       prevents skipping items when multiple rows share the same timestamp.
+                     *      */
                     cursor?: string;
                 };
                 header?: never;
@@ -457,6 +462,10 @@ export interface paths {
                     content: {
                         "application/json": {
                             items?: components["schemas"]["Ticket"][];
+                            /**
+                             * @description Composite cursor of the form "<RFC3339Nano>|<id>" for stable keyset pagination.
+                             * @example 2024-01-02T03:04:05.123456Z|00000000-0000-0000-0000-000000000123
+                             */
                             next_cursor?: string;
                         };
                     };
@@ -735,7 +744,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Upload attachment */
+        /** Finalize attachment */
         post: {
             parameters: {
                 query?: never;
@@ -747,9 +756,13 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "multipart/form-data": {
-                        /** Format: binary */
-                        file?: string;
+                    "application/json": {
+                        /** Format: uuid */
+                        attachment_id: string;
+                        filename: string;
+                        /** Format: int64 */
+                        bytes: number;
+                        mime?: string;
                     };
                 };
             };
@@ -763,6 +776,74 @@ export interface paths {
                         "application/json": {
                             /** Format: uuid */
                             id?: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}/attachments/presign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Presign attachment upload */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        filename: string;
+                        /** Format: int64 */
+                        bytes: number;
+                        mime?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            upload_url?: string;
+                            headers?: {
+                                [key: string]: string;
+                            };
+                            /** Format: uuid */
+                            attachment_id?: string;
                         };
                     };
                 };

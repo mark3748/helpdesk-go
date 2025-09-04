@@ -558,6 +558,64 @@ func TestGetAttachment_MinIOPresign(t *testing.T) {
 	}
 }
 
+func TestFinalizeAttachment_RejectsInvalidID(t *testing.T) {
+    // Set up app with fake object store and bypass auth
+    store := newFakeObjectStore()
+    defer store.Close()
+    cfg := Config{Env: "test", TestBypassAuth: true, MinIOBucket: "bucket"}
+    app := NewApp(cfg, readyzDB{}, nil, store, nil)
+
+    // Finalize with a path-traversal style ID should be rejected before StatObject/DB
+    body := `{"attachment_id":"../../etc/passwd","filename":"x","bytes":5}`
+    rr := httptest.NewRecorder()
+    req := httptest.NewRequest(http.MethodPost, "/tickets/1/attachments", strings.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    app.r.ServeHTTP(rr, req)
+
+    if rr.Code != http.StatusBadRequest {
+        t.Fatalf("expected 400, got %d body=%s", rr.Code, rr.Body.String())
+    }
+}
+
+type traversalAttachmentDB struct{}
+
+func (db *traversalAttachmentDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+    return &fakeRows{}, nil
+}
+func (db *traversalAttachmentDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+    // Return a malicious object_key to simulate prior bad data
+    return &fakeRow{scan: func(dest ...any) error {
+        if p, ok := dest[0].(*string); ok {
+            *p = "../../etc/passwd"
+        }
+        if p, ok := dest[1].(*string); ok {
+            *p = "passwd"
+        }
+        if p, ok := dest[2].(**string); ok {
+            *p = nil
+        }
+        return nil
+    }}
+}
+func (db *traversalAttachmentDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+    return pgconn.CommandTag{}, nil
+}
+
+func TestGetAttachment_FileStoreTraversalBlocked(t *testing.T) {
+    dir := t.TempDir()
+    // Configure file store path (no MinIO), and DB returns a traversal key
+    cfg := Config{Env: "test", TestBypassAuth: true, FileStorePath: dir, MinIOBucket: "attachments"}
+    app := NewApp(cfg, &traversalAttachmentDB{}, nil, &fsObjectStore{base: dir}, nil)
+
+    rr := httptest.NewRecorder()
+    req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/att", nil)
+    app.r.ServeHTTP(rr, req)
+
+    if rr.Code != http.StatusNotFound {
+        t.Fatalf("expected 404, got %d body=%s", rr.Code, rr.Body.String())
+    }
+}
+
 type statusDB struct{ called bool }
 
 func (db *statusDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
