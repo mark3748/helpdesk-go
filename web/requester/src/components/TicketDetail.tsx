@@ -94,11 +94,11 @@ export default function TicketDetail() {
                   {a.filename} <span className="text-gray-500 text-sm">({Math.round(((a.bytes || 0) / 1024))} KB)</span>
                 </span>
                 <span className="space-x-2">
-                  <button className="rounded bg-gray-200 px-2 py-1" onClick={() => downloadAttachment(id!, a.id, auth.user!.access_token!)}>Download</button>
+                  <button className="rounded bg-gray-200 px-2 py-1" onClick={() => downloadAttachment(id!, a.id!, auth.user!.access_token!)}>Download</button>
                   <button
                     className="rounded bg-red-600 px-2 py-1 text-white"
                     onClick={async () => {
-                      await deleteAttachment(id!, a.id, auth.user!.access_token!);
+                      await deleteAttachment(id!, a.id!, auth.user!.access_token!);
                       qc.invalidateQueries({ queryKey: ['attachments', id] });
                     }}
                   >
