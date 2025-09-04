@@ -29,3 +29,7 @@ out/
 web/**/.vite/
 cmd/worker/worker
 cmd/api/api
+
+# Local GOPATH shim/cache
+.gopath/
+**/.gopath/
