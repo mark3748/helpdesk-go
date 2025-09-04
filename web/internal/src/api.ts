@@ -13,10 +13,15 @@ export interface AppEvent {
  */
 export function subscribeEvents(onStatus?: (connected: boolean) => void) {
   const handlers = new Map<string, Set<(ev: AppEvent) => void>>();
+  const listeners = new Map<string, (e: MessageEvent<string>) => void>();
   let es: EventSource | null = null;
   let timer: number | null = null;
   let backoff = 1000;
   let lastEventId: string | undefined;
+
+  const attachListeners = () => {
+    listeners.forEach((listener, type) => es?.addEventListener(type, listener));
+  };
 
   const connect = () => {
     const headers = lastEventId ? { 'Last-Event-ID': lastEventId } : undefined;
@@ -25,16 +30,6 @@ export function subscribeEvents(onStatus?: (connected: boolean) => void) {
       onStatus?.(true);
       backoff = 1000;
     };
-    es.onmessage = (e: MessageEvent<string>) => {
-      lastEventId = e.lastEventId || lastEventId;
-      try {
-        const parsed = JSON.parse(e.data) as AppEvent;
-        const cbs = handlers.get(parsed.type);
-        cbs?.forEach((cb) => cb(parsed));
-      } catch {
-        // ignore malformed events
-      }
-    };
     es.onerror = () => {
       onStatus?.(false);
       if (timer) window.clearTimeout(timer);
@@ -42,15 +37,51 @@ export function subscribeEvents(onStatus?: (connected: boolean) => void) {
       timer = window.setTimeout(connect, backoff);
       backoff = Math.min(backoff * 2, 30000);
     };
+    attachListeners();
   };
 
   connect();
 
+  const addListener = (type: string) => {
+    if (listeners.has(type)) return;
+    const listener = (e: MessageEvent<string>) => {
+      lastEventId = e.lastEventId || lastEventId;
+      try {
+        const parsed = JSON.parse(e.data) as AppEvent;
+        const cbs = handlers.get(type);
+        cbs?.forEach((cb) => cb(parsed));
+      } catch {
+        // ignore malformed events
+      }
+    };
+    listeners.set(type, listener);
+    es?.addEventListener(type, listener);
+  };
+
+  const removeListener = (type: string) => {
+    const listener = listeners.get(type);
+    if (!listener) return;
+    es?.removeEventListener(type, listener);
+    listeners.delete(type);
+  };
+
   const on = (type: string, handler: (ev: AppEvent) => void) => {
-    const set = handlers.get(type);
-    if (set) set.add(handler);
-    else handlers.set(type, new Set([handler]));
-    return () => handlers.get(type)?.delete(handler);
+    let set = handlers.get(type);
+    if (!set) {
+      set = new Set();
+      handlers.set(type, set);
+      addListener(type);
+    }
+    set.add(handler);
+    return () => {
+      const set = handlers.get(type);
+      if (!set) return;
+      set.delete(handler);
+      if (set.size === 0) {
+        handlers.delete(type);
+        removeListener(type);
+      }
+    };
   };
 
   return {
