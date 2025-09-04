@@ -125,14 +125,6 @@ func Create(a *app.App) gin.HandlerFunc {
             c.JSON(http.StatusCreated, Ticket{Title: in.Title, Priority: in.Priority})
             return
         }
-        if in.Source != "web" && in.Source != "email" {
-            if a.Cfg.Env == "test" {
-                c.JSON(http.StatusBadRequest, gin.H{"errors": map[string]string{"source": "invalid"}})
-            } else {
-                app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"source": "invalid"})
-            }
-            return
-        }
 		// Determine default assignee: if current user has the agent role, assign to them
 		var defaultAssignee string
 		if v, ok := c.Get("user"); ok {
