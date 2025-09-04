@@ -11,40 +11,86 @@ export interface AppEvent {
  * Subscribe to server sent events and automatically reconnect on failure.
  * Returns a cleanup function to close the connection.
  */
-export function subscribeEvents(
-  onEvent: (ev: AppEvent) => void,
-  onStatus?: (connected: boolean) => void,
-): () => void {
+export function subscribeEvents(onStatus?: (connected: boolean) => void) {
+  const handlers = new Map<string, Set<(ev: AppEvent) => void>>();
+  const listeners = new Map<string, (e: MessageEvent<string>) => void>();
   let es: EventSource | null = null;
   let timer: number | null = null;
+  let backoff = 1000;
+  let lastEventId: string | undefined;
+
+  const attachListeners = () => {
+    listeners.forEach((listener, type) => es?.addEventListener(type, listener));
+  };
 
   const connect = () => {
-    es = new EventSource('/api/events', { withCredentials: true });
-    es.onopen = () => onStatus?.(true);
-    const handler = (e: MessageEvent<string>) => {
-      try {
-        const parsed = JSON.parse(e.data) as AppEvent;
-        onEvent(parsed);
-      } catch {
-        // ignore malformed events
-      }
+    // EventSource does not support custom headers in browsers; pass last id via query
+    const url = lastEventId ? `/api/events?last_event_id=${encodeURIComponent(lastEventId)}` : '/api/events';
+    es = new EventSource(url, { withCredentials: true });
+    es.onopen = () => {
+      onStatus?.(true);
+      backoff = 1000;
     };
-    ['ticket_created', 'ticket_updated', 'queue_changed'].forEach((evt) => {
-      es?.addEventListener(evt, handler);
-    });
     es.onerror = () => {
       onStatus?.(false);
       if (timer) window.clearTimeout(timer);
       es?.close();
-      timer = window.setTimeout(connect, 3000);
+      timer = window.setTimeout(connect, backoff);
+      backoff = Math.min(backoff * 2, 30000);
     };
+    attachListeners();
   };
 
   connect();
 
-  return () => {
-    if (timer) window.clearTimeout(timer);
-    es?.close();
+  const addListener = (type: string) => {
+    if (listeners.has(type)) return;
+    const listener = (e: MessageEvent<string>) => {
+      lastEventId = e.lastEventId || lastEventId;
+      try {
+        const parsed = JSON.parse(e.data) as AppEvent;
+        const cbs = handlers.get(type);
+        cbs?.forEach((cb) => cb(parsed));
+      } catch {
+        // ignore malformed events
+      }
+    };
+    listeners.set(type, listener);
+    es?.addEventListener(type, listener);
+  };
+
+  const removeListener = (type: string) => {
+    const listener = listeners.get(type);
+    if (!listener) return;
+    es?.removeEventListener(type, listener);
+    listeners.delete(type);
+  };
+
+  const on = (type: string, handler: (ev: AppEvent) => void) => {
+    let set = handlers.get(type);
+    if (!set) {
+      set = new Set();
+      handlers.set(type, set);
+      addListener(type);
+    }
+    set.add(handler);
+    return () => {
+      const set = handlers.get(type);
+      if (!set) return;
+      set.delete(handler);
+      if (set.size === 0) {
+        handlers.delete(type);
+        removeListener(type);
+      }
+    };
+  };
+
+  return {
+    on,
+    close: () => {
+      if (timer) window.clearTimeout(timer);
+      es?.close();
+    },
   };
 }
 

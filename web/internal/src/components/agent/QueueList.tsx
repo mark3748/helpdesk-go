@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Table, Button, Space, Tag } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useTickets, subscribeEvents } from '../../api';
-import type { AppEvent, Ticket } from '../../api';
+import type { Ticket } from '../../api';
 import CreateTicketModal from './CreateTicketModal';
 
 export default function QueueList() {
@@ -27,14 +27,19 @@ export default function QueueList() {
   }, [data, cursor]);
 
   useEffect(() => {
-    const stop = subscribeEvents((ev: AppEvent) => {
-      if (['ticket_created', 'ticket_updated', 'queue_changed'].includes(ev.type)) {
-        setItems([]);
-        setCursor(undefined);
-        refetch();
-      }
-    }, setConnected);
-    return stop;
+    const sub = subscribeEvents(setConnected);
+    const handler = () => {
+      setItems([]);
+      setCursor(undefined);
+      refetch();
+    };
+    const offs = ['ticket_created', 'ticket_updated', 'queue_changed'].map((t) =>
+      sub.on(t, handler),
+    );
+    return () => {
+      offs.forEach((off) => off());
+      sub.close();
+    };
   }, [refetch]);
 
   const loadMore = () => {
