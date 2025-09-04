@@ -202,9 +202,6 @@ func PresignDownload(a *app.App) gin.HandlerFunc {
 func sanitizeFilename(name string) string {
 	// Drop any path components
 	name = filepath.Base(name)
-	// Replace Windows separators too
-	name = strings.ReplaceAll(name, "\\", "_")
-	name = strings.ReplaceAll(name, "/", "_")
 	// Remove dot-dot sequences
 	name = strings.ReplaceAll(name, "..", "")
 	// Allow only letters, digits, space, dash, underscore, and dot
