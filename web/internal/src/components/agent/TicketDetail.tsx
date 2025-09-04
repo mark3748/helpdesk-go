@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Typography, Select, List, Form, Input, Button, Upload, message, Tag } from 'antd';
+import { Typography, Select, List, Form, Input, Button, Upload, message, Tag, Collapse } from 'antd';
 import type { UploadProps } from 'antd';
-import { useTicket, subscribeEvents } from '../../api';
+import { useTicket, subscribeEvents, useRequester } from '../../api';
 import type { AppEvent } from '../../api';
 import {
   fetchComments,
@@ -13,6 +13,7 @@ import {
   deleteAttachment,
   downloadAttachment,
   updateTicketStatus,
+  updateRequester,
 } from '../../shared/api';
 
 export default function TicketDetail() {
@@ -64,6 +65,14 @@ export default function TicketDetail() {
     onError: () => message.error('Failed to add comment'),
   });
 
+  const requester = useRequester((ticket as any)?.requester_id || '');
+  const updateReq = useMutation({
+    mutationFn: (vals: { email?: string; display_name?: string }) =>
+      updateRequester(String((ticket as any)?.requester_id), vals),
+    onSuccess: () => requester.refetch(),
+    onError: () => message.error('Failed to update requester'),
+  });
+
   const uploadProps: UploadProps = {
     showUploadList: false,
     customRequest: async ({ file, onProgress, onSuccess, onError }) => {
@@ -101,6 +110,31 @@ export default function TicketDetail() {
           { value: 'closed', label: 'Closed' },
         ]}
       />
+
+      <Collapse style={{ marginBottom: 16 }}>
+        <Collapse.Panel header="Requester" key="req">
+          {requester.data && (
+            <Form
+              layout="vertical"
+              initialValues={{
+                display_name: requester.data.display_name,
+                email: requester.data.email,
+              }}
+              onFinish={(vals) => updateReq.mutate(vals)}
+            >
+              <Form.Item name="display_name" label="Name">
+                <Input />
+              </Form.Item>
+              <Form.Item name="email" label="Email">
+                <Input />
+              </Form.Item>
+              <Button type="primary" htmlType="submit" loading={updateReq.isPending}>
+                Save
+              </Button>
+            </Form>
+          )}
+        </Collapse.Panel>
+      </Collapse>
 
       <Upload {...uploadProps}>
         <Button>Upload Attachment</Button>

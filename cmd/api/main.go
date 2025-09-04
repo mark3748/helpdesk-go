@@ -200,50 +200,50 @@ type fsObjectStore struct {
 }
 
 func (f *fsObjectStore) PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
-    _ = ctx
-    dir := f.base
-    if bucketName != "" {
-        dir = filepath.Join(dir, bucketName)
-    }
-    base := filepath.Clean(dir)
-    if err := os.MkdirAll(base, 0o755); err != nil {
-        return minio.UploadInfo{}, err
-    }
-    fp := filepath.Join(base, objectName)
-    clean := filepath.Clean(fp)
-    if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
-        return minio.UploadInfo{}, errors.New("invalid object name")
-    }
-    tmp := clean + ".tmp"
-    out, err := os.Create(tmp)
-    if err != nil {
-        return minio.UploadInfo{}, err
-    }
-    defer out.Close()
-    if _, err := io.Copy(out, reader); err != nil {
-        _ = os.Remove(tmp)
-        return minio.UploadInfo{}, err
-    }
-    if err := os.Rename(tmp, clean); err != nil {
-        return minio.UploadInfo{}, err
-    }
-    return minio.UploadInfo{Bucket: bucketName, Key: objectName, Size: objectSize}, nil
+	_ = ctx
+	dir := f.base
+	if bucketName != "" {
+		dir = filepath.Join(dir, bucketName)
+	}
+	base := filepath.Clean(dir)
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return minio.UploadInfo{}, err
+	}
+	fp := filepath.Join(base, objectName)
+	clean := filepath.Clean(fp)
+	if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
+		return minio.UploadInfo{}, errors.New("invalid object name")
+	}
+	tmp := clean + ".tmp"
+	out, err := os.Create(tmp)
+	if err != nil {
+		return minio.UploadInfo{}, err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, reader); err != nil {
+		_ = os.Remove(tmp)
+		return minio.UploadInfo{}, err
+	}
+	if err := os.Rename(tmp, clean); err != nil {
+		return minio.UploadInfo{}, err
+	}
+	return minio.UploadInfo{Bucket: bucketName, Key: objectName, Size: objectSize}, nil
 }
 
 func (f *fsObjectStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
-    _ = ctx
-    _ = opts
-    dir := f.base
-    if bucketName != "" {
-        dir = filepath.Join(dir, bucketName)
-    }
-    base := filepath.Clean(dir)
-    fp := filepath.Join(base, objectName)
-    clean := filepath.Clean(fp)
-    if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
-        return errors.New("invalid object name")
-    }
-    return os.Remove(clean)
+	_ = ctx
+	_ = opts
+	dir := f.base
+	if bucketName != "" {
+		dir = filepath.Join(dir, bucketName)
+	}
+	base := filepath.Clean(dir)
+	fp := filepath.Join(base, objectName)
+	clean := filepath.Clean(fp)
+	if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
+		return errors.New("invalid object name")
+	}
+	return os.Remove(clean)
 }
 
 func (f *fsObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
@@ -253,23 +253,23 @@ func (f *fsObjectStore) PresignedPutObject(ctx context.Context, bucketName, obje
 }
 
 func (f *fsObjectStore) StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error) {
-    _ = ctx
-    _ = opts
-    dir := f.base
-    if bucketName != "" {
-        dir = filepath.Join(dir, bucketName)
-    }
-    base := filepath.Clean(dir)
-    fp := filepath.Join(base, objectName)
-    clean := filepath.Clean(fp)
-    if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
-        return minio.ObjectInfo{}, errors.New("invalid object name")
-    }
-    fi, err := os.Stat(clean)
-    if err != nil {
-        return minio.ObjectInfo{}, err
-    }
-    return minio.ObjectInfo{Key: objectName, Size: fi.Size()}, nil
+	_ = ctx
+	_ = opts
+	dir := f.base
+	if bucketName != "" {
+		dir = filepath.Join(dir, bucketName)
+	}
+	base := filepath.Clean(dir)
+	fp := filepath.Join(base, objectName)
+	clean := filepath.Clean(fp)
+	if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
+		return minio.ObjectInfo{}, errors.New("invalid object name")
+	}
+	fi, err := os.Stat(clean)
+	if err != nil {
+		return minio.ObjectInfo{}, err
+	}
+	return minio.ObjectInfo{Key: objectName, Size: fi.Size()}, nil
 }
 
 type App struct {
@@ -532,6 +532,10 @@ func (a *App) routes() {
 	auth.GET("/users/:id/roles", a.requireRole("admin"), a.listUserRoles)
 	auth.POST("/users/:id/roles", a.requireRole("admin"), a.addUserRole)
 	auth.DELETE("/users/:id/roles/:role", a.requireRole("admin"), a.removeUserRole)
+
+	auth.GET("/requesters/:id", a.getRequester)
+	auth.POST("/requesters", a.requireRole("agent", "manager"), a.createRequester)
+	auth.PATCH("/requesters/:id", a.requireRole("agent", "manager"), a.updateRequester)
 
 	// Tickets
 	auth.GET("/tickets", a.listTickets)
@@ -1039,6 +1043,12 @@ type Comment struct {
 	BodyMD     string    `json:"body_md"`
 	IsInternal bool      `json:"is_internal"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+type Requester struct {
+	ID          string `json:"id"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
 }
 
 // ===== Handlers =====
@@ -1603,28 +1613,28 @@ type finalizeReq struct {
 }
 
 func (a *App) finalizeAttachment(c *gin.Context) {
-    if a.m == nil {
-        c.JSON(500, gin.H{"error": "minio not configured"})
-        return
-    }
-    ticketID := c.Param("id")
-    u := c.MustGet("user").(AuthUser)
-    var in finalizeReq
-    if err := c.ShouldBindJSON(&in); err != nil {
-        c.JSON(400, gin.H{"error": err.Error()})
-        return
-    }
-    // Validate that the attachment ID is a UUID to prevent path traversal
-    if _, err := uuid.Parse(strings.TrimSpace(in.AttachmentID)); err != nil {
-        c.JSON(400, gin.H{"error": "invalid attachment_id"})
-        return
-    }
-    ctx := c.Request.Context()
-    info, err := a.m.StatObject(ctx, a.cfg.MinIOBucket, in.AttachmentID, minio.StatObjectOptions{})
-    if err != nil || info.Size != in.Bytes {
-        c.JSON(400, gin.H{"error": "upload incomplete"})
-        return
-    }
+	if a.m == nil {
+		c.JSON(500, gin.H{"error": "minio not configured"})
+		return
+	}
+	ticketID := c.Param("id")
+	u := c.MustGet("user").(AuthUser)
+	var in finalizeReq
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	// Validate that the attachment ID is a UUID to prevent path traversal
+	if _, err := uuid.Parse(strings.TrimSpace(in.AttachmentID)); err != nil {
+		c.JSON(400, gin.H{"error": "invalid attachment_id"})
+		return
+	}
+	ctx := c.Request.Context()
+	info, err := a.m.StatObject(ctx, a.cfg.MinIOBucket, in.AttachmentID, minio.StatObjectOptions{})
+	if err != nil || info.Size != in.Bytes {
+		c.JSON(400, gin.H{"error": "upload incomplete"})
+		return
+	}
 	_, err = a.db.Exec(ctx, `insert into attachments (id, ticket_id, uploader_id, object_key, filename, bytes, mime) values ($1,$2,$3,$4,$5,$6,$7)`,
 		in.AttachmentID, ticketID, u.ID, in.AttachmentID, in.Filename, in.Bytes, in.Mime)
 	if err != nil {
@@ -1687,28 +1697,28 @@ func (a *App) getAttachment(c *gin.Context) {
 		}
 	}
 	// Serve from filesystem store when configured
-    if a.cfg.FileStorePath != "" {
-        dir := a.cfg.FileStorePath
-        if a.cfg.MinIOBucket != "" {
-            dir = filepath.Join(dir, a.cfg.MinIOBucket)
-        }
-        // Safely join and ensure the final path stays within the base directory
-        base := filepath.Clean(dir)
-        fp := filepath.Join(base, objectKey)
-        clean := filepath.Clean(fp)
-        if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
-            c.JSON(404, gin.H{"error": "not found"})
-            return
-        }
-        if mime != nil && *mime != "" {
-            c.Header("Content-Type", *mime)
-        } else {
-            c.Header("Content-Type", "application/octet-stream")
-        }
-        c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-        c.File(clean)
-        return
-    }
+	if a.cfg.FileStorePath != "" {
+		dir := a.cfg.FileStorePath
+		if a.cfg.MinIOBucket != "" {
+			dir = filepath.Join(dir, a.cfg.MinIOBucket)
+		}
+		// Safely join and ensure the final path stays within the base directory
+		base := filepath.Clean(dir)
+		fp := filepath.Join(base, objectKey)
+		clean := filepath.Clean(fp)
+		if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
+			c.JSON(404, gin.H{"error": "not found"})
+			return
+		}
+		if mime != nil && *mime != "" {
+			c.Header("Content-Type", *mime)
+		} else {
+			c.Header("Content-Type", "application/octet-stream")
+		}
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		c.File(clean)
+		return
+	}
 	c.JSON(500, gin.H{"error": "object store not configured"})
 }
 
@@ -1736,6 +1746,63 @@ func (a *App) deleteAttachment(c *gin.Context) {
 	a.audit(c, "user", u.ID, "ticket", ticketID, "attachment_delete", gin.H{"attachment_id": attID})
 	a.recordTicketEvent(ctx, ticketID, "attachment_delete", u.ID, gin.H{"attachment_id": attID})
 	c.JSON(200, gin.H{"ok": true})
+}
+
+// ===== Requesters =====
+type createRequesterReq struct {
+	Email       string `json:"email" binding:"required,email"`
+	DisplayName string `json:"display_name" binding:"required"`
+}
+
+type updateRequesterReq struct {
+	Email       *string `json:"email" binding:"omitempty,email"`
+	DisplayName *string `json:"display_name"`
+}
+
+func (a *App) createRequester(c *gin.Context) {
+	var in createRequesterReq
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	ctx := c.Request.Context()
+	var id string
+	err := a.db.QueryRow(ctx, `insert into users (id, email, display_name) values (gen_random_uuid(), $1, $2) returning id`, in.Email, in.DisplayName).Scan(&id)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	_, _ = a.db.Exec(ctx, `insert into user_roles (user_id, role_id) select $1, id from roles where name='requester' on conflict do nothing`, id)
+	c.JSON(201, Requester{ID: id, Email: in.Email, DisplayName: in.DisplayName})
+}
+
+func (a *App) getRequester(c *gin.Context) {
+	id := c.Param("id")
+	ctx := c.Request.Context()
+	var out Requester
+	err := a.db.QueryRow(ctx, `select id, coalesce(email,''), coalesce(display_name,'') from users where id=$1`, id).Scan(&out.ID, &out.Email, &out.DisplayName)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(200, out)
+}
+
+func (a *App) updateRequester(c *gin.Context) {
+	id := c.Param("id")
+	var in updateRequesterReq
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	ctx := c.Request.Context()
+	var out Requester
+	err := a.db.QueryRow(ctx, `update users set email=coalesce($1,email), display_name=coalesce($2,display_name), updated_at=now() where id=$3 returning id, coalesce(email,''), coalesce(display_name,'')`, in.Email, in.DisplayName, id).Scan(&out.ID, &out.Email, &out.DisplayName)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, out)
 }
 
 // ===== Watchers =====

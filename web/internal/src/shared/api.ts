@@ -15,6 +15,33 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 export type Ticket = components['schemas']['Ticket'];
 export type Comment = components['schemas']['Comment'];
 export type Attachment = components['schemas']['Attachment'];
+export type Requester = components['schemas']['Requester'];
+
+export async function fetchRequester(id: string): Promise<Requester> {
+  return apiFetch<Requester>(`/requesters/${id}`);
+}
+
+export async function createRequester(data: {
+  email: string;
+  display_name: string;
+}): Promise<Requester> {
+  return apiFetch<Requester>('/requesters', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateRequester(
+  id: string,
+  data: { email?: string; display_name?: string },
+): Promise<Requester> {
+  return apiFetch<Requester>(`/requesters/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
 
 
 export async function createTicket(data: {
