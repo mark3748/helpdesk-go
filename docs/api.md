@@ -43,7 +43,8 @@ Comments
 
 Attachments
 - GET `/tickets/:id/attachments` → 200 `[{ id, filename, bytes, mime, created_at }]` | 500
-- POST `/tickets/:id/attachments` multipart field `file` → 201 `{ id }` | 400 | 500
+- POST `/tickets/:id/attachments/presign` `{ filename, bytes, mime? }` → 201 `{ upload_url, headers, attachment_id }` | 400 | 500
+- POST `/tickets/:id/attachments` `{ attachment_id, filename, bytes, mime? }` → 201 `{ id }` | 400 | 500
 - DELETE `/tickets/:id/attachments/:attID` → 200 `{ ok:true }` | 404 | 500
 
 Watchers

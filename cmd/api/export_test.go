@@ -1,15 +1,17 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5"
@@ -34,11 +36,20 @@ func newFakeObjectStore() *fakeObjectStore {
 			return
 		}
 		key := parts[1]
-		if b, ok := fos.objects[key]; ok {
-			_, _ = w.Write(b)
-			return
+		switch r.Method {
+		case http.MethodPut:
+			b, _ := io.ReadAll(r.Body)
+			fos.objects[key] = b
+			w.WriteHeader(http.StatusOK)
+		case http.MethodGet:
+			if b, ok := fos.objects[key]; ok {
+				_, _ = w.Write(b)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
-		w.WriteHeader(http.StatusNotFound)
 	})
 	fos.srv = httptest.NewServer(mux)
 	return fos
@@ -56,6 +67,23 @@ func (f *fakeObjectStore) PutObject(ctx context.Context, bucketName, objectName 
 func (f *fakeObjectStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
 	delete(f.objects, objectName)
 	return nil
+}
+
+func (f *fakeObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
+	_ = ctx
+	_ = expiry
+	u, _ := url.Parse(f.srv.URL + "/" + bucketName + "/" + objectName)
+	return u, nil
+}
+
+func (f *fakeObjectStore) StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error) {
+	_ = ctx
+	_ = opts
+	b, ok := f.objects[objectName]
+	if !ok {
+		return minio.ObjectInfo{}, errors.New("not found")
+	}
+	return minio.ObjectInfo{Key: objectName, Size: int64(len(b))}, nil
 }
 
 func (f *fakeObjectStore) URL() string { return f.srv.URL }
@@ -219,23 +247,43 @@ func TestAttachmentEventsRecorded(t *testing.T) {
 	cfg := Config{Env: "test", TestBypassAuth: true, MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
 	app := NewApp(cfg, db, nil, store, nil)
 
-	// upload attachment
-	buf := &bytes.Buffer{}
-	mw := multipart.NewWriter(buf)
-	fw, _ := mw.CreateFormFile("file", "test.txt")
-	_, _ = fw.Write([]byte("hello"))
-	_ = mw.Close()
+	// presign
+	body := `{"filename":"test.txt","bytes":5,"mime":"text/plain"}`
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/tickets/1/attachments", buf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req := httptest.NewRequest(http.MethodPost, "/tickets/1/attachments/presign", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	app.r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", rr.Code)
 	}
+	var ps map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &ps); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	uploadURL := ps["upload_url"].(string)
+	attID := ps["attachment_id"].(string)
+
+	// upload to object store
+	reqUpload, _ := http.NewRequest(http.MethodPut, uploadURL, strings.NewReader("hello"))
+	resUpload, err := http.DefaultClient.Do(reqUpload)
+	if err != nil || resUpload.StatusCode != http.StatusOK {
+		t.Fatalf("upload failed: %v status=%d", err, resUpload.StatusCode)
+	}
+	_ = resUpload.Body.Close()
+
+	// finalize
+	finBody := fmt.Sprintf(`{"attachment_id":"%s","filename":"test.txt","bytes":5,"mime":"text/plain"}`, attID)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/tickets/1/attachments", strings.NewReader(finBody))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rr.Code, rr.Body.String())
+	}
 
 	// delete attachment
 	rr = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodDelete, "/tickets/1/attachments/obj123", nil)
+	req = httptest.NewRequest(http.MethodDelete, "/tickets/1/attachments/"+attID, nil)
 	app.r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)

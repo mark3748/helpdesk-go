@@ -36,6 +36,8 @@ export default function TicketDetail() {
     refetchInterval: connected ? false : 5000,
   });
 
+  const [pendingAtts, setPendingAtts] = useState<{ filename: string; bytes: number }[]>([]);
+
   useEffect(() => {
     const sub = subscribeEvents(setConnected);
     const off = sub.on('ticket_updated', (ev: AppEvent) => {
@@ -66,13 +68,17 @@ export default function TicketDetail() {
     showUploadList: false,
     customRequest: async ({ file, onProgress, onSuccess, onError }) => {
       try {
-        await uploadAttachment(id, file as File, {
+        const f = file as File;
+        setPendingAtts((p) => [...p, { filename: f.name, bytes: f.size }]);
+        await uploadAttachment(id, f, {
           onProgress: (e) => onProgress?.({ percent: e.percent }),
         });
         onSuccess?.({});
         attachments.refetch();
       } catch (err) {
         onError?.(err as Error);
+      } finally {
+        setPendingAtts((p) => p.filter((a) => a.filename !== (file as File).name));
       }
     },
   };
@@ -101,24 +107,34 @@ export default function TicketDetail() {
       </Upload>
       <List
         header="Attachments"
-        dataSource={attachments.data || []}
+        dataSource={[
+          ...pendingAtts.map((a) => ({ ...a, id: `pending-${a.filename}`, pending: true })),
+          ...(attachments.data || []),
+        ]}
         renderItem={(a: any) => (
           <List.Item
             key={String(a.id)}
-            actions={[
-              <a key="dl" onClick={() => downloadAttachment(id, String(a.id))}>Download</a>,
-              <a
-                key="del"
-                onClick={async () => {
-                  await deleteAttachment(id, String(a.id));
-                  attachments.refetch();
-                }}
-              >
-                Delete
-              </a>,
-            ]}
+            actions={
+              a.pending
+                ? undefined
+                : [
+                    <a key="dl" onClick={() => downloadAttachment(id, String(a.id))}>Download</a>,
+                    <a
+                      key="del"
+                      onClick={async () => {
+                        await deleteAttachment(id, String(a.id));
+                        attachments.refetch();
+                      }}
+                    >
+                      Delete
+                    </a>,
+                  ]
+            }
           >
-            {String(a.filename)} ({((a.bytes || 0) / 1024).toFixed(1)} KB)
+            {String(a.filename)}
+            {a.pending
+              ? ' (uploading...)'
+              : ` (${((a.bytes || 0) / 1024).toFixed(1)} KB)`}
           </List.Item>
         )}
         style={{ marginTop: 16 }}
