@@ -50,12 +50,12 @@ func Events(rdb *redis.Client) gin.HandlerFunc {
 }
 
 func events(rdb *redis.Client, hbInterval time.Duration, chSize int) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        uVal, ok := c.Get("user")
-        if !ok {
-            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
-            return
-        }
+	return func(c *gin.Context) {
+		uVal, ok := c.Get("user")
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+			return
+		}
 		user, ok := uVal.(RoleUser)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid user"})
@@ -71,14 +71,14 @@ func events(rdb *redis.Client, hbInterval time.Duration, chSize int) gin.Handler
 			return
 		}
 
-        ctx := c.Request.Context()
-        var ch <-chan *redis.Message
-        var sub *redis.PubSub
-        if rdb != nil {
-            sub = rdb.Subscribe(ctx, "events")
-            ch = sub.ChannelSize(chSize)
-            defer sub.Close()
-        }
+		ctx := c.Request.Context()
+		var ch <-chan *redis.Message
+		var sub *redis.PubSub
+		if rdb != nil {
+			sub = rdb.Subscribe(ctx, "events")
+			ch = sub.ChannelSize(chSize)
+			defer sub.Close()
+		}
 
 		ticker := time.NewTicker(hbInterval)
 		defer ticker.Stop()
@@ -96,26 +96,25 @@ func events(rdb *redis.Client, hbInterval time.Duration, chSize int) gin.Handler
 			case <-ticker.C:
 				fmt.Fprint(c.Writer, ":hb\n\n")
 				flusher.Flush()
-            case msg, ok := <-ch:
-                if rdb == nil || !ok || msg == nil {
-                    // No broker available; keep heartbeating only
-                    continue
-                }
-                var ev Event
-                if err := json.Unmarshal([]byte(msg.Payload), &ev); err != nil {
-                    continue
-                }
-                if ev.Type == "queue_changed" && !isAdmin {
-                    continue
-                }
-                fmt.Fprintf(c.Writer, "event: %s\n", ev.Type)
-                fmt.Fprintf(c.Writer, "data: %s\n\n", msg.Payload)
-                flusher.Flush()
-        }
-    }
+			case msg, ok := <-ch:
+				if rdb == nil || !ok || msg == nil {
+					// No broker available; keep heartbeating only
+					continue
+				}
+				var ev Event
+				if err := json.Unmarshal([]byte(msg.Payload), &ev); err != nil {
+					continue
+				}
+				if ev.Type == "queue_changed" && !isAdmin {
+					continue
+				}
+				fmt.Fprintf(c.Writer, "event: %s\n", ev.Type)
+				fmt.Fprintf(c.Writer, "data: %s\n\n", msg.Payload)
+				flusher.Flush()
+			}
+		}
+	}
 }
-}
-
 func hasRole(roles []string, role string) bool {
 	for _, r := range roles {
 		if r == role {

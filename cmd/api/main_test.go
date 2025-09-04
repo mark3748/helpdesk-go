@@ -18,6 +18,7 @@ import (
     "github.com/jackc/pgx/v5/pgconn"
     appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
     handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+    authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
     "github.com/minio/minio-go/v7"
     "github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -265,13 +266,12 @@ func TestMe_NoBypass_NoJWKS(t *testing.T) {
 }
 
 func TestRequireRoleMultiple(t *testing.T) {
-	app := NewApp(Config{Env: "test"}, nil, nil, nil, nil)
-	handler := app.requireRole("agent", "manager")
+    handler := authpkg.RequireRole("agent", "manager")
 
 	t.Run("allowed role", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		c.Set("user", AuthUser{Roles: []string{"manager"}})
+        c.Set("user", authpkg.AuthUser{Roles: []string{"manager"}})
 		handler(c)
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d", w.Code)
@@ -281,7 +281,7 @@ func TestRequireRoleMultiple(t *testing.T) {
 	t.Run("forbidden role", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		c.Set("user", AuthUser{Roles: []string{"user"}})
+        c.Set("user", authpkg.AuthUser{Roles: []string{"user"}})
 		handler(c)
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d", w.Code)
@@ -464,18 +464,18 @@ func TestListTickets(t *testing.T) {
 			wantSQLParts: []string{"t.status = $1", "t.priority = $2"},
 			wantArgs:     []any{"open", 1},
 		},
-		{
-			name:         "with cursor (timestamp only)",
-			url:          "/tickets?cursor=2024-01-02T03:04:05Z",
-			wantSQLParts: []string{"t.created_at <= $1"},
-			wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
-		},
-		{
-			name:         "with composite cursor",
-			url:          "/tickets?cursor=2024-01-02T03:04:05Z|abc123",
-			wantSQLParts: []string{"(t.created_at < $1 OR (t.created_at = $1 AND t.id < $2))"},
-			wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC), "abc123"},
-		},
+        {
+            name:         "with cursor (timestamp only)",
+            url:          "/tickets?cursor=2024-01-02T03:04:05Z",
+            wantSQLParts: []string{"t.created_at <= $1"},
+            wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
+        },
+        {
+            name:         "with composite cursor",
+            url:          "/tickets?cursor=2024-01-02T03:04:05Z|abc123",
+            wantSQLParts: []string{"(t.created_at < $1 OR (t.created_at = $1 AND t.id < $2))"},
+            wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC), "abc123"},
+        },
 	}
 
 	for _, tc := range cases {

@@ -6,10 +6,16 @@ Track and check off pending improvements. Items are grouped by priority and refe
 
 - [x] Harden filesystem object store to prevent path traversal in `cmd/api/app/app.go` (`FsObjectStore`). Align with safe path cleaning/prefix checks used in `cmd/api/main.go`’s `fsObjectStore`.
 - [x] Fix `internal/sla/sla.go` DB loader bug (variable shadowing: `rows` vs `hrows`, incorrect defer). Add a unit test to cover holiday loading and ensure both query cursors close correctly.
-- [ ] Unify duplicated API composition: consolidate config, app wiring, and object store between `cmd/api/main.go` and modular packages (`cmd/api/app`, `cmd/api/auth`, feature handlers). Make `main.go` a thin bootstrapper.
+- [x] Unify duplicated API composition: consolidate config, app wiring, and object store between `cmd/api/main.go` and modular packages (`cmd/api/app`, `cmd/api/auth`, feature handlers). Make `main.go` a thin bootstrapper.
 - [x] Strengthen JWT/OIDC validation in `cmd/api/auth`: verify issuer (when configured) and enforce allowed signing algorithms; standard time-based claims validated by parser. Follow-up: audience config and clock skew.
 - [x] Consolidate login cookie handling: prefer single `hd_auth` cookie with `HttpOnly`, `SameSite=Lax`, and `Secure` in prod; remove legacy `auth` cookie.
-- [ ] Ensure `cmd/api/handlers/events.go` compiles cleanly (brace/structure sanity) and matches tests; keep heartbeat/backpressure behavior intact.
+- [x] Ensure `cmd/api/handlers/events.go` compiles cleanly (brace/structure sanity) and matches tests; keep heartbeat/backpressure behavior intact.
+
+Additional completions
+
+- [x] Attachments: implement presign/finalize and internal upload flow in `cmd/api/attachments` and rewire routes; preserve MinIO redirect and filesystem serving; block traversal.
+- [x] Tickets/Comments/Watchers/Metrics/Exports: rewire routes to modular handlers; remove legacy duplicates from `main.go`.
+- [x] Auth: switch to `cmd/api/auth` middleware and role checks; remove legacy main auth handlers.
 - [x] Align Go versions across codebase: `go.mod`, Dockerfiles, and CI (`.github/workflows/ci.yml`) to a single supported version.
 
 ## Medium Priority

@@ -28,6 +28,10 @@ type Config struct {
 	OIDCIssuer     string
 	JWKSURL        string
 	OIDCGroupClaim string
+	// Optional audience validation for OIDC tokens
+	OIDCAudience       string
+	// Optional leeway for JWT time-based claims validation
+	JWTClockSkewSeconds int
 	MinIOEndpoint  string
 	MinIOAccess    string
 	MinIOSecret    string
@@ -65,6 +69,7 @@ func GetConfig() Config {
 		OIDCIssuer:      GetEnv("OIDC_ISSUER", ""),
 		JWKSURL:         GetEnv("OIDC_JWKS_URL", ""),
 		OIDCGroupClaim:  GetEnv("OIDC_GROUP_CLAIM", "groups"),
+		OIDCAudience:    GetEnv("OIDC_AUDIENCE", ""),
 		MinIOEndpoint:   GetEnv("MINIO_ENDPOINT", ""),
 		MinIOAccess:     GetEnv("MINIO_ACCESS_KEY", ""),
 		MinIOSecret:     GetEnv("MINIO_SECRET_KEY", ""),
@@ -83,6 +88,9 @@ func GetConfig() Config {
 	}
 	if v, err := strconv.Atoi(GetEnv("RATE_LIMIT_BURST", "0")); err == nil {
 		cfg.RateLimitBurst = v
+	}
+	if v, err := strconv.Atoi(GetEnv("JWT_CLOCK_SKEW_SECONDS", "0")); err == nil {
+		cfg.JWTClockSkewSeconds = v
 	}
 	return cfg
 }
