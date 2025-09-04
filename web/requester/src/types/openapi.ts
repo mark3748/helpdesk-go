@@ -3,1370 +3,1033 @@
  * Do not make direct changes to the file.
  */
 
+
 export interface paths {
-    "/healthz": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  "/livez": {
+    /** Liveness check */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
         };
-        /** Health check */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            ok?: boolean;
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
     };
-    "/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/readyz": {
+    /** Readiness check */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
         };
-        get?: never;
-        put?: never;
-        /**
-         * Login (local mode)
-         * @description Enabled only when `AUTH_MODE=local`.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        username: string;
-                        password: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Unauthorized */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+        /** @description Dependency failure */
+        500: {
+          content: never;
         };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
     };
-    "/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Logout (local mode) */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
+  };
+  "/healthz": {
+    /** Health check */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              ok?: boolean;
             };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+          };
         };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
     };
-    "/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/login": {
+    /**
+     * Login (local mode)
+     * @description Enabled only when `AUTH_MODE=local`.
+     */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": {
+            username: string;
+            password: string;
+          };
         };
-        /** Current user */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["AuthUser"];
-                    };
-                };
-                /** @description Unauthorized */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
         };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Unauthorized */
+        401: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
     };
-    "/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/logout": {
+    /** Logout (local mode) */
+    post: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
         };
-        /**
-         * Event stream
-         * @description Server-sent events for ticket and queue updates.
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/event-stream": components["schemas"]["EventEnvelope"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
     };
-    "/users/{id}/roles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/me": {
+    /** Current user */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AuthUser"];
+          };
         };
-        /** List roles for a user */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": string[];
-                    };
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+        /** @description Unauthorized */
+        401: {
+          content: never;
         };
-        put?: never;
-        /** Add role to a user */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["RoleRequest"];
-                };
-            };
-            responses: {
-                /** @description Created */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
     };
-    "/users/{id}/roles/{role}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/events": {
+    /**
+     * Event stream
+     * @description Server-sent events for ticket and queue updates. Heartbeat comments (`:hb`) are sent about every 30s.
+     */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "text/event-stream": string;
+          };
         };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove role from a user */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                    role: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
     };
-    "/tickets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/users/{id}/roles": {
+    /** List roles for a user */
+    get: {
+      parameters: {
+        path: {
+          id: string;
         };
-        /** List tickets */
-        get: {
-            parameters: {
-                query?: {
-                    status?: string;
-                    priority?: number;
-                    team?: string;
-                    assignee?: string;
-                    requester?: string;
-                    queue?: string;
-                    search?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Ticket"][];
-                    };
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": string[];
+          };
         };
-        put?: never;
-        /** Create ticket */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["CreateTicketRequest"];
-                };
-            };
-            responses: {
-                /** @description Created */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            /** Format: uuid */
-                            id?: string;
-                            number?: string;
-                            status?: string;
-                        };
-                    };
-                };
-                /** @description Validation error */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["ValidationError"];
-                    };
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+        /** @description Server Error */
+        500: {
+          content: never;
         };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
     };
-    "/tickets/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    /** Add role to a user */
+    post: {
+      parameters: {
+        path: {
+          id: string;
         };
-        /** Get ticket */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Ticket"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RoleRequest"];
         };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Update ticket
-         * @description Requires `agent` role.
-         */
-        patch: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["UpdateTicketRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          content: never;
         };
-        trace?: never;
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
     };
-    "/tickets/{id}/comments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/users/{id}/roles/{role}": {
+    /** Remove role from a user */
+    delete: {
+      parameters: {
+        path: {
+          id: string;
+          role: string;
         };
-        /** List public comments */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Comment"][];
-                    };
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
         };
-        put?: never;
-        /** Add comment */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["CommentRequest"];
-                };
-            };
-            responses: {
-                /** @description Created */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            /** Format: uuid */
-                            id?: string;
-                        };
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+        /** @description Server Error */
+        500: {
+          content: never;
         };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
     };
-    "/tickets/{id}/attachments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/requesters": {
+    /** Create requester */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateRequesterRequest"];
         };
-        /** List attachments */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["Attachment"][];
-                    };
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          content: {
+            "application/json": components["schemas"]["Requester"];
+          };
         };
-        put?: never;
-        /** Upload attachment */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "multipart/form-data": {
-                        /** Format: binary */
-                        file?: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description Created */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            /** Format: uuid */
-                            id?: string;
-                        };
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+        /** @description Bad Request */
+        400: {
+          content: never;
         };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
     };
-    "/tickets/{id}/attachments/{attID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/requesters/{id}": {
+    /** Get requester */
+    get: {
+      parameters: {
+        path: {
+          id: string;
         };
-        /** Download attachment */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                    attID: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description File content */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/octet-stream": string;
-                    };
-                };
-                /** @description Redirect to object storage */
-                302: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Requester"];
+          };
         };
-        put?: never;
-        post?: never;
-        /** Delete attachment */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                    attID: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+        /** @description Not Found */
+        404: {
+          content: never;
         };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
     };
-    "/tickets/{id}/watchers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    /** Update requester */
+    patch: {
+      parameters: {
+        path: {
+          id: string;
         };
-        /** List watcher user IDs */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": string[];
-                    };
-                };
-            };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["UpdateRequesterRequest"];
         };
-        put?: never;
-        /** Add watcher */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["WatcherRequest"];
-                };
-            };
-            responses: {
-                /** @description Created */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Requester"];
+          };
         };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
     };
-    "/tickets/{id}/watchers/{userID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/tickets": {
+    /** List tickets */
+    get: {
+      parameters: {
+        query?: {
+          status?: string;
+          priority?: number;
+          team?: string;
+          assignee?: string;
+          search?: string;
+          /**
+           * @description Pagination cursor. Accepts either:
+           * - A timestamp in RFC3339/RFC3339Nano (legacy form), or
+           * - A composite value "<RFC3339Nano>|<id>" returned by the API, which
+           *   prevents skipping items when multiple rows share the same timestamp.
+           */
+          cursor?: string;
         };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove watcher */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                    userID: string;
-                };
-                cookie?: never;
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              items?: components["schemas"]["Ticket"][];
+              /**
+               * @description Composite cursor of the form "<RFC3339Nano>|<id>" for stable keyset pagination.
+               * @example 2024-01-02T03:04:05.123456Z|00000000-0000-0000-0000-000000000123
+               */
+              next_cursor?: string;
             };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+          };
         };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
     };
-    "/csat/{token}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    /** Create ticket */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateTicketRequest"];
         };
-        /**
-         * Submit CSAT score
-         * @description Public endpoint embedded in emails.
-         */
-        get: {
-            parameters: {
-                query: {
-                    score: "good" | "bad";
-                };
-                header?: never;
-                path: {
-                    token: string;
-                };
-                cookie?: never;
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          content: {
+            "application/json": {
+              /** Format: uuid */
+              id?: string;
+              number?: string;
+              status?: string;
             };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Invalid score */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Invalid token */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+          };
         };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+        /** @description Validation error */
+        400: {
+          content: {
+            "application/json": components["schemas"]["ValidationError"];
+          };
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
     };
-    "/metrics/sla": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/tickets/{id}": {
+    /** Get ticket */
+    get: {
+      parameters: {
+        path: {
+          id: string;
         };
-        /**
-         * SLA attainment
-         * @description Requires `agent` role.
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            total?: number;
-                            met?: number;
-                            sla_attainment?: number;
-                        };
-                    };
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Ticket"];
+          };
         };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+      };
     };
-    "/metrics/resolution": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    /**
+     * Update ticket
+     * @description Requires `agent` role.
+     */
+    patch: {
+      parameters: {
+        path: {
+          id: string;
         };
-        /**
-         * Average resolution time
-         * @description Requires `agent` role.
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            avg_resolution_ms?: number;
-                        };
-                    };
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["UpdateTicketRequest"];
         };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
     };
-    "/metrics/tickets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+  };
+  "/tickets/{id}/comments": {
+    /** List public comments */
+    get: {
+      parameters: {
+        path: {
+          id: string;
         };
-        /**
-         * Ticket volume per day (30)
-         * @description Requires `agent` role.
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            daily?: {
-                                /** Format: date */
-                                day?: string;
-                                count?: number;
-                            }[];
-                        };
-                    };
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Comment"][];
+          };
         };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
     };
-    "/exports/tickets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    /** Add comment */
+    post: {
+      parameters: {
+        path: {
+          id: string;
         };
-        get?: never;
-        put?: never;
-        /**
-         * Export tickets to CSV
-         * @description Requires object store configuration. Requires `agent` role.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["ExportTicketsRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            /** Format: uri */
-                            url?: string;
-                        };
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CommentRequest"];
         };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          content: {
+            "application/json": {
+              /** Format: uuid */
+              id?: string;
+            };
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
     };
-}
-export type webhooks = Record<string, never>;
-export interface components {
-    schemas: {
-        AuthUser: {
-            /** Format: uuid */
-            id?: string;
-            external_id?: string;
-            /** Format: email */
-            email?: string;
-            display_name?: string;
-            roles?: string[];
+  };
+  "/tickets/{id}/attachments": {
+    /** List attachments */
+    get: {
+      parameters: {
+        path: {
+          id: string;
         };
-        Ticket: {
-            /** Format: uuid */
-            id?: string;
-            number?: string;
-            title?: string;
-            description?: string;
-            /** Format: uuid */
-            requester_id?: string;
-            /** Format: uuid */
-            assignee_id?: string | null;
-            /** Format: uuid */
-            team_id?: string | null;
-            /** Format: uuid */
-            queue_id?: string | null;
-            priority?: number;
-            urgency?: number | null;
-            category?: string | null;
-            subcategory?: string | null;
-            status?: string;
-            /** Format: date-time */
-            scheduled_at?: string | null;
-            /** Format: date-time */
-            due_at?: string | null;
-            source?: string;
-            custom_json?: Record<string, never>;
-            /** Format: date-time */
-            created_at?: string;
-            /** Format: date-time */
-            updated_at?: string;
-            sla?: components["schemas"]["SLAStatus"];
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Attachment"][];
+          };
         };
-        SLAStatus: {
-            /** Format: uuid */
-            policy_id?: string;
-            response_elapsed_ms?: number;
-            resolution_elapsed_ms?: number;
-            response_target_mins?: number;
-            resolution_target_mins?: number;
-            paused?: boolean;
-            reason?: string | null;
+        /** @description Server Error */
+        500: {
+          content: never;
         };
-        Comment: {
-            /** Format: uuid */
-            id?: string;
-            /** Format: uuid */
-            ticket_id?: string;
-            /** Format: uuid */
-            author_id?: string;
-            body_md?: string;
-            is_internal?: boolean;
-            /** Format: date-time */
-            created_at?: string;
+      };
+    };
+    /** Finalize attachment */
+    post: {
+      parameters: {
+        path: {
+          id: string;
         };
-        Attachment: {
+      };
+      requestBody: {
+        content: {
+          "application/json": {
             /** Format: uuid */
-            id?: string;
-            filename?: string;
-            /** Format: int64 */
-            bytes?: number;
-            mime?: string | null;
-            /** Format: date-time */
-            created_at?: string;
-        };
-        CreateTicketRequest: {
-            title: string;
-            description?: string;
-            /** Format: uuid */
-            requester_id: string;
-            priority: number;
-            urgency?: number;
-            category?: string;
-            subcategory?: string;
-            /** Format: uuid */
-            assignee_id?: string;
-            /** Format: uuid */
-            queue_id?: string;
-            custom_json?: Record<string, never>;
-        };
-        UpdateTicketRequest: {
-            status?: string;
-            /** Format: uuid */
-            assignee_id?: string;
-            priority?: number;
-            urgency?: number;
-            /** Format: date-time */
-            scheduled_at?: string;
-            /** Format: date-time */
-            due_at?: string;
-            custom_json?: Record<string, never>;
-        };
-        CommentRequest: {
-            body_md: string;
-            is_internal?: boolean;
-            /** Format: uuid */
-            author_id?: string;
-        };
-        WatcherRequest: {
-            /** Format: uuid */
-            user_id: string;
-        };
-        RoleRequest: {
-            role: string;
-        };
-        ExportTicketsRequest: {
-            ids: string[];
-        };
-        ValidationError: {
-            errors?: {
-                [key: string]: string;
-            };
-        };
-        Requester: {
-            /** Format: uuid */
-            id?: string;
-            /** Format: email */
-            email?: string;
-            name?: string;
-        };
-        Queue: {
-            /** Format: uuid */
-            id?: string;
-            name?: string;
-        };
-        EventEnvelope: {
-            type?: string;
-            data?: Record<string, never>;
-        };
-        PresignRequest: {
+            attachment_id: string;
             filename: string;
-            content_type?: string;
+            /** Format: int64 */
+            bytes: number;
+            mime?: string;
+          };
         };
-        PresignResponse: {
-            url?: string;
-            fields?: {
-                [key: string]: string;
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          content: {
+            "application/json": {
+              /** Format: uuid */
+              id?: string;
             };
+          };
         };
-        OIDCSettings: {
-            issuer?: string;
-            client_id?: string;
-            scopes?: string[];
+        /** @description Bad Request */
+        400: {
+          content: never;
         };
-        MailSettings: {
-            smtp_host?: string;
-            imap_host?: string;
-            from?: string;
+        /** @description Server Error */
+        500: {
+          content: never;
         };
-        Error: {
-            error?: string;
-        };
+      };
     };
-    responses: never;
-    parameters: never;
-    requestBodies: never;
-    headers: never;
-    pathItems: never;
+  };
+  "/tickets/{id}/attachments/presign": {
+    /** Presign attachment upload */
+    post: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": {
+            filename: string;
+            /** Format: int64 */
+            bytes: number;
+            mime?: string;
+          };
+        };
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          content: {
+            "application/json": {
+              upload_url?: string;
+              headers?: {
+                [key: string]: string;
+              };
+              /** Format: uuid */
+              attachment_id?: string;
+            };
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/tickets/{id}/attachments/{attID}": {
+    /** Download attachment */
+    get: {
+      parameters: {
+        path: {
+          id: string;
+          attID: string;
+        };
+      };
+      responses: {
+        /** @description File content */
+        200: {
+          content: {
+            "application/octet-stream": string;
+          };
+        };
+        /** @description Redirect to object storage */
+        302: {
+          content: never;
+        };
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+    /** Delete attachment */
+    delete: {
+      parameters: {
+        path: {
+          id: string;
+          attID: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
+        };
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/tickets/{id}/watchers": {
+    /** List watcher user IDs */
+    get: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": string[];
+          };
+        };
+      };
+    };
+    /** Add watcher */
+    post: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["WatcherRequest"];
+        };
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          content: never;
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/tickets/{id}/watchers/{userID}": {
+    /** Remove watcher */
+    delete: {
+      parameters: {
+        path: {
+          id: string;
+          userID: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/csat/{token}": {
+    /**
+     * CSAT form
+     * @description Public endpoint embedded in emails.
+     */
+    get: {
+      parameters: {
+        path: {
+          token: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "text/html": string;
+          };
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+    /**
+     * Submit CSAT score
+     * @description Public endpoint embedded in emails.
+     */
+    post: {
+      parameters: {
+        path: {
+          token: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/x-www-form-urlencoded": {
+            /** @enum {string} */
+            score: "good" | "bad";
+          };
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
+        };
+        /** @description Invalid score */
+        400: {
+          content: never;
+        };
+        /** @description Invalid token */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/metrics/sla": {
+    /**
+     * SLA attainment
+     * @description Requires `agent` role.
+     */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              total?: number;
+              met?: number;
+              sla_attainment?: number;
+            };
+          };
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/metrics/resolution": {
+    /**
+     * Average resolution time
+     * @description Requires `agent` role.
+     */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              avg_resolution_ms?: number;
+            };
+          };
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/metrics/tickets": {
+    /**
+     * Ticket volume per day (30)
+     * @description Requires `agent` role.
+     */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              daily?: {
+                  /** Format: date */
+                  day?: string;
+                  count?: number;
+                }[];
+            };
+          };
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/exports/tickets": {
+    /**
+     * Export tickets to CSV
+     * @description Requires object store configuration. Requires `agent` role.
+     */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ExportTicketsRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              /** Format: uri */
+              url?: string;
+            };
+          };
+        };
+        /** @description Accepted */
+        202: {
+          content: {
+            "application/json": components["schemas"]["ExportJobAccepted"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/exports/tickets/{job_id}": {
+    /** Check export job status */
+    get: {
+      parameters: {
+        path: {
+          job_id: string;
+        };
+      };
+      responses: {
+        /** @description Status */
+        200: {
+          content: {
+            "application/json": components["schemas"]["ExportJobStatus"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
 }
+
+export type webhooks = Record<string, never>;
+
+export interface components {
+  schemas: {
+    AuthUser: {
+      /** Format: uuid */
+      id?: string;
+      external_id?: string;
+      /** Format: email */
+      email?: string;
+      display_name?: string;
+      roles?: string[];
+    };
+    Ticket: {
+      /** Format: uuid */
+      id?: string;
+      number?: string;
+      title?: string;
+      description?: string;
+      /** Format: uuid */
+      requester_id?: string;
+      /** Format: uuid */
+      assignee_id?: string | null;
+      /** Format: uuid */
+      team_id?: string | null;
+      priority?: number;
+      urgency?: number | null;
+      category?: string | null;
+      subcategory?: string | null;
+      status?: string;
+      /** Format: date-time */
+      scheduled_at?: string | null;
+      /** Format: date-time */
+      due_at?: string | null;
+      source?: string;
+      custom_json?: Record<string, never>;
+      /** Format: date-time */
+      created_at?: string;
+      /** Format: date-time */
+      updated_at?: string;
+      sla?: components["schemas"]["SLAStatus"];
+    };
+    SLAStatus: {
+      /** Format: uuid */
+      policy_id?: string;
+      response_elapsed_ms?: number;
+      resolution_elapsed_ms?: number;
+      response_target_mins?: number;
+      resolution_target_mins?: number;
+      paused?: boolean;
+      reason?: string | null;
+    };
+    Comment: {
+      /** Format: uuid */
+      id?: string;
+      /** Format: uuid */
+      ticket_id?: string;
+      /** Format: uuid */
+      author_id?: string;
+      body_md?: string;
+      is_internal?: boolean;
+      /** Format: date-time */
+      created_at?: string;
+    };
+    Attachment: {
+      /** Format: uuid */
+      id?: string;
+      filename?: string;
+      /** Format: int64 */
+      bytes?: number;
+      mime?: string | null;
+      /** Format: date-time */
+      created_at?: string;
+    };
+    Requester: {
+      /** Format: uuid */
+      id?: string;
+      /** Format: email */
+      email?: string;
+      display_name?: string;
+    };
+    CreateRequesterRequest: {
+      /** Format: email */
+      email: string;
+      display_name: string;
+    };
+    UpdateRequesterRequest: {
+      /** Format: email */
+      email?: string;
+      display_name?: string;
+    };
+    CreateTicketRequest: {
+      title: string;
+      description?: string;
+      /** Format: uuid */
+      requester_id: string;
+      priority: number;
+      urgency?: number;
+      category?: string;
+      subcategory?: string;
+      custom_json?: Record<string, never>;
+    };
+    UpdateTicketRequest: {
+      status?: string;
+      /** Format: uuid */
+      assignee_id?: string;
+      priority?: number;
+      urgency?: number;
+      /** Format: date-time */
+      scheduled_at?: string;
+      /** Format: date-time */
+      due_at?: string;
+      custom_json?: Record<string, never>;
+    };
+    CommentRequest: {
+      body_md: string;
+      is_internal?: boolean;
+      /** Format: uuid */
+      author_id?: string;
+    };
+    WatcherRequest: {
+      /** Format: uuid */
+      user_id: string;
+    };
+    RoleRequest: {
+      role: string;
+    };
+    ExportTicketsRequest: {
+      ids: string[];
+    };
+    ExportJobAccepted: {
+      job_id?: string;
+    };
+    ExportJobStatus: {
+      status?: string;
+      /** Format: uri */
+      url?: string;
+      error?: string;
+    };
+    ValidationError: {
+      errors?: {
+        [key: string]: string;
+      };
+    };
+  };
+  responses: never;
+  parameters: never;
+  requestBodies: never;
+  headers: never;
+  pathItems: never;
+}
+
 export type $defs = Record<string, never>;
+
+export type external = Record<string, never>;
+
 export type operations = Record<string, never>;

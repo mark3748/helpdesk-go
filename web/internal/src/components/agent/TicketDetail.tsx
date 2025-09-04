@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Typography, Select, List, Form, Input, Button, Upload, message, Tag } from 'antd';
+import { Typography, Select, List, Form, Input, Button, Upload, message, Tag, Collapse } from 'antd';
 import type { UploadProps } from 'antd';
-import { useTicket, subscribeEvents } from '../../api';
+import { useTicket, subscribeEvents, useRequester } from '../../api';
 import type { AppEvent } from '../../api';
 import {
   fetchComments,
@@ -13,6 +13,7 @@ import {
   deleteAttachment,
   downloadAttachment,
   updateTicketStatus,
+  updateRequester,
 } from '../../shared/api';
 
 export default function TicketDetail() {
@@ -36,15 +37,21 @@ export default function TicketDetail() {
     refetchInterval: connected ? false : 5000,
   });
 
+  const [pendingAtts, setPendingAtts] = useState<{ filename: string; bytes: number }[]>([]);
+
   useEffect(() => {
-    const stop = subscribeEvents((ev: AppEvent) => {
-      if (ev.type === 'ticket_updated' && String((ev.data as any)?.id) === id) {
+    const sub = subscribeEvents(setConnected);
+    const off = sub.on('ticket_updated', (ev: AppEvent) => {
+      if (String((ev.data as any)?.id) === id) {
         refetchTicket();
         comments.refetch();
         attachments.refetch();
       }
-    }, setConnected);
-    return stop;
+    });
+    return () => {
+      off();
+      sub.close();
+    };
   }, [id, refetchTicket, comments, attachments]);
 
   const updateStatus = useMutation({
@@ -58,11 +65,21 @@ export default function TicketDetail() {
     onError: () => message.error('Failed to add comment'),
   });
 
+  const requester = useRequester((ticket as any)?.requester_id || '');
+  const updateReq = useMutation({
+    mutationFn: (vals: { email?: string; display_name?: string }) =>
+      updateRequester(String((ticket as any)?.requester_id), vals),
+    onSuccess: () => requester.refetch(),
+    onError: () => message.error('Failed to update requester'),
+  });
+
   const uploadProps: UploadProps = {
     showUploadList: false,
     customRequest: async ({ file, onProgress, onSuccess, onError }) => {
       try {
-        await uploadAttachment(id, file as File, {
+        const f = file as File;
+        setPendingAtts((p) => [...p, { filename: f.name, bytes: f.size }]);
+        await uploadAttachment(id, f, {
           onProgress: (e) => onProgress?.({ percent: e.percent }),
         });
         onSuccess?.({});
@@ -70,6 +87,8 @@ export default function TicketDetail() {
         attachments.refetch();
       } catch (err) {
         onError?.(err as Error);
+      } finally {
+        setPendingAtts((p) => p.filter((a) => a.filename !== (file as File).name));
       }
     },
   };
@@ -93,29 +112,64 @@ export default function TicketDetail() {
         ]}
       />
 
+      <Collapse style={{ marginBottom: 16 }}>
+        <Collapse.Panel header="Requester" key="req">
+          {requester.data && (
+            <Form
+              layout="vertical"
+              initialValues={{
+                display_name: requester.data.display_name,
+                email: requester.data.email,
+              }}
+              onFinish={(vals) => updateReq.mutate(vals)}
+            >
+              <Form.Item name="display_name" label="Name">
+                <Input />
+              </Form.Item>
+              <Form.Item name="email" label="Email">
+                <Input />
+              </Form.Item>
+              <Button type="primary" htmlType="submit" loading={updateReq.isPending}>
+                Save
+              </Button>
+            </Form>
+          )}
+        </Collapse.Panel>
+      </Collapse>
+
       <Upload {...uploadProps}>
         <Button>Upload Attachment</Button>
       </Upload>
       <List
         header="Attachments"
-        dataSource={attachments.data || []}
+        dataSource={[
+          ...pendingAtts.map((a) => ({ ...a, id: `pending-${a.filename}`, pending: true })),
+          ...(attachments.data || []),
+        ]}
         renderItem={(a: any) => (
           <List.Item
             key={String(a.id)}
-            actions={[
-              <a key="dl" onClick={() => downloadAttachment(id, String(a.id))}>Download</a>,
-              <a
-                key="del"
-                onClick={async () => {
-                  await deleteAttachment(id, String(a.id));
-                  attachments.refetch();
-                }}
-              >
-                Delete
-              </a>,
-            ]}
+            actions={
+              a.pending
+                ? undefined
+                : [
+                    <a key="dl" onClick={() => downloadAttachment(id, String(a.id))}>Download</a>,
+                    <a
+                      key="del"
+                      onClick={async () => {
+                        await deleteAttachment(id, String(a.id));
+                        attachments.refetch();
+                      }}
+                    >
+                      Delete
+                    </a>,
+                  ]
+            }
           >
-            {String(a.filename)} ({((a.bytes || 0) / 1024).toFixed(1)} KB)
+            {String(a.filename)}
+            {a.pending
+              ? ' (uploading...)'
+              : ` (${((a.bytes || 0) / 1024).toFixed(1)} KB)`}
           </List.Item>
         )}
         style={{ marginTop: 16 }}

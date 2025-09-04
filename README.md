@@ -67,8 +67,10 @@ Notes:
 - Attachments: `GET /tickets/:id/attachments`, `POST /tickets/:id/attachments`, `DELETE /tickets/:id/attachments/:attID`
 - Watchers: `GET /tickets/:id/watchers`, `POST /tickets/:id/watchers`, `DELETE /tickets/:id/watchers/:userID`
 - Exports: `POST /exports/tickets` (CSV)
-- CSAT: `GET /csat/:token?score=good|bad` (public)
+- CSAT: `GET /csat/:token` form, `POST /csat/:token` score=good|bad (public)
 - Metrics (agent role): `GET /metrics/sla`, `GET /metrics/resolution`, `GET /metrics/tickets`
+- Prometheus metrics: `GET /metrics` (no auth)
+- Events: `GET /events` (SSE) with heartbeat comments `:hb` ~every 30s
 
 See `docs/api.md` for detailed status codes, request/response bodies, and models. For tooling and client generation, use `docs/openapi.yaml`. A live documentation UI is served at `/docs` when the API is running; the spec is served at `/openapi.yaml` and is packaged in the Docker image. For metrics visualization guidance, see `docs/grafana.md`.
 
@@ -122,9 +124,13 @@ API (cmd/api):
 - `ADMIN_PASSWORD`: initial admin password in dev local-auth mode.
 - `FILESTORE_PATH`: local path for attachments (filesystem store).
 - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`: S3/MinIO settings.
+- `ALLOWED_ORIGINS`: comma-separated origins allowed for cross-origin requests (default none).
 - `TEST_BYPASS_AUTH`: set `true` in tests to bypass JWT and inject a test user.
 - `OPENAPI_SPEC_PATH`: optional path to the OpenAPI spec for serving `/openapi.yaml` in local dev (default packaged in Docker at `/opt/helpdesk/docs/openapi.yaml`).
 - `LOG_PATH`: directory for API log output (default system temp dir, e.g. `/tmp`). Falls back to stdout if unwritable.
+- `RATE_LIMIT_LOGIN`: max login/logout requests per minute per IP (default unlimited).
+- `RATE_LIMIT_TICKETS`: max ticket creation requests per minute per user.
+- `RATE_LIMIT_ATTACHMENTS`: max attachment upload/download requests per minute per user.
 
 Worker (cmd/worker):
 - `DATABASE_URL`, `REDIS_ADDR`, `ENV`.

@@ -1,21 +1,23 @@
-package exports_test
+package main
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/minio/minio-go/v7"
-
-	apppkg "github.com/mark3748/helpdesk-go/cmd/api/app"
-	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
-	exportspkg "github.com/mark3748/helpdesk-go/cmd/api/exports"
+	"github.com/redis/go-redis/v9"
 )
 
 // fakeObjectStore stores objects in memory and serves them over HTTP.
@@ -34,11 +36,20 @@ func newFakeObjectStore() *fakeObjectStore {
 			return
 		}
 		key := parts[1]
-		if b, ok := fos.objects[key]; ok {
-			_, _ = w.Write(b)
-			return
+		switch r.Method {
+		case http.MethodPut:
+			b, _ := io.ReadAll(r.Body)
+			fos.objects[key] = b
+			w.WriteHeader(http.StatusOK)
+		case http.MethodGet:
+			if b, ok := fos.objects[key]; ok {
+				_, _ = w.Write(b)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
-		w.WriteHeader(http.StatusNotFound)
 	})
 	fos.srv = httptest.NewServer(mux)
 	return fos
@@ -56,6 +67,23 @@ func (f *fakeObjectStore) PutObject(ctx context.Context, bucketName, objectName 
 func (f *fakeObjectStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
 	delete(f.objects, objectName)
 	return nil
+}
+
+func (f *fakeObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
+	_ = ctx
+	_ = expiry
+	u, _ := url.Parse(f.srv.URL + "/" + bucketName + "/" + objectName)
+	return u, nil
+}
+
+func (f *fakeObjectStore) StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error) {
+	_ = ctx
+	_ = opts
+	b, ok := f.objects[objectName]
+	if !ok {
+		return minio.ObjectInfo{}, errors.New("not found")
+	}
+	return minio.ObjectInfo{Key: objectName, Size: int64(len(b))}, nil
 }
 
 func (f *fakeObjectStore) URL() string { return f.srv.URL }
@@ -94,14 +122,24 @@ func (r *ticketRows) Conn() *pgx.Conn        { return nil }
 // exportDB returns predefined ticket rows.
 type exportDB struct {
 	tickets []ticket
+	count   int
 }
 
 func (db *exportDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
 	return &ticketRows{data: db.tickets}, nil
 }
-func (db *exportDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+
+type countRow struct{ n int }
+
+func (r countRow) Scan(dest ...any) error {
+	*(dest[0].(*int)) = r.n
 	return nil
 }
+
+func (db *exportDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return countRow{n: db.count}
+}
+
 func (db *exportDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
 }
@@ -110,16 +148,15 @@ func TestExportTickets(t *testing.T) {
 	store := newFakeObjectStore()
 	defer store.Close()
 
-	db := &exportDB{tickets: []ticket{{ID: "1", Number: "TKT-1", Title: "First", Status: "Open", Priority: 1}}}
-	cfg := apppkg.Config{Env: "test", TestBypassAuth: true, MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
-	a := apppkg.NewApp(cfg, db, nil, store, nil)
-	a.R.POST("/exports/tickets", authpkg.Middleware(a), exportspkg.Tickets(a))
+	db := &exportDB{tickets: []ticket{{ID: "1", Number: "TKT-1", Title: "First", Status: "Open", Priority: 1}}, count: 1}
+	cfg := Config{Env: "test", TestBypassAuth: true, MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
+	app := NewApp(cfg, db, nil, store, nil)
 
 	body := strings.NewReader(`{"ids":["1"]}`)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/exports/tickets", body)
 	req.Header.Set("Content-Type", "application/json")
-	a.R.ServeHTTP(rr, req)
+	app.r.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -142,5 +179,123 @@ func TestExportTickets(t *testing.T) {
 	want := "id,number,title,status,priority\n1,TKT-1,First,Open,1"
 	if got != want {
 		t.Fatalf("csv mismatch: got %q want %q", got, want)
+	}
+}
+
+func TestExportTicketsAsync(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+
+	store := newFakeObjectStore()
+	defer store.Close()
+
+	db := &exportDB{count: exportSyncLimit + 1}
+	cfg := Config{Env: "test", TestBypassAuth: true, MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
+	app := NewApp(cfg, db, nil, store, rdb)
+
+	body := strings.NewReader(`{"ids":["1","2"]}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/exports/tickets", body)
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rr.Code)
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	jobID := resp["job_id"]
+	if jobID == "" {
+		t.Fatalf("missing job_id")
+	}
+
+	// simulate worker completion
+	st := struct {
+		Requester string `json:"requester"`
+		Status    string `json:"status"`
+		URL       string `json:"url"`
+	}{"test-user", "done", "http://example.com/export.csv"}
+	b, _ := json.Marshal(st)
+	if err := rdb.Set(context.Background(), "export_tickets:"+jobID, b, 0).Err(); err != nil {
+		t.Fatalf("redis set: %v", err)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/exports/tickets/"+jobID, nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	resp = map[string]string{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if resp["url"] != "http://example.com/export.csv" {
+		t.Fatalf("unexpected url %q", resp["url"])
+	}
+}
+
+func TestAttachmentEventsRecorded(t *testing.T) {
+	store := newFakeObjectStore()
+	defer store.Close()
+
+	db := &eventCaptureDB{}
+	cfg := Config{Env: "test", TestBypassAuth: true, MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
+	app := NewApp(cfg, db, nil, store, nil)
+
+	// presign
+	body := `{"filename":"test.txt","bytes":5,"mime":"text/plain"}`
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/tickets/1/attachments/presign", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rr.Code)
+	}
+	var ps map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &ps); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	uploadURL := ps["upload_url"].(string)
+	attID := ps["attachment_id"].(string)
+
+	// upload to object store
+	reqUpload, _ := http.NewRequest(http.MethodPut, uploadURL, strings.NewReader("hello"))
+	resUpload, err := http.DefaultClient.Do(reqUpload)
+	if err != nil || resUpload.StatusCode != http.StatusOK {
+		t.Fatalf("upload failed: %v status=%d", err, resUpload.StatusCode)
+	}
+	_ = resUpload.Body.Close()
+
+	// finalize
+	finBody := fmt.Sprintf(`{"attachment_id":"%s","filename":"test.txt","bytes":5,"mime":"text/plain"}`, attID)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/tickets/1/attachments", strings.NewReader(finBody))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	// delete attachment
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodDelete, "/tickets/1/attachments/"+attID, nil)
+	app.r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	count := 0
+	for _, sql := range db.execs {
+		if strings.Contains(strings.ToLower(sql), "insert into ticket_events") {
+			count++
+		}
+	}
+	if count < 2 {
+		t.Fatalf("expected 2 ticket_events inserts, got %d (%v)", count, db.execs)
 	}
 }

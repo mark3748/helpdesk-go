@@ -1,4 +1,4 @@
-import type { Ticket, Comment, Attachment } from '../types/api';
+import type { components } from '../types/openapi';
 
 const API_BASE = '/api';
 
@@ -12,7 +12,37 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return (await res.json()) as T;
 }
 
-export type { Ticket, Comment, Attachment };
+export type Ticket = components['schemas']['Ticket'];
+export type Comment = components['schemas']['Comment'];
+export type Attachment = components['schemas']['Attachment'];
+export type Requester = components['schemas']['Requester'];
+
+export async function fetchRequester(id: string): Promise<Requester> {
+  return apiFetch<Requester>(`/requesters/${id}`);
+}
+
+export async function createRequester(data: {
+  email: string;
+  display_name: string;
+}): Promise<Requester> {
+  return apiFetch<Requester>('/requesters', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateRequester(
+  id: string,
+  data: { email?: string; display_name?: string },
+): Promise<Requester> {
+  return apiFetch<Requester>(`/requesters/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
 
 export async function createTicket(data: {
   title: string;
@@ -93,32 +123,50 @@ export function uploadAttachment(
   file: File,
   cb: UploadCallbacks = {},
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append('file', file);
+  return (async () => {
+    const presign = await apiFetch<{ upload_url: string; headers: Record<string, string>; attachment_id: string }>(
+      `/tickets/${ticketId}/attachments/presign`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, bytes: file.size, mime: file.type }),
+      },
+    );
 
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API_BASE}/tickets/${ticketId}/attachments`);
-    xhr.withCredentials = true;
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', presign.upload_url);
+      Object.entries(presign.headers || {}).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) cb.onProgress?.({ percent: (e.loaded / e.total) * 100 });
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`failed to upload attachment: ${xhr.status}`));
+      };
+      xhr.onerror = () => reject(new Error('failed to upload attachment'));
+      xhr.send(file);
+    });
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        cb.onProgress?.({ percent: (e.loaded / e.total) * 100 });
+    for (let i = 0; i < 5; i++) {
+      try {
+        await apiFetch(`/tickets/${ticketId}/attachments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            attachment_id: presign.attachment_id,
+            filename: file.name,
+            bytes: file.size,
+            mime: file.type,
+          }),
+        });
+        return;
+      } catch {
+        await new Promise((r) => setTimeout(r, 1000));
       }
-    };
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
-      } else {
-        reject(new Error(`failed to upload attachment: ${xhr.status}`));
-      }
-    };
-
-    xhr.onerror = () => reject(new Error('failed to upload attachment'));
-
-    xhr.send(form);
-  });
+    }
+    throw new Error('failed to finalize attachment');
+  })();
 }
 
 export async function deleteAttachment(

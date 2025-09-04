@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -19,6 +21,15 @@ type RoleUser interface {
 type Event struct {
 	Type string      `json:"type"`
 	Data interface{} `json:"data"`
+}
+
+var sseClients = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "sse_clients",
+	Help: "Number of connected SSE clients",
+})
+
+func init() {
+	prometheus.MustRegister(sseClients)
 }
 
 // PublishEvent sends an event to the Redis "events" channel.
@@ -35,6 +46,10 @@ func PublishEvent(ctx context.Context, rdb *redis.Client, ev Event) {
 
 // Events streams server-sent events to the client.
 func Events(rdb *redis.Client) gin.HandlerFunc {
+	return events(rdb, 30*time.Second, 10)
+}
+
+func events(rdb *redis.Client, hbInterval time.Duration, chSize int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if rdb == nil {
 			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "events not available"})
@@ -63,7 +78,13 @@ func Events(rdb *redis.Client) gin.HandlerFunc {
 		ctx := c.Request.Context()
 		sub := rdb.Subscribe(ctx, "events")
 		defer sub.Close()
-		ch := sub.Channel()
+		ch := sub.ChannelSize(chSize)
+
+		ticker := time.NewTicker(hbInterval)
+		defer ticker.Stop()
+
+		sseClients.Inc()
+		defer sseClients.Dec()
 
 		roles := user.GetRoles()
 		isAdmin := hasRole(roles, "admin")
@@ -72,6 +93,9 @@ func Events(rdb *redis.Client) gin.HandlerFunc {
 			select {
 			case <-ctx.Done():
 				return
+			case <-ticker.C:
+				fmt.Fprint(c.Writer, ":hb\n\n")
+				flusher.Flush()
 			case msg, ok := <-ch:
 				if !ok {
 					return

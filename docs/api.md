@@ -18,6 +18,8 @@ Base URL examples:
 ## Endpoints
 
 Health
+- GET `/livez` → 200 OK `{ "ok": true }`
+- GET `/readyz` → 200 OK `{ "ok": true }` | 500
 - GET `/healthz` → 200 OK `{ "ok": true }`
 
 Auth (local mode only)
@@ -28,18 +30,17 @@ User
 - GET `/me` → 200 `{ id, external_id, email, display_name, roles }` | 401
 
 Requesters
-- POST `/requesters` body `{ email?, name?, phone? }` (email or phone required) → 201 `{ id }` | 400 | 500
-- GET `/requesters/:id` → 200 `{ id, email, name, phone }` | 404
-- PATCH `/requesters/:id` body partial `{ email?, name?, phone? }` → 200 `{ id }` | 400 | 404 | 500
+- POST `/requesters` body `{ email, display_name }` → 201 `{ id, email, display_name }` | 400 | 500
+- GET `/requesters/:id` → 200 `{ id, email, display_name }` | 404
+- PATCH `/requesters/:id` body `{ email?, display_name? }` → 200 `{ id, email, display_name }` | 400 | 404 | 500
 
 Tickets
 - GET `/tickets` query `status,priority,team,assignee,search` → 200 `[Ticket]` | 500
-- POST `/tickets` body `{ title, description, requester_id?, requester?, priority, urgency?, category?, subcategory?, custom_json? }` → 201 `{ id, number, status }` | 400 | 500
+- POST `/tickets` body `{ title, description, requester_id, priority, urgency?, category?, subcategory?, custom_json? }` → 201 `{ id, number, status }` | 400 | 500
   - `urgency` 1-4
   - `custom_json` object of additional fields
 - GET `/tickets/:id` → 200 `Ticket` | 404
 - PATCH `/tickets/:id` (agent role) body partial `{ status?, assignee_id?, priority?, urgency?, scheduled_at?, due_at?, custom_json? }` → 200 `{ ok:true }` | 400 | 500
-- POST `/tickets/:id/assign` (agent role) body `{ assignee_id }` → 200 `Ticket` | 400 | 403 | 404
 
 Comments
 - GET `/tickets/:id/comments` → 200 `[Comment]` | 500
@@ -47,7 +48,8 @@ Comments
 
 Attachments
 - GET `/tickets/:id/attachments` → 200 `[{ id, filename, bytes, mime, created_at }]` | 500
-- POST `/tickets/:id/attachments` multipart field `file` → 201 `{ id }` | 400 | 500
+- POST `/tickets/:id/attachments/presign` `{ filename, bytes, mime? }` → 201 `{ upload_url, headers, attachment_id }` | 400 | 500
+- POST `/tickets/:id/attachments` `{ attachment_id, filename, bytes, mime? }` → 201 `{ id }` | 400 | 500
 - DELETE `/tickets/:id/attachments/:attID` → 200 `{ ok:true }` | 404 | 500
 
 Watchers
@@ -55,11 +57,9 @@ Watchers
 - POST `/tickets/:id/watchers` body `{ user_id }` → 201 `{ ok:true }` | 400 | 500
 - DELETE `/tickets/:id/watchers/:userID` → 200 `{ ok:true }` | 500
 
-Queues
-- GET `/queues` (agent role) → 200 `[Queue]` | 403 | 500
-
 Customer Satisfaction (CSAT)
-- GET `/csat/:token?score=good|bad` (public) → 200 `{ ok:true }` | 400 | 404 | 500
+- GET `/csat/:token` (public) → 200 HTML form | 500
+- POST `/csat/:token` score=good|bad → 200 `{ ok:true }` | 400 | 404 | 500
 
 Exports
 - POST `/exports/tickets` (agent role) body `{ ids: [uuid] }` → 200 `{ url }` | 400 | 500
@@ -69,10 +69,12 @@ Metrics (agent role)
 - GET `/metrics/sla` → 200 `{ total, met, sla_attainment }` | 500
 - GET `/metrics/resolution` → 200 `{ avg_resolution_ms }` | 500
 - GET `/metrics/tickets` → 200 `{ daily: [{ day, count }] }` | 500
+- GET `/metrics` → Prometheus metrics (no auth)
 
 Events
 - GET `/events` (SSE) → stream of `ticket_created`, `ticket_updated`, `queue_changed`
   - `queue_changed` requires `admin` role
+  - Heartbeat comments (`:hb`) sent ~every 30s keep the connection alive
 
 ## Models
 
@@ -81,4 +83,7 @@ Ticket
 
 Comment
 - Fields: `id, ticket_id, author_id, body_md, is_internal, created_at`
+
+Requester
+- Fields: `id, email, display_name`
 

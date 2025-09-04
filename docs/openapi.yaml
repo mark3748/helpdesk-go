@@ -11,15 +11,19 @@ tags:
   - name: Health
   - name: Auth
   - name: Users
+  - name: Requesters
   - name: Tickets
   - name: Comments
   - name: Attachments
   - name: Watchers
-  - name: Queues
   - name: CSAT
   - name: Metrics
   - name: Exports
   - name: Events
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+# Cross-origin requests are limited to origins set via the ALLOWED_ORIGINS env var.
 components:
   securitySchemes:
     bearerAuth:
@@ -51,7 +55,6 @@ components:
         requester_id: { type: string, format: uuid }
         assignee_id: { type: string, format: uuid, nullable: true }
         team_id: { type: string, format: uuid, nullable: true }
-        queue_id: { type: string, format: uuid, nullable: true }
         priority: { type: integer, minimum: 1, maximum: 4 }
         urgency: { type: integer, minimum: 1, maximum: 4, nullable: true }
         category: { type: string, nullable: true }
@@ -97,28 +100,29 @@ components:
       properties:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
-        name: { type: string }
-        phone: { type: string }
+        display_name: { type: string }
     CreateRequesterRequest:
+      type: object
+      required: [email, display_name]
+      properties:
+        email: { type: string, format: email }
+        display_name: { type: string }
+    UpdateRequesterRequest:
       type: object
       properties:
         email: { type: string, format: email }
-        name: { type: string }
-        phone: { type: string }
+        display_name: { type: string }
     CreateTicketRequest:
       type: object
-      required: [title, priority]
+      required: [title, requester_id, priority]
       properties:
         title: { type: string }
         description: { type: string }
         requester_id: { type: string, format: uuid }
-        requester: { $ref: '#/components/schemas/CreateRequesterRequest' }
         priority: { type: integer, minimum: 1, maximum: 4 }
         urgency: { type: integer, minimum: 1, maximum: 4 }
         category: { type: string }
         subcategory: { type: string }
-        assignee_id: { type: string, format: uuid }
-        queue_id: { type: string, format: uuid }
         custom_json: { type: object }
     UpdateTicketRequest:
       type: object
@@ -154,6 +158,16 @@ components:
         ids:
           type: array
           items: { type: string, format: uuid }
+    ExportJobAccepted:
+      type: object
+      properties:
+        job_id: { type: string }
+    ExportJobStatus:
+      type: object
+      properties:
+        status: { type: string }
+        url: { type: string, format: uri }
+        error: { type: string }
     ValidationError:
       type: object
       properties:
@@ -161,48 +175,22 @@ components:
           type: object
           additionalProperties:
             type: string
-    Queue:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        name: { type: string }
-    EventEnvelope:
-      type: object
-      properties:
-        type: { type: string }
-        data: { type: object }
-    PresignRequest:
-      type: object
-      required: [filename]
-      properties:
-        filename: { type: string }
-        content_type: { type: string }
-    PresignResponse:
-      type: object
-      properties:
-        url: { type: string }
-        fields:
-          type: object
-          additionalProperties: { type: string }
-    OIDCSettings:
-      type: object
-      properties:
-        issuer: { type: string }
-        client_id: { type: string }
-        scopes:
-          type: array
-          items: { type: string }
-    MailSettings:
-      type: object
-      properties:
-        smtp_host: { type: string }
-        imap_host: { type: string }
-        from: { type: string }
-    Error:
-      type: object
-      properties:
-        error: { type: string }
 paths:
+  /livez:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      security: []
+      responses:
+        '200': { description: OK }
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness check
+      security: []
+      responses:
+        '200': { description: OK }
+        '500': { description: Dependency failure }
   /healthz:
     get:
       tags: [Health]
@@ -264,14 +252,14 @@ paths:
     get:
       tags: [Events]
       summary: Event stream
-      description: Server-sent events for ticket and queue updates.
+      description: Server-sent events for ticket and queue updates. Heartbeat comments (`:hb`) are sent about every 30s.
       responses:
         '200':
           description: OK
           content:
             text/event-stream:
               schema:
-                $ref: '#/components/schemas/EventEnvelope'
+                type: string
       security:
         - bearerAuth: []
         - cookieAuth: []
@@ -350,7 +338,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Requester' }
-        '400': { description: Validation error }
+        '400': { description: Bad Request }
         '500': { description: Server Error }
       security:
         - bearerAuth: []
@@ -386,14 +374,14 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CreateRequesterRequest' }
+            schema: { $ref: '#/components/schemas/UpdateRequesterRequest' }
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Requester' }
-        '400': { description: Validation error }
+        '400': { description: Bad Request }
         '404': { description: Not Found }
         '500': { description: Server Error }
       security:
@@ -417,22 +405,37 @@ paths:
           name: assignee
           schema: { type: string, format: uuid }
         - in: query
-          name: requester
-          schema: { type: string, format: uuid }
-        - in: query
-          name: queue
-          schema: { type: string, format: uuid }
-        - in: query
           name: search
           schema: { type: string }
+        - in: query
+          name: cursor
+          description: |
+            Pagination cursor. Accepts either:
+            - A timestamp in RFC3339/RFC3339Nano (legacy form), or
+            - A composite value "<RFC3339Nano>|<id>" returned by the API, which
+              prevents skipping items when multiple rows share the same timestamp.
+          schema:
+            type: string
+          examples:
+            legacy:
+              value: "2024-01-02T03:04:05Z"
+            composite:
+              value: "2024-01-02T03:04:05.123456Z|00000000-0000-0000-0000-000000000123"
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/Ticket' }
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Ticket' }
+                  next_cursor:
+                    type: string
+                    description: Composite cursor of the form "<RFC3339Nano>|<id>" for stable keyset pagination.
+                    example: "2024-01-02T03:04:05.123456Z|00000000-0000-0000-0000-000000000123"
         '500': { description: Server Error }
       security:
         - bearerAuth: []
@@ -501,38 +504,6 @@ paths:
       responses:
         '200': { description: OK }
         '400': { description: Bad Request }
-        '500': { description: Server Error }
-      security:
-        - bearerAuth: []
-        - cookieAuth: []
-  /tickets/{id}/assign:
-    post:
-      tags: [Tickets]
-      summary: Assign ticket
-      description: Requires `agent` role.
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [assignee_id]
-              properties:
-                assignee_id: { type: string, format: uuid }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Ticket' }
-        '400': { description: Bad Request }
-        '403': { description: Forbidden }
-        '404': { description: Not Found }
         '500': { description: Server Error }
       security:
         - bearerAuth: []
@@ -608,7 +579,7 @@ paths:
         - cookieAuth: []
     post:
       tags: [Attachments]
-      summary: Upload attachment
+      summary: Finalize attachment
       parameters:
         - in: path
           name: id
@@ -617,13 +588,15 @@ paths:
       requestBody:
         required: true
         content:
-          multipart/form-data:
+          application/json:
             schema:
               type: object
+              required: [attachment_id, filename, bytes]
               properties:
-                file:
-                  type: string
-                  format: binary
+                attachment_id: { type: string, format: uuid }
+                filename: { type: string }
+                bytes: { type: integer, format: int64 }
+                mime: { type: string }
       responses:
         '201':
           description: Created
@@ -633,6 +606,44 @@ paths:
                 type: object
                 properties:
                   id: { type: string, format: uuid }
+        '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /tickets/{id}/attachments/presign:
+    post:
+      tags: [Attachments]
+      summary: Presign attachment upload
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, bytes]
+              properties:
+                filename: { type: string }
+                bytes: { type: integer, format: int64 }
+                mime: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upload_url: { type: string }
+                  headers:
+                    type: object
+                    additionalProperties: { type: string }
+                  attachment_id: { type: string, format: uuid }
         '400': { description: Bad Request }
         '500': { description: Server Error }
       security:
@@ -743,26 +754,25 @@ paths:
       security:
         - bearerAuth: []
         - cookieAuth: []
-  /queues:
+  /csat/{token}:
     get:
-      tags: [Queues]
-      summary: List queues
-      description: Requires `agent` role.
+      tags: [CSAT]
+      summary: CSAT form
+      description: Public endpoint embedded in emails.
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
       responses:
         '200':
           description: OK
           content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Queue' }
-        '403': { description: Forbidden }
+            text/html:
+              schema: { type: string }
         '500': { description: Server Error }
-      security:
-        - bearerAuth: []
-        - cookieAuth: []
-  /csat/{token}:
-    get:
+    post:
       tags: [CSAT]
       summary: Submit CSAT score
       description: Public endpoint embedded in emails.
@@ -772,12 +782,17 @@ paths:
           name: token
           required: true
           schema: { type: string }
-        - in: query
-          name: score
-          required: true
-          schema:
-            type: string
-            enum: [good, bad]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [score]
+              properties:
+                score:
+                  type: string
+                  enum: [good, bad]
       responses:
         '200': { description: OK }
         '400': { description: Invalid score }
@@ -864,10 +879,34 @@ paths:
                 type: object
                 properties:
                   url: { type: string, format: uri }
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportJobAccepted' }
         '400': { description: Bad Request }
         '500': { description: Server Error }
       security:
         - bearerAuth: []
         - cookieAuth: []
-
+  /exports/tickets/{job_id}:
+    get:
+      tags: [Exports]
+      summary: Check export job status
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportJobStatus' }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
 

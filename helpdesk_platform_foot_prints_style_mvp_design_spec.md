@@ -157,7 +157,7 @@
 
 - **Inbound:** IMAP poller (label/folder based) or SMTP hook → parse, link to user via sender, create ticket or append comment via `[#TKT-1234]` in subject.
 - **Outbound:** SMTP with DKIM/SPF support via infra; HTML templates; reply-to works for threading.
-- **CSAT:** 1‑click links in resolution email: `/csat/{token}?score=good|bad` + optional comment page.
+- **CSAT:** Links in resolution email to `/csat/{token}` form (score good/bad) + optional comment page.
 
 ### 6.3 “Chat” Outbound (Optional later)
 
@@ -201,7 +201,8 @@
 - `POST /search` (advanced)
 - `GET /me` | `GET /teams` | `GET /slas` | `GET /kb?query`
 - `POST /exports/tickets` (CSV async → download URL)
-- `GET /csat/{token}` (public)
+- `GET /csat/{token}` (public form)
+- `POST /csat/{token}`
 - `POST /webhooks/email-inbound` (if using SMTP hook)
 
 **WebSockets:** presence, ticket updates, queue counters, typing, notifications.

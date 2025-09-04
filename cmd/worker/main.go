@@ -4,18 +4,21 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/smtp"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/microcosm-cc/bluemonday"
@@ -25,7 +28,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 	"github.com/mark3748/helpdesk-go/internal/sla"
 )
@@ -48,7 +50,6 @@ type Config struct {
 	MinIOSecret   string
 	MinIOBucket   string
 	MinIOUseSSL   bool
-	FileStorePath string
 	LogPath       string
 }
 
@@ -79,7 +80,6 @@ func cfg() Config {
 		MinIOSecret:   getEnv("MINIO_SECRET_KEY", ""),
 		MinIOBucket:   getEnv("MINIO_BUCKET", ""),
 		MinIOUseSSL:   getEnv("MINIO_USE_SSL", "false") == "true",
-		FileStorePath: getEnv("FILESTORE_PATH", ""),
 		LogPath:       getEnv("LOG_PATH", os.TempDir()),
 	}
 }
@@ -90,6 +90,7 @@ var templatesFS embed.FS
 var mailTemplates = template.Must(template.ParseFS(templatesFS, "templates/*.tmpl"))
 
 type Job struct {
+	ID   string          `json:"id"`
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`
 }
@@ -98,6 +99,28 @@ type EmailJob struct {
 	To       string      `json:"to"`
 	Template string      `json:"template"`
 	Data     interface{} `json:"data"`
+}
+
+type ExportTicketsJob struct {
+	IDs       []string `json:"ids"`
+	Requester string   `json:"requester"`
+}
+
+type ExportStatus struct {
+    Requester string `json:"requester"`
+    Status    string `json:"status"`
+    URL       string `json:"url,omitempty"`
+    ObjectKey string `json:"object_key,omitempty"`
+    Error     string `json:"error,omitempty"`
+}
+
+type DB interface {
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+}
+
+type ObjectStore interface {
+	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
 }
 
 // Email address validation regex based on RFC 5322 simplified pattern
@@ -137,21 +160,17 @@ func sanitizeAndValidateEmail(email string) (string, error) {
 
 // sanitizeEmailBody removes potentially harmful HTML or scripts from an email body
 func sanitizeEmailBody(body []byte) string {
-	return string(htmlPolicy.SanitizeBytes(body))
+    return string(htmlPolicy.SanitizeBytes(body))
 }
 
-// sanitizeAttachmentName strips path components to prevent filesystem traversal
+// sanitizeAttachmentName strips any path components and returns a safe filename.
 func sanitizeAttachmentName(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ""
-	}
-	name = strings.ReplaceAll(name, "\\", "/")
-	name = path.Base(name)
-	if name == "." || name == ".." {
-		return ""
-	}
-	return name
+    if name == "" {
+        return ""
+    }
+    name = strings.ReplaceAll(name, "\\", "/")
+    base := filepath.Base(name)
+    return strings.TrimSpace(base)
 }
 
 func sendEmail(c Config, j EmailJob) error {
@@ -187,10 +206,62 @@ func sendEmail(c Config, j EmailJob) error {
 	if c.SMTPUser != "" {
 		auth = smtp.PlainAuth("", c.SMTPUser, c.SMTPPass, c.SMTPHost)
 	}
-	return smtpSendMail(addr, auth, sanitizedFrom, []string{sanitizedTo}, msg.Bytes())
+	return smtp.SendMail(addr, auth, sanitizedFrom, []string{sanitizedTo}, msg.Bytes())
 }
 
-var smtpSendMail = smtp.SendMail
+// exportTickets generates the CSV and uploads it to the object store, returning the object key.
+func exportTickets(ctx context.Context, c Config, db DB, store ObjectStore, ids []string) (string, error) {
+	if store == nil {
+		return "", fmt.Errorf("object store not configured")
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	q := fmt.Sprintf("select id, number, title, status, priority from tickets where id in (%s)", strings.Join(placeholders, ","))
+	rows, err := db.Query(ctx, q, args...)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	buf := &bytes.Buffer{}
+	w := csv.NewWriter(buf)
+	_ = w.Write([]string{"id", "number", "title", "status", "priority"})
+	for rows.Next() {
+		var id, number, title, status string
+		var priority int16
+		if err := rows.Scan(&id, &number, &title, &status, &priority); err != nil {
+			return "", err
+		}
+		_ = w.Write([]string{id, number, title, status, strconv.Itoa(int(priority))})
+	}
+	w.Flush()
+    objectKey := uuid.New().String() + ".csv"
+    _, err = store.PutObject(ctx, c.MinIOBucket, objectKey, bytes.NewReader(buf.Bytes()), int64(buf.Len()), minio.PutObjectOptions{ContentType: "text/csv"})
+    if err != nil {
+        return "", err
+    }
+    // Return the object key; URL will be generated by API when client polls status.
+    return objectKey, nil
+}
+
+func handleExportTicketsJob(ctx context.Context, c Config, db DB, store ObjectStore, rdb *redis.Client, jobID string, ej ExportTicketsJob) {
+    objectKey, err := exportTickets(ctx, c, db, store, ej.IDs)
+    st := ExportStatus{Requester: ej.Requester}
+    if err != nil {
+        st.Status = "error"
+        st.Error = err.Error()
+    } else {
+        st.Status = "done"
+        st.ObjectKey = objectKey
+    }
+    b, _ := json.Marshal(st)
+    if err := rdb.Set(ctx, "export_tickets:"+jobID, b, 0).Err(); err != nil {
+        log.Error().Err(err).Msg("store export result")
+    }
+}
 
 func main() {
 	c := cfg()
@@ -228,9 +299,10 @@ func main() {
 	}
 	defer rdb.Close()
 
-	var store app.ObjectStore
+	var mc *minio.Client
+	var store ObjectStore
 	if c.MinIOEndpoint != "" {
-		mc, err := minio.New(c.MinIOEndpoint, &minio.Options{
+		mc, err = minio.New(c.MinIOEndpoint, &minio.Options{
 			Creds:  credentials.NewStaticV4(c.MinIOAccess, c.MinIOSecret, ""),
 			Secure: c.MinIOUseSSL,
 		})
@@ -240,14 +312,11 @@ func main() {
 			store = mc
 		}
 	}
-	if store == nil && c.FileStorePath != "" {
-		store = &app.FsObjectStore{Base: c.FileStorePath}
-	}
 
 	if c.IMAPHost != "" {
 		go func() {
 			for {
-				if err := pollIMAP(ctx, c, db, store, rdb); err != nil {
+				if err := pollIMAP(ctx, c, db, mc, rdb); err != nil {
 					log.Error().Err(err).Msg("poll imap")
 				}
 				time.Sleep(time.Minute)
@@ -267,37 +336,42 @@ func main() {
 
 	log.Info().Msg("worker started")
 	for {
-		if err := processQueueJob(ctx, c, rdb, sendEmail); err != nil {
-			log.Error().Err(err).Msg("process job")
+		res, err := rdb.BLPop(ctx, 0, "jobs").Result()
+		if err != nil {
+			log.Error().Err(err).Msg("blpop")
+			continue
+		}
+		if len(res) < 2 {
+			continue
+		}
+		size, _ := rdb.LLen(ctx, "jobs").Result()
+		handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
+		var job Job
+		if err := json.Unmarshal([]byte(res[1]), &job); err != nil {
+			log.Error().Err(err).Msg("unmarshal job")
+			continue
+		}
+		switch job.Type {
+		case "send_email":
+			var ej EmailJob
+			if err := json.Unmarshal(job.Data, &ej); err != nil {
+				log.Error().Err(err).Msg("unmarshal email job")
+				continue
+			}
+			if err := sendEmail(c, ej); err != nil {
+				log.Error().Err(err).Msg("send email")
+			}
+		case "export_tickets":
+			var ej ExportTicketsJob
+			if err := json.Unmarshal(job.Data, &ej); err != nil {
+				log.Error().Err(err).Msg("unmarshal export job")
+				continue
+			}
+			handleExportTicketsJob(ctx, c, db, store, rdb, job.ID, ej)
+		default:
+			log.Warn().Str("type", job.Type).Msg("unknown job type")
 		}
 	}
-}
-
-func processQueueJob(ctx context.Context, c Config, rdb *redis.Client, send func(Config, EmailJob) error) error {
-	res, err := rdb.BLPop(ctx, 0, "jobs").Result()
-	if err != nil {
-		return err
-	}
-	if len(res) < 2 {
-		return nil
-	}
-	size, _ := rdb.LLen(ctx, "jobs").Result()
-	handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
-	var job Job
-	if err := json.Unmarshal([]byte(res[1]), &job); err != nil {
-		return err
-	}
-	switch job.Type {
-	case "send_email":
-		var ej EmailJob
-		if err := json.Unmarshal(job.Data, &ej); err != nil {
-			return err
-		}
-		return send(c, ej)
-	default:
-		log.Warn().Str("type", job.Type).Msg("unknown job type")
-	}
-	return nil
 }
 
 func updateSLAClocks(ctx context.Context, db *pgxpool.Pool) error {

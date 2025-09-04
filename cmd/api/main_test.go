@@ -1,27 +1,33 @@
-package main_test
+package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
-
-	apppkg "github.com/mark3748/helpdesk-go/cmd/api/app"
-	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
-	ticketspkg "github.com/mark3748/helpdesk-go/cmd/api/tickets"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 func TestHealthz(t *testing.T) {
-	cfg := apppkg.Config{Env: "test"}
-	a := apppkg.NewApp(cfg, nil, nil, nil, nil)
-	a.R.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+	cfg := Config{Env: "test"}
+	app := NewApp(cfg, nil, nil, nil, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	a.R.ServeHTTP(rr, req)
+	app.r.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -35,25 +41,203 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
-func TestMe_BypassAuth(t *testing.T) {
-	cfg := apppkg.Config{Env: "test", TestBypassAuth: true}
-	a := apppkg.NewApp(cfg, nil, nil, nil, nil)
-	a.R.GET("/me", authpkg.Middleware(a), authpkg.Me)
+func TestLivez(t *testing.T) {
+	cfg := Config{Env: "test"}
+	app := NewApp(cfg, nil, nil, nil, nil)
 
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/me", nil)
-	a.R.ServeHTTP(rr, req)
+	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
+	app.r.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	var user authpkg.AuthUser
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	cfg := Config{Env: "test", AllowedOrigins: []string{"http://allowed"}}
+	app := NewApp(cfg, nil, nil, nil, nil)
+
+	t.Run("allowed origin", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		req.Header.Set("Origin", "http://allowed")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rr.Code)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "http://allowed" {
+			t.Fatalf("expected Access-Control-Allow-Origin header, got %q", got)
+		}
+		if got := rr.Header().Get("Content-Security-Policy"); got != "default-src 'none'" {
+			t.Fatalf("expected Content-Security-Policy header, got %q", got)
+		}
+		if got := rr.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Fatalf("expected X-Content-Type-Options header, got %q", got)
+		}
+	})
+
+	t.Run("disallowed origin", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		req.Header.Set("Origin", "http://bad")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", rr.Code)
+		}
+	})
+}
+
+func TestCORSPreflight(t *testing.T) {
+	cfg := Config{Env: "test", AllowedOrigins: []string{"http://allowed"}}
+	app := NewApp(cfg, nil, nil, nil, nil)
+
+	t.Run("preflight allowed", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodOptions, "/healthz", nil)
+		req.Header.Set("Origin", "http://allowed")
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		req.Header.Set("Access-Control-Request-Headers", "Authorization, Content-Type")
+		app.r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d", rr.Code)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "http://allowed" {
+			t.Fatalf("expected Access-Control-Allow-Origin header, got %q", got)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "POST") || !strings.Contains(got, "OPTIONS") {
+			t.Fatalf("expected Allow-Methods to include POST and OPTIONS, got %q", got)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Authorization") || !strings.Contains(got, "Content-Type") {
+			t.Fatalf("expected Allow-Headers to include Authorization and Content-Type, got %q", got)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+			t.Fatalf("expected Allow-Credentials=true, got %q", got)
+		}
+	})
+
+	t.Run("preflight disallowed origin", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodOptions, "/healthz", nil)
+		req.Header.Set("Origin", "http://bad")
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		app.r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", rr.Code)
+		}
+	})
+}
+
+type readyzRow struct{ err error }
+
+func (r readyzRow) Scan(dest ...any) error { return r.err }
+
+type readyzDB struct{ err error }
+
+func (db readyzDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return nil, nil
+}
+func (db readyzDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return readyzRow{err: db.err}
+}
+func (db readyzDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func setMail(ms map[string]string) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	b, _ := json.Marshal(ms)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(b))
+	c.Request.Header.Set("Content-Type", "application/json")
+	handlers.SaveMailSettings(c)
+}
+
+func TestReadyzFailures(t *testing.T) {
+	t.Run("db", func(t *testing.T) {
+		setMail(map[string]string{"host": "", "port": ""})
+		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{err: errors.New("db")}, nil, nil, nil)
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code == http.StatusOK {
+			t.Fatalf("expected failure, got %d", rr.Code)
+		}
+	})
+
+	t.Run("object store", func(t *testing.T) {
+		setMail(map[string]string{"host": "", "port": ""})
+		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, &fsObjectStore{base: "/dev/null"}, nil)
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code == http.StatusOK {
+			t.Fatalf("expected failure, got %d", rr.Code)
+		}
+	})
+
+	t.Run("smtp", func(t *testing.T) {
+		setMail(map[string]string{"host": "127.0.0.1", "port": "1"})
+		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil, nil)
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code == http.StatusOK {
+			t.Fatalf("expected failure, got %d", rr.Code)
+		}
+	})
+
+	t.Run("redis", func(t *testing.T) {
+		setMail(map[string]string{"host": "", "port": ""})
+		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil, nil)
+		// Override pingRedis to simulate a failing Redis
+		app.pingRedis = func(ctx context.Context) error { return errors.New("redis down") }
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code == http.StatusOK {
+			t.Fatalf("expected failure, got %d", rr.Code)
+		}
+		if !strings.Contains(rr.Body.String(), "redis") {
+			t.Fatalf("expected redis error in body, got %s", rr.Body.String())
+		}
+	})
+
+	t.Run("object store bucket auto-create", func(t *testing.T) {
+		setMail(map[string]string{"host": "", "port": ""})
+		dir := t.TempDir()
+		// Do not create bucket subdir; readyz should mkdir it and succeed
+		app := NewApp(Config{Env: "test", MinIOBucket: "attachments"}, readyzDB{}, nil, &fsObjectStore{base: dir}, nil)
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected success, got %d body=%s", rr.Code, rr.Body.String())
+		}
+	})
+}
+
+func TestMe_BypassAuth(t *testing.T) {
+	cfg := Config{Env: "test", TestBypassAuth: true}
+	app := NewApp(cfg, nil, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var user AuthUser
 	if err := json.Unmarshal(rr.Body.Bytes(), &user); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
 	if user.ID == "" || user.Email == "" {
 		t.Fatalf("expected synthetic user, got: %+v", user)
 	}
+	// Should include agent role by default for bypass
 	found := false
 	for _, r := range user.Roles {
 		if r == "agent" {
@@ -67,13 +251,12 @@ func TestMe_BypassAuth(t *testing.T) {
 }
 
 func TestMe_NoBypass_NoJWKS(t *testing.T) {
-	cfg := apppkg.Config{Env: "test", TestBypassAuth: false}
-	a := apppkg.NewApp(cfg, nil, nil, nil, nil)
-	a.R.GET("/me", authpkg.Middleware(a), authpkg.Me)
+	cfg := Config{Env: "test", TestBypassAuth: false}
+	app := NewApp(cfg, nil, nil, nil, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
-	a.R.ServeHTTP(rr, req)
+	app.r.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 due to missing JWKS, got %d", rr.Code)
@@ -81,12 +264,13 @@ func TestMe_NoBypass_NoJWKS(t *testing.T) {
 }
 
 func TestRequireRoleMultiple(t *testing.T) {
-	handler := authpkg.RequireRole("agent", "manager")
+	app := NewApp(Config{Env: "test"}, nil, nil, nil, nil)
+	handler := app.requireRole("agent", "manager")
 
 	t.Run("allowed role", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		c.Set("user", authpkg.AuthUser{Roles: []string{"manager"}})
+		c.Set("user", AuthUser{Roles: []string{"manager"}})
 		handler(c)
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d", w.Code)
@@ -96,38 +280,64 @@ func TestRequireRoleMultiple(t *testing.T) {
 	t.Run("forbidden role", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		c.Set("user", authpkg.AuthUser{Roles: []string{"user"}})
+		c.Set("user", AuthUser{Roles: []string{"user"}})
 		handler(c)
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d", w.Code)
 		}
 	})
 }
+func TestEnqueueEmail_JSONMarshalError(t *testing.T) {
+	// Create a minimal app instance without Redis (enqueueEmail will return early if q is nil)
+	app := &App{}
+
+	// Test that the function handles marshal errors gracefully
+	// Use data that cannot be marshaled to JSON (e.g., a function or channel)
+	ctx := context.Background()
+	unmarshalableData := map[string]interface{}{
+		"invalid": func() {}, // functions cannot be marshaled to JSON
+	}
+
+	// This should not panic, even with unmarshalable data and nil Redis client
+	app.enqueueEmail(ctx, "test@example.com", "test_template", unmarshalableData)
+}
+
+func TestEnqueueEmail_InfinityError(t *testing.T) {
+	// Another test with data that can't be marshaled (Infinity/NaN)
+	app := &App{}
+	ctx := context.Background()
+
+	unmarshalableData := map[string]interface{}{
+		"infinity": math.Inf(1),
+		"nan":      math.NaN(),
+	}
+
+	// This should not panic and should handle the marshal error gracefully
+	app.enqueueEmail(ctx, "test@example.com", "test_template", unmarshalableData)
+}
 
 func TestCreateTicketValidationErrors(t *testing.T) {
-	cfg := apppkg.Config{Env: "test", TestBypassAuth: true}
-	a := apppkg.NewApp(cfg, nil, nil, nil, nil)
-	a.R.POST("/tickets", authpkg.Middleware(a), ticketspkg.Create(a))
+	cfg := Config{Env: "test", TestBypassAuth: true}
+	app := NewApp(cfg, nil, nil, nil, nil)
 
 	t.Run("invalid urgency", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		body := `{"title":"abc","requester_id":"00000000-0000-0000-0000-000000000000","priority":1,"urgency":5,"custom_json":{}}`
 		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		a.R.ServeHTTP(rr, req)
+		app.r.ServeHTTP(rr, req)
+
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rr.Code)
 		}
 		var resp struct {
-			Error struct {
-				FieldErrors map[string]string `json:"field_errors"`
-			} `json:"error"`
+			Errors map[string]string `json:"errors"`
 		}
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("invalid json: %v", err)
 		}
-		if resp.Error.FieldErrors["urgency"] == "" {
-			t.Fatalf("expected urgency error, got %v", resp.Error.FieldErrors)
+		if resp.Errors["urgency"] == "" {
+			t.Fatalf("expected urgency error, got %v", resp.Errors)
 		}
 	})
 
@@ -136,31 +346,647 @@ func TestCreateTicketValidationErrors(t *testing.T) {
 		body := `{"title":"abc","requester_id":"00000000-0000-0000-0000-000000000000","priority":1,"custom_json":[]}`
 		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		a.R.ServeHTTP(rr, req)
+		app.r.ServeHTTP(rr, req)
+
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rr.Code)
 		}
 		var resp struct {
-			Error struct {
-				FieldErrors map[string]string `json:"field_errors"`
-			} `json:"error"`
+			Errors map[string]string `json:"errors"`
 		}
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("invalid json: %v", err)
 		}
-		if resp.Error.FieldErrors["custom_json"] == "" {
-			t.Fatalf("expected custom_json error, got %v", resp.Error.FieldErrors)
+		if resp.Errors["custom_json"] == "" {
+			t.Fatalf("expected custom_json error, got %v", resp.Errors)
+		}
+	})
+}
+
+type csatTestDB struct {
+	lastSQL  string
+	lastArgs []any
+	rows     int64
+}
+
+func (db *csatTestDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
+
+func (db *csatTestDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return nil
+}
+
+func (db *csatTestDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	db.lastSQL = sql
+	db.lastArgs = args
+	return pgconn.NewCommandTag(fmt.Sprintf("UPDATE %d", db.rows)), nil
+}
+
+func TestSubmitCSAT(t *testing.T) {
+	db := &csatTestDB{rows: 1}
+	cfg := Config{Env: "test"}
+	app := NewApp(cfg, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/csat/token123", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	rr = httptest.NewRecorder()
+	body := strings.NewReader("score=good")
+	req = httptest.NewRequest(http.MethodPost, "/csat/token123", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if db.lastSQL == "" || len(db.lastArgs) != 2 {
+		t.Fatalf("exec not called properly: %s %v", db.lastSQL, db.lastArgs)
+	}
+	if db.lastArgs[0] != "good" || db.lastArgs[1] != "token123" {
+		t.Fatalf("unexpected args: %v", db.lastArgs)
+	}
+}
+
+type recordDB struct {
+	sql  string
+	args []any
+}
+
+func (db *recordDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	db.sql = sql
+	db.args = args
+	return &fakeRows{}, nil
+}
+
+func (db *recordDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return nil
+}
+
+func (db *recordDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func TestListTickets(t *testing.T) {
+	cases := []struct {
+		name         string
+		url          string
+		wantSQLParts []string
+		wantArgs     []any
+	}{
+		{
+			name: "filtering and search",
+			url:  "/tickets?status=open&priority=2&team=team1&assignee=user1&search=foo+++bar",
+			wantSQLParts: []string{
+				"t.status = $1",
+				"t.priority = $2",
+				"t.team_id = $3",
+				"t.assignee_id = $4",
+				"websearch_to_tsquery('english', $5)",
+			},
+			wantArgs: []any{"open", 2, "team1", "user1", "foo   bar"},
+		},
+		{
+			name:         "search only",
+			url:          "/tickets?search=hello+++world",
+			wantSQLParts: []string{"websearch_to_tsquery('english', $1)"},
+			wantArgs:     []any{"hello   world"},
+		},
+		{
+			name:         "filters only",
+			url:          "/tickets?status=open&priority=1",
+			wantSQLParts: []string{"t.status = $1", "t.priority = $2"},
+			wantArgs:     []any{"open", 1},
+		},
+		{
+			name:         "with cursor (timestamp only)",
+			url:          "/tickets?cursor=2024-01-02T03:04:05Z",
+			wantSQLParts: []string{"t.created_at <= $1"},
+			wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
+		},
+		{
+			name:         "with composite cursor",
+			url:          "/tickets?cursor=2024-01-02T03:04:05Z|abc123",
+			wantSQLParts: []string{"(t.created_at < $1 OR (t.created_at = $1 AND t.id < $2))"},
+			wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC), "abc123"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := &recordDB{}
+			cfg := Config{Env: "test", TestBypassAuth: true}
+			app := NewApp(cfg, db, nil, nil, nil)
+
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			app.r.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", rr.Code)
+			}
+			for _, part := range tc.wantSQLParts {
+				if !strings.Contains(db.sql, part) {
+					t.Fatalf("missing sql part %q in %s", part, db.sql)
+				}
+			}
+			if len(db.args) != len(tc.wantArgs) {
+				t.Fatalf("expected %d args, got %d", len(tc.wantArgs), len(db.args))
+			}
+			for i, v := range tc.wantArgs {
+				if db.args[i] != v {
+					t.Fatalf("arg %d = %#v, want %#v", i, db.args[i], v)
+				}
+			}
+		})
+	}
+}
+
+type attachmentDB struct{}
+
+func (db *attachmentDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
+
+func (db *attachmentDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return &fakeRow{scan: func(dest ...any) error {
+		if p, ok := dest[0].(*string); ok {
+			*p = "obj123"
+		}
+		if p, ok := dest[1].(*string); ok {
+			*p = "file.txt"
+		}
+		if p, ok := dest[2].(**string); ok {
+			*p = nil
+		}
+		return nil
+	}}
+}
+
+func (db *attachmentDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func TestGetAttachment_MinIOPresign(t *testing.T) {
+	db := &attachmentDB{}
+	mc, err := minio.New("localhost:9000", &minio.Options{
+		Creds:  credentials.NewStaticV4("id", "secret", ""),
+		Secure: false,
+		Region: "us-east-1",
+	})
+	if err != nil {
+		t.Fatalf("minio new: %v", err)
+	}
+	cfg := Config{Env: "test", MinIOEndpoint: "localhost:9000", MinIOBucket: "bucket", TestBypassAuth: true}
+	app := NewApp(cfg, db, nil, mc, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/1", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", rr.Code)
+	}
+	loc := rr.Header().Get("Location")
+	if !strings.Contains(loc, "X-Amz-Signature") {
+		t.Fatalf("expected presigned URL, got %s", loc)
+	}
+}
+
+func TestFinalizeAttachment_RejectsInvalidID(t *testing.T) {
+	// Set up app with fake object store and bypass auth
+	store := newFakeObjectStore()
+	defer store.Close()
+	cfg := Config{Env: "test", TestBypassAuth: true, MinIOBucket: "bucket"}
+	app := NewApp(cfg, readyzDB{}, nil, store, nil)
+
+	// Finalize with a path-traversal style ID should be rejected before StatObject/DB
+	body := `{"attachment_id":"../../etc/passwd","filename":"x","bytes":5}`
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/tickets/1/attachments", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+type traversalAttachmentDB struct{}
+
+func (db *traversalAttachmentDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
+func (db *traversalAttachmentDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	// Return a malicious object_key to simulate prior bad data
+	return &fakeRow{scan: func(dest ...any) error {
+		if p, ok := dest[0].(*string); ok {
+			*p = "../../etc/passwd"
+		}
+		if p, ok := dest[1].(*string); ok {
+			*p = "passwd"
+		}
+		if p, ok := dest[2].(**string); ok {
+			*p = nil
+		}
+		return nil
+	}}
+}
+func (db *traversalAttachmentDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func TestGetAttachment_FileStoreTraversalBlocked(t *testing.T) {
+	dir := t.TempDir()
+	// Configure file store path (no MinIO), and DB returns a traversal key
+	cfg := Config{Env: "test", TestBypassAuth: true, FileStorePath: dir, MinIOBucket: "attachments"}
+	app := NewApp(cfg, &traversalAttachmentDB{}, nil, &fsObjectStore{base: dir}, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/att", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+type statusDB struct{ called bool }
+
+func (db *statusDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return nil, nil
+}
+
+func (db *statusDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return nil
+}
+
+func (db *statusDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	db.called = true
+	return pgconn.CommandTag{}, nil
+}
+
+func TestAddStatusHistory_Invalid(t *testing.T) {
+	db := &statusDB{}
+	app := NewApp(Config{Env: "test"}, db, nil, nil, nil)
+	ctx := context.Background()
+	app.addStatusHistory(ctx, "1", "Open", "Bogus", "u1")
+	if db.called {
+		t.Fatalf("expected no insert for invalid status")
+	}
+	db2 := &statusDB{}
+	app2 := NewApp(Config{Env: "test"}, db2, nil, nil, nil)
+	app2.addStatusHistory(ctx, "1", "Open", "Resolved", "u1")
+	if !db2.called {
+		t.Fatalf("expected insert for valid status")
+	}
+}
+
+func TestCreateTicketInvalidEnums(t *testing.T) {
+	cfg := Config{Env: "test", TestBypassAuth: true}
+	app := NewApp(cfg, nil, nil, nil, nil)
+
+	t.Run("priority", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		body := `{"title":"foo","requester_id":"r1","priority":5,"source":"web"}`
+		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
 		}
 	})
 
-	t.Run("null custom_json", func(t *testing.T) {
+	t.Run("source", func(t *testing.T) {
 		rr := httptest.NewRecorder()
-		body := `{"title":"abc","requester_id":"00000000-0000-0000-0000-000000000000","priority":1,"custom_json":null}`
+		body := `{"title":"foo","requester_id":"r1","priority":1,"source":"sms"}`
 		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		a.R.ServeHTTP(rr, req)
-		if rr.Code != http.StatusCreated {
-			t.Fatalf("expected 201, got %d", rr.Code)
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
 		}
 	})
+}
+
+func TestUpdateTicketInvalidEnums(t *testing.T) {
+	cfg := Config{Env: "test", TestBypassAuth: true}
+	app := NewApp(cfg, nil, nil, nil, nil)
+
+	t.Run("priority", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPatch, "/tickets/1", strings.NewReader(`{"priority":5}`))
+		req.Header.Set("Content-Type", "application/json")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+	})
+
+	t.Run("status", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPatch, "/tickets/1", strings.NewReader(`{"status":"bogus"}`))
+		req.Header.Set("Content-Type", "application/json")
+		app.r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+	})
+}
+
+type updateCaptureDB struct {
+	firstExecArgs []any
+}
+
+func (db *updateCaptureDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
+func (db *updateCaptureDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	// Return oldStatus, number, requesterEmail
+	return &fakeRow{scan: func(dest ...any) error {
+		if len(dest) >= 3 {
+			if p, ok := dest[0].(*string); ok {
+				*p = "Open"
+			}
+			if p, ok := dest[1].(*string); ok {
+				*p = "TKT-1"
+			}
+			if p, ok := dest[2].(*string); ok {
+				*p = ""
+			}
+		}
+		return nil
+	}}
+}
+func (db *updateCaptureDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	if db.firstExecArgs == nil {
+		db.firstExecArgs = append([]any{}, args...)
+	}
+	return pgconn.CommandTag{}, nil
+}
+
+func TestUpdateTicket_LowercaseStatus_Normalized(t *testing.T) {
+	db := &updateCaptureDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/tickets/1", strings.NewReader(`{"status":"open"}`))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(db.firstExecArgs) < 1 {
+		t.Fatalf("expected exec args captured")
+	}
+	val := db.firstExecArgs[0]
+	if ps, ok := val.(*string); ok {
+		val = *ps
+	}
+	if val != "Open" {
+		t.Fatalf("expected normalized status 'Open', got %#v", val)
+	}
+}
+
+type eventCaptureDB struct {
+	execs []string
+}
+
+func (db *eventCaptureDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
+
+func (db *eventCaptureDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	s := strings.ToLower(strings.TrimSpace(sql))
+	switch {
+	case strings.HasPrefix(s, "insert into tickets"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if len(dest) >= 3 {
+				*(dest[0].(*string)) = "t1"
+				*(dest[1].(*string)) = "TKT-1"
+				*(dest[2].(*string)) = "New"
+			}
+			return nil
+		}}
+	case strings.HasPrefix(s, "insert into ticket_comments"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if len(dest) >= 1 {
+				*(dest[0].(*string)) = "c1"
+			}
+			return nil
+		}}
+	default:
+		return &fakeRow{scan: func(dest ...any) error {
+			for _, d := range dest {
+				switch v := d.(type) {
+				case *string:
+					*v = ""
+				case **string:
+					*v = nil
+				}
+			}
+			return nil
+		}}
+	}
+}
+
+func (db *eventCaptureDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	db.execs = append(db.execs, sql)
+	return pgconn.CommandTag{}, nil
+}
+
+func TestCreateTicket_EventRecorded(t *testing.T) {
+	db := &eventCaptureDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	body := `{"title":"foo","requester_id":"u1","priority":1}`
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rr.Code)
+	}
+	found := false
+	for _, sql := range db.execs {
+		if strings.Contains(strings.ToLower(sql), "insert into ticket_events") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected ticket_events insert, got %v", db.execs)
+	}
+}
+
+func TestAddWatcher_EventRecorded(t *testing.T) {
+	db := &eventCaptureDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	body := `{"user_id":"u2"}`
+	req := httptest.NewRequest(http.MethodPost, "/tickets/1/watchers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rr.Code)
+	}
+	found := false
+	for _, sql := range db.execs {
+		if strings.Contains(strings.ToLower(sql), "insert into ticket_events") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected ticket_events insert, got %v", db.execs)
+	}
+}
+
+type requesterDB struct {
+	execs []string
+}
+
+func (db *requesterDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return &fakeRows{}, nil
+}
+
+func (db *requesterDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	s := strings.ToLower(sql)
+	switch {
+	case strings.Contains(s, "insert into users"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if p, ok := dest[0].(*string); ok {
+				*p = "req-1"
+			}
+			return nil
+		}}
+	case strings.Contains(s, "update users"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if p, ok := dest[0].(*string); ok {
+				*p = "req-1"
+			}
+			if p, ok := dest[1].(*string); ok {
+				*p = "new@example.com"
+			}
+			if p, ok := dest[2].(*string); ok {
+				*p = "New Name"
+			}
+			return nil
+		}}
+	case strings.Contains(s, "select id"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if p, ok := dest[0].(*string); ok {
+				*p = "req-1"
+			}
+			if p, ok := dest[1].(*string); ok {
+				*p = "user@example.com"
+			}
+			if p, ok := dest[2].(*string); ok {
+				*p = "User"
+			}
+			return nil
+		}}
+	default:
+		return &fakeRow{}
+	}
+}
+
+func (db *requesterDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	db.execs = append(db.execs, sql)
+	return pgconn.CommandTag{}, nil
+}
+
+func TestCreateRequester(t *testing.T) {
+	db := &requesterDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	body := `{"email":"u@example.com","display_name":"User"}`
+	req := httptest.NewRequest(http.MethodPost, "/requesters", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rr.Code)
+	}
+	found := false
+	for _, sql := range db.execs {
+		if strings.Contains(strings.ToLower(sql), "user_roles") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected role insert, got %v", db.execs)
+	}
+}
+
+func TestGetRequester(t *testing.T) {
+	db := &requesterDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/requesters/req-1", nil)
+	app.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+}
+
+func TestUpdateRequester(t *testing.T) {
+    db := &requesterDB{}
+    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+	rr := httptest.NewRecorder()
+	body := `{"email":"new@example.com","display_name":"New Name"}`
+	req := httptest.NewRequest(http.MethodPatch, "/requesters/req-1", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
+
+    if rr.Code != http.StatusOK {
+        t.Fatalf("expected 200, got %d", rr.Code)
+    }
+}
+
+type nonRequesterDB struct{}
+
+func (db *nonRequesterDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+    return &fakeRows{}, nil
+}
+
+func (db *nonRequesterDB) QueryRow(ctx context.Context, s string, args ...interface{}) pgx.Row {
+    // Simulate update failing due to missing requester role by returning no rows
+    if strings.Contains(strings.ToLower(s), "update users") {
+        return &fakeRow{scan: func(dest ...any) error { return pgx.ErrNoRows }}
+    }
+    return &fakeRow{}
+}
+
+func (db *nonRequesterDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+    return pgconn.CommandTag{}, nil
+}
+
+func TestUpdateRequester_OnlyRequesterRole(t *testing.T) {
+    db := &nonRequesterDB{}
+    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+
+    rr := httptest.NewRecorder()
+    body := `{"email":"new@example.com","display_name":"New Name"}`
+    req := httptest.NewRequest(http.MethodPatch, "/requesters/target-user", strings.NewReader(body))
+    req.Header.Set("Content-Type", "application/json")
+    app.r.ServeHTTP(rr, req)
+
+    if rr.Code != http.StatusNotFound {
+        t.Fatalf("expected 404 for non-requester, got %d body=%s", rr.Code, rr.Body.String())
+    }
 }

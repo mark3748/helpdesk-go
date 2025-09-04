@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { Form, Input, Button, message } from 'antd';
-import { useSettings, useSaveMailSettings, useMailTest } from '../../api';
+import { useSettings, useSaveMailSettings, useTestConnection, useSendTestEmail } from '../../api';
 
 export default function MailSettings() {
   const [form] = Form.useForm();
   const { data } = useSettings();
   const save = useSaveMailSettings();
-  const test = useMailTest();
+  const test = useTestConnection();
+  const sendTest = useSendTestEmail();
 
   useEffect(() => {
     if ((data as any)?.mail) {
@@ -33,9 +34,21 @@ export default function MailSettings() {
           })
         }
         loading={test.isPending}
-        style={{ marginBottom: 16 }}
+        style={{ marginBottom: 16, marginRight: 8 }}
       >
         Test Connection
+      </Button>
+      <Button
+        onClick={() =>
+          sendTest.mutate(undefined, {
+            onSuccess: () => message.success('Test email queued'),
+            onError: () => message.error('Failed to queue email'),
+          })
+        }
+        loading={sendTest.isPending}
+        style={{ marginBottom: 16 }}
+      >
+        Send Test Email
       </Button>
       <Form form={form} layout="vertical" onFinish={onFinish}>
       <Form.Item label="SMTP Host" name="smtp_host">

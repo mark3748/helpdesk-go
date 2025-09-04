@@ -1,6 +1,10 @@
-import type { Ticket, Comment, Attachment } from './types/api';
+import type { components } from './types/openapi';
 
-export type { Ticket, Comment, Attachment };
+export type Ticket = components['schemas']['Ticket'];
+export type Comment = components['schemas']['Comment'];
+export type Attachment = components['schemas']['Attachment'];
+export type Requester = components['schemas']['Requester'];
+
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
@@ -15,8 +19,19 @@ async function apiFetch<T = unknown>(path: string, opts: RequestInit = {}, token
   return (await res.json()) as T;
 }
 
-export async function listTickets(token: string): Promise<Ticket[]> {
-  return apiFetch<Ticket[]>('/tickets', {}, token);
+export async function listTickets(
+  token: string,
+  cursor?: string,
+  query: Record<string, string> = {},
+): Promise<{ items: Ticket[]; next_cursor?: string }> {
+  const params = new URLSearchParams(query);
+  if (cursor) params.set('cursor', cursor);
+  const qs = params.toString();
+  return apiFetch<{ items: Ticket[]; next_cursor?: string }>(
+    `/tickets${qs ? `?${qs}` : ''}`,
+    {},
+    token,
+  );
 }
 
 export async function getTicket(id: string, token: string): Promise<Ticket> {
@@ -46,6 +61,37 @@ export async function addComment(id: string | number, content: string, token: st
 
 export async function listAttachments(id: string, token: string): Promise<Attachment[]> {
   return apiFetch<Attachment[]>(`/tickets/${id}/attachments`, {}, token);
+}
+
+export async function createRequester(
+  data: { email: string; display_name: string },
+  token: string,
+): Promise<Requester> {
+  return apiFetch<Requester>(
+    '/requesters',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+    token,
+  );
+}
+
+export async function updateRequester(
+  id: string,
+  data: { email?: string; display_name?: string },
+  token: string,
+): Promise<Requester> {
+  return apiFetch<Requester>(
+    `/requesters/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+    token,
+  );
 }
 
 export async function deleteAttachment(id: string | number, attID: string | number, token: string): Promise<void> {
@@ -83,30 +129,51 @@ export function uploadAttachment(
   token: string,
   opts: UploadOptions = {},
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append('file', file);
+  return (async () => {
+    const presign = await apiFetch<{ upload_url: string; headers: Record<string, string>; attachment_id: string }>(
+      `/tickets/${String(id)}/attachments/presign`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, bytes: file.size, mime: file.type }),
+      },
+      token,
+    );
 
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API_BASE}/tickets/${String(id)}/attachments`);
-    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', presign.upload_url);
+      Object.entries(presign.headers || {}).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          opts.onProgress?.({ percent: (e.loaded / e.total) * 100 });
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(xhr.responseText || `failed to upload attachment: ${xhr.status}`));
+      };
+      xhr.onerror = () => reject(new Error('failed to upload attachment'));
+      xhr.send(file);
+    });
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        opts.onProgress?.({ percent: (e.loaded / e.total) * 100 });
+    for (let i = 0; i < 5; i++) {
+      try {
+        await apiFetch(`/tickets/${String(id)}/attachments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            attachment_id: presign.attachment_id,
+            filename: file.name,
+            bytes: file.size,
+            mime: file.type,
+          }),
+        }, token);
+        return;
+      } catch {
+        await new Promise((r) => setTimeout(r, 1000));
       }
-    };
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
-      } else {
-        reject(new Error(xhr.responseText || `failed to upload attachment: ${xhr.status}`));
-      }
-    };
-
-    xhr.onerror = () => reject(new Error('failed to upload attachment'));
-
-    xhr.send(form);
-  });
+    }
+    throw new Error('failed to finalize attachment');
+  })();
 }

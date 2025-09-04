@@ -4,6 +4,81 @@
  */
 
 export interface paths {
+    "/livez": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liveness check */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Readiness check */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Dependency failure */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -193,7 +268,7 @@ export interface paths {
         };
         /**
          * Event stream
-         * @description Server-sent events for ticket and queue updates.
+         * @description Server-sent events for ticket and queue updates. Heartbeat comments (`:hb`) are sent about every 30s.
          */
         get: {
             parameters: {
@@ -210,7 +285,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/event-stream": components["schemas"]["EventEnvelope"];
+                        "text/event-stream": string;
                     };
                 };
             };
@@ -350,6 +425,152 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/requesters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create requester */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateRequesterRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Requester"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/requesters/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get requester */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Requester"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update requester */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateRequesterRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Requester"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        trace?: never;
+    };
     "/tickets": {
         parameters: {
             query?: never;
@@ -365,9 +586,13 @@ export interface paths {
                     priority?: number;
                     team?: string;
                     assignee?: string;
-                    requester?: string;
-                    queue?: string;
                     search?: string;
+                    /** @description Pagination cursor. Accepts either:
+                     *     - A timestamp in RFC3339/RFC3339Nano (legacy form), or
+                     *     - A composite value "<RFC3339Nano>|<id>" returned by the API, which
+                     *       prevents skipping items when multiple rows share the same timestamp.
+                     *      */
+                    cursor?: string;
                 };
                 header?: never;
                 path?: never;
@@ -381,7 +606,14 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["Ticket"][];
+                        "application/json": {
+                            items?: components["schemas"]["Ticket"][];
+                            /**
+                             * @description Composite cursor of the form "<RFC3339Nano>|<id>" for stable keyset pagination.
+                             * @example 2024-01-02T03:04:05.123456Z|00000000-0000-0000-0000-000000000123
+                             */
+                            next_cursor?: string;
+                        };
                     };
                 };
                 /** @description Server Error */
@@ -658,7 +890,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Upload attachment */
+        /** Finalize attachment */
         post: {
             parameters: {
                 query?: never;
@@ -670,9 +902,13 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "multipart/form-data": {
-                        /** Format: binary */
-                        file?: string;
+                    "application/json": {
+                        /** Format: uuid */
+                        attachment_id: string;
+                        filename: string;
+                        /** Format: int64 */
+                        bytes: number;
+                        mime?: string;
                     };
                 };
             };
@@ -686,6 +922,74 @@ export interface paths {
                         "application/json": {
                             /** Format: uuid */
                             id?: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}/attachments/presign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Presign attachment upload */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        filename: string;
+                        /** Format: int64 */
+                        bytes: number;
+                        mime?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            upload_url?: string;
+                            headers?: {
+                                [key: string]: string;
+                            };
+                            /** Format: uuid */
+                            attachment_id?: string;
                         };
                     };
                 };
@@ -934,14 +1238,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Submit CSAT score
+         * CSAT form
          * @description Public endpoint embedded in emails.
          */
         get: {
             parameters: {
-                query: {
-                    score: "good" | "bad";
-                };
+                query?: never;
                 header?: never;
                 path: {
                     token: string;
@@ -949,6 +1251,47 @@ export interface paths {
                 cookie?: never;
             };
             requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/html": string;
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Submit CSAT score
+         * @description Public endpoint embedded in emails.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    token: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/x-www-form-urlencoded": {
+                        /** @enum {string} */
+                        score: "good" | "bad";
+                    };
+                };
+            };
             responses: {
                 /** @description OK */
                 200: {
@@ -980,8 +1323,6 @@ export interface paths {
                 };
             };
         };
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1176,6 +1517,15 @@ export interface paths {
                         };
                     };
                 };
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ExportJobAccepted"];
+                    };
+                };
                 /** @description Bad Request */
                 400: {
                     headers: {
@@ -1192,6 +1542,58 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/exports/tickets/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check export job status */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    job_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Status */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ExportJobStatus"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1223,8 +1625,6 @@ export interface components {
             assignee_id?: string | null;
             /** Format: uuid */
             team_id?: string | null;
-            /** Format: uuid */
-            queue_id?: string | null;
             priority?: number;
             urgency?: number | null;
             category?: string | null;
@@ -1274,6 +1674,23 @@ export interface components {
             /** Format: date-time */
             created_at?: string;
         };
+        Requester: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: email */
+            email?: string;
+            display_name?: string;
+        };
+        CreateRequesterRequest: {
+            /** Format: email */
+            email: string;
+            display_name: string;
+        };
+        UpdateRequesterRequest: {
+            /** Format: email */
+            email?: string;
+            display_name?: string;
+        };
         CreateTicketRequest: {
             title: string;
             description?: string;
@@ -1283,10 +1700,6 @@ export interface components {
             urgency?: number;
             category?: string;
             subcategory?: string;
-            /** Format: uuid */
-            assignee_id?: string;
-            /** Format: uuid */
-            queue_id?: string;
             custom_json?: Record<string, never>;
         };
         UpdateTicketRequest: {
@@ -1317,49 +1730,19 @@ export interface components {
         ExportTicketsRequest: {
             ids: string[];
         };
+        ExportJobAccepted: {
+            job_id?: string;
+        };
+        ExportJobStatus: {
+            status?: string;
+            /** Format: uri */
+            url?: string;
+            error?: string;
+        };
         ValidationError: {
             errors?: {
                 [key: string]: string;
             };
-        };
-        Requester: {
-            /** Format: uuid */
-            id?: string;
-            /** Format: email */
-            email?: string;
-            name?: string;
-        };
-        Queue: {
-            /** Format: uuid */
-            id?: string;
-            name?: string;
-        };
-        EventEnvelope: {
-            type?: string;
-            data?: Record<string, never>;
-        };
-        PresignRequest: {
-            filename: string;
-            content_type?: string;
-        };
-        PresignResponse: {
-            url?: string;
-            fields?: {
-                [key: string]: string;
-            };
-        };
-        OIDCSettings: {
-            issuer?: string;
-            client_id?: string;
-            scopes?: string[];
-        };
-        MailSettings: {
-            smtp_host?: string;
-            imap_host?: string;
-            from?: string;
-        };
-        Error: {
-            error?: string;
         };
     };
     responses: never;
