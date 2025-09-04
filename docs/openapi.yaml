@@ -497,7 +497,7 @@ paths:
         - cookieAuth: []
     post:
       tags: [Attachments]
-      summary: Upload attachment
+      summary: Finalize attachment
       parameters:
         - in: path
           name: id
@@ -506,13 +506,15 @@ paths:
       requestBody:
         required: true
         content:
-          multipart/form-data:
+          application/json:
             schema:
               type: object
+              required: [attachment_id, filename, bytes]
               properties:
-                file:
-                  type: string
-                  format: binary
+                attachment_id: { type: string, format: uuid }
+                filename: { type: string }
+                bytes: { type: integer, format: int64 }
+                mime: { type: string }
       responses:
         '201':
           description: Created
@@ -522,6 +524,44 @@ paths:
                 type: object
                 properties:
                   id: { type: string, format: uuid }
+        '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /tickets/{id}/attachments/presign:
+    post:
+      tags: [Attachments]
+      summary: Presign attachment upload
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, bytes]
+              properties:
+                filename: { type: string }
+                bytes: { type: integer, format: int64 }
+                mime: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upload_url: { type: string }
+                  headers:
+                    type: object
+                    additionalProperties: { type: string }
+                  attachment_id: { type: string, format: uuid }
         '400': { description: Bad Request }
         '500': { description: Server Error }
       security:

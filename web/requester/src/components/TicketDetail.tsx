@@ -11,6 +11,7 @@ export default function TicketDetail() {
   const [body, setBody] = useState('');
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [pendingAtts, setPendingAtts] = useState<{ filename: string; bytes: number }[]>([]);
   const auth = useAuth();
   const qc = useQueryClient();
 
@@ -51,8 +52,10 @@ export default function TicketDetail() {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     if (!e.target.files || !e.target.files[0] || !id || !auth.user) return;
     setUploading(true);
+    const f = e.target.files[0];
+    setPendingAtts((p) => [...p, { filename: f.name, bytes: f.size }]);
     try {
-      await uploadAttachment(id!, e.target.files[0], auth.user.access_token!, {
+      await uploadAttachment(id!, f, auth.user.access_token!, {
         onProgress: (evt) => setProgress(evt.percent),
       });
       alert('Uploaded');
@@ -62,6 +65,7 @@ export default function TicketDetail() {
     } finally {
       setUploading(false);
       setProgress(0);
+      setPendingAtts((p) => p.filter((a) => a.filename !== f.name));
       e.target.value = '';
     }
   }
@@ -84,10 +88,17 @@ export default function TicketDetail() {
         <h4 className="text-lg font-semibold">Attachments</h4>
         {attachmentsLoading ? (
           <p>Loading…</p>
-        ) : attachments.length === 0 ? (
+        ) : attachments.length + pendingAtts.length === 0 ? (
           <p className="text-sm text-gray-500">No attachments yet</p>
         ) : (
           <ul className="space-y-1">
+            {pendingAtts.map(a => (
+              <li key={`pending-${a.filename}`} className="flex items-center justify-between text-gray-500">
+                <span>
+                  {a.filename} <span className="text-sm">(uploading...)</span>
+                </span>
+              </li>
+            ))}
             {attachments.map(a => (
               <li key={a.id} className="flex items-center justify-between">
                 <span>
