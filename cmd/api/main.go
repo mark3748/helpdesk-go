@@ -978,24 +978,36 @@ func (a *App) login(c *gin.Context) {
 		"exp":   time.Now().Add(24 * time.Hour).Unix(),
 		"mode":  "local",
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	s, err := token.SignedString([]byte(a.cfg.AuthLocalSecret))
-	if err != nil {
-		c.JSON(500, gin.H{"error": "token"})
-		return
-	}
-	c.SetSameSite(http.SameSiteLaxMode)
-	// Set both new and legacy cookie names to support all clients
-	c.SetCookie("auth", s, 86400, "/", "", false, true)
-	c.SetCookie("hd_auth", s, 86400, "/", "", false, true)
-	c.JSON(200, gin.H{"ok": true})
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    s, err := token.SignedString([]byte(a.cfg.AuthLocalSecret))
+    if err != nil {
+        c.JSON(500, gin.H{"error": "token"})
+        return
+    }
+    // Set single auth cookie with secure flags depending on env
+    secure := a.cfg.Env == "prod"
+    http.SetCookie(c.Writer, &http.Cookie{
+        Name:     "hd_auth",
+        Value:    s,
+        Path:     "/",
+        HttpOnly: true,
+        Secure:   secure,
+        SameSite: http.SameSiteLaxMode,
+        Expires:  time.Now().Add(24 * time.Hour),
+    })
+    c.JSON(200, gin.H{"ok": true})
 }
 
 func (a *App) logout(c *gin.Context) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("auth", "", -1, "/", "", false, true)
-	c.SetCookie("hd_auth", "", -1, "/", "", false, true)
-	c.JSON(200, gin.H{"ok": true})
+    http.SetCookie(c.Writer, &http.Cookie{
+        Name:     "hd_auth",
+        Value:    "",
+        Path:     "/",
+        HttpOnly: true,
+        Expires:  time.Unix(0, 0),
+        MaxAge:   -1,
+    })
+    c.JSON(200, gin.H{"ok": true})
 }
 
 func (a *App) requireRole(roles ...string) gin.HandlerFunc {

@@ -1,18 +1,20 @@
 package app
 
 import (
-	"context"
-	"io"
-	"os"
-	"strconv"
+    "context"
+    "io"
+    "os"
+    "path/filepath"
+    "strconv"
+    "strings"
 
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/minio/minio-go/v7"
-	"github.com/redis/go-redis/v9"
-	"golang.org/x/time/rate"
+    "github.com/gin-gonic/gin"
+    "github.com/golang-jwt/jwt/v5"
+    "github.com/jackc/pgx/v5"
+    "github.com/jackc/pgx/v5/pgconn"
+    "github.com/minio/minio-go/v7"
+    "github.com/redis/go-redis/v9"
+    "golang.org/x/time/rate"
 )
 
 // Config holds API configuration values.
@@ -98,44 +100,56 @@ type ObjectStore interface {
 
 // fsObjectStore implements ObjectStore on the local filesystem for development/testing.
 type FsObjectStore struct {
-	Base string
+    Base string
 }
 
 func (f *FsObjectStore) PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
-	_ = ctx
-	dir := f.Base
-	if bucketName != "" {
-		dir = dir + string(os.PathSeparator) + bucketName
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return minio.UploadInfo{}, err
-	}
-	fp := dir + string(os.PathSeparator) + objectName
-	tmp := fp + ".tmp"
-	out, err := os.Create(tmp)
-	if err != nil {
-		return minio.UploadInfo{}, err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, reader); err != nil {
-		_ = os.Remove(tmp)
-		return minio.UploadInfo{}, err
-	}
-	if err := os.Rename(tmp, fp); err != nil {
-		return minio.UploadInfo{}, err
-	}
-	return minio.UploadInfo{Bucket: bucketName, Key: objectName, Size: objectSize}, nil
+    _ = ctx
+    // Clean and constrain paths within base to prevent traversal
+    base := filepath.Clean(f.Base)
+    dir := base
+    if bucketName != "" {
+        dir = filepath.Join(base, bucketName)
+    }
+    if err := os.MkdirAll(dir, 0o755); err != nil {
+        return minio.UploadInfo{}, err
+    }
+    fp := filepath.Join(dir, objectName)
+    clean := filepath.Clean(fp)
+    // Ensure the final path stays within the base directory
+    if !strings.HasPrefix(clean, dir+string(os.PathSeparator)) && clean != dir {
+        return minio.UploadInfo{}, os.ErrPermission
+    }
+    tmp := clean + ".tmp"
+    out, err := os.Create(tmp)
+    if err != nil {
+        return minio.UploadInfo{}, err
+    }
+    defer out.Close()
+    if _, err := io.Copy(out, reader); err != nil {
+        _ = os.Remove(tmp)
+        return minio.UploadInfo{}, err
+    }
+    if err := os.Rename(tmp, clean); err != nil {
+        return minio.UploadInfo{}, err
+    }
+    return minio.UploadInfo{Bucket: bucketName, Key: objectName, Size: objectSize}, nil
 }
 
 func (f *FsObjectStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
-	_ = ctx
-	_ = opts
-	dir := f.Base
-	if bucketName != "" {
-		dir = dir + string(os.PathSeparator) + bucketName
-	}
-	fp := dir + string(os.PathSeparator) + objectName
-	return os.Remove(fp)
+    _ = ctx
+    _ = opts
+    base := filepath.Clean(f.Base)
+    dir := base
+    if bucketName != "" {
+        dir = filepath.Join(base, bucketName)
+    }
+    fp := filepath.Join(dir, objectName)
+    clean := filepath.Clean(fp)
+    if !strings.HasPrefix(clean, dir+string(os.PathSeparator)) && clean != dir {
+        return os.ErrPermission
+    }
+    return os.Remove(clean)
 }
 
 // App wires dependencies and the Gin router.
