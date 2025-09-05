@@ -23,7 +23,7 @@ Additional completions
 - [ ] Standardize rate limiting: prefer Redis-backed limiter (`internal/ratelimit`) for login, ticket create, and attachments; remove ad‑hoc in‑memory limiter to ensure consistency across replicas.
 - [ ] Add context timeouts to DB, Redis, MinIO, and JWKS operations; propagate request contexts to DB calls in handlers.
 - [ ] Improve JWKS handling: periodic refresh with backoff/metrics; validate KID/alg robustly; fail closed with clear errors when JWKS unavailable.
-- [ ] Helm: move sensitive config to Kubernetes Secrets (DB URL, `AUTH_LOCAL_SECRET`, `SMTP_*`, `MINIO_*`); wire via `valueFrom` in templates.
+- [x] Helm: move sensitive config to Kubernetes Secrets (DB URL, `AUTH_LOCAL_SECRET`, `SMTP_*`, `MINIO_*`); wire via `envFrom` in templates. Add `imagePullSecrets` and scheduling knobs. Add optional PVC for `FILESTORE_PATH`.
 - [ ] Make Docker builds reproducible: vendor/pin Swagger UI assets instead of fetching at build time, or checksum‑verify downloads.
 - [ ] Multi-arch builds: parameterize `GOARCH` and use Buildx matrix in CI for `linux/amd64,linux/arm64` images.
 - [ ] Expand tests: path traversal attempts for object store; JWT claim validation; `s3` presign error paths; `/attachments/upload/:objectKey` validates keys; add SLA calendar loader tests (holidays/hours).
@@ -41,3 +41,11 @@ Additional completions
 ## Notes
 
 - Keep items scoped and linked to PRs. For multi-part refactors (e.g., unifying `main.go` with modular packages), split into small PRs to ease review.
+
+## Recently Completed (This PR)
+
+- [x] Ticket creation deduplication: Redis idempotency (resilient to Redis errors), DB advisory locks, and exact-content unique index (migration cleans existing dupes).
+- [x] SSE stability: initial heartbeat and `X-Accel-Buffering: no`; graceful fallback when `http.Flusher` absent.
+- [x] UI gating for attachments: `GET /api/features` exposes `attachments` flag; internal UI disables upload button with message when storage is not configured.
+- [x] Helm: Secrets support (`values.secrets` + optional managed Secret), `imagePullSecrets`, `nodeSelector`/`tolerations`/`affinity`, and `persistence.enabled` PVC mounted at `FILESTORE_PATH`.
+- [x] Tickets: return `201 Created` on success; include `description` in list/detail; auto-assign for `agent`/`admin` creators.
