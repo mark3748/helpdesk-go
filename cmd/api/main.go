@@ -388,6 +388,7 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 		c.Header("Content-Security-Policy", "default-src 'none'")
 		c.Header("X-Content-Type-Options", "nosniff")
 		origin := c.GetHeader("Origin")
+		c.Header("Vary", "Origin")
 		if origin != "" && len(cfg.AllowedOrigins) > 0 {
 			allowed := false
 			for _, ao := range cfg.AllowedOrigins {
@@ -402,7 +403,6 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 			}
 			// CORS headers for allowed origins
 			c.Header("Access-Control-Allow-Origin", origin)
-			c.Header("Vary", "Origin")
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
 			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With")
 			c.Header("Access-Control-Allow-Credentials", "true")

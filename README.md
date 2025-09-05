@@ -200,6 +200,8 @@ API (cmd/api):
 - `REDIS_TIMEOUT_MS`: per-call Redis timeout in milliseconds (default 2000). Applies to readiness ping and queue operations.
 - `OBJECTSTORE_TIMEOUT_MS`: per-call object store timeout in milliseconds (default 10000). Applies to MinIO/S3 presign/put/stat and filesystem operations.
 - `ALLOWED_ORIGINS`: comma-separated origins allowed for cross-origin requests (default none).
+  Example: `ALLOWED_ORIGINS=https://helpdesk.example.com,https://portal.example.com`.
+  Avoid broad patterns or untrusted origins; permissive values let other sites read authenticated responses.
 - `TEST_BYPASS_AUTH`: set `true` in tests to bypass JWT and inject a test user.
 - `OPENAPI_SPEC_PATH`: optional path to the OpenAPI spec for serving `/openapi.yaml` in local dev (default packaged in Docker at `/opt/helpdesk/docs/openapi.yaml`).
 - `LOG_PATH`: directory for API log output (default system temp dir, e.g. `/tmp`). Falls back to stdout if unwritable.
@@ -292,6 +294,8 @@ Breaking considerations:
 - If you have a pre-existing DB, run the migrations in order. Ensure `0007_requesters_queues_ticket_events.sql` applies cleanly and `tickets.requester_id` points to `requesters`. For dev data, a fresh compose up is easiest.
 
 Security/config:
-- In prod, set `ALLOWED_ORIGINS` to allow UIs to call the API. Set `LOG_PATH` to a writable directory. Use secure cookies and OIDC.
+- In prod, set `ALLOWED_ORIGINS` to the specific UI origins that may call the API.
+  Avoid wildcards or public origins to prevent cross-site request forgery and data leaks.
+  Set `LOG_PATH` to a writable directory. Use secure cookies and OIDC.
 - Auth errors: for OIDC, set `OIDC_JWKS_URL` (and `OIDC_ISSUER` if enforcing issuer). For local auth, set `AUTH_LOCAL_SECRET` and optionally `ADMIN_PASSWORD`.
 - Port conflicts: default ports are 8080 (API), 5173 (Internal UI dev), 5175 (Compose internal UI), 5432 (Postgres), 6379 (Redis). Adjust `ADDR` or container port mappings as needed.

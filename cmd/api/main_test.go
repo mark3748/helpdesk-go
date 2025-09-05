@@ -1,26 +1,26 @@
 package main
 
 import (
-    "bytes"
-    "context"
-    "encoding/json"
-    "errors"
-    "fmt"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-    "time"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "github.com/jackc/pgx/v5"
-    "github.com/jackc/pgx/v5/pgconn"
-    appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
-    handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
-    authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
-    "github.com/minio/minio-go/v7"
-    "github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
+	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 func TestHealthz(t *testing.T) {
@@ -71,6 +71,9 @@ func TestSecurityHeaders(t *testing.T) {
 		if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "http://allowed" {
 			t.Fatalf("expected Access-Control-Allow-Origin header, got %q", got)
 		}
+		if got := rr.Header().Get("Vary"); got != "Origin" {
+			t.Fatalf("expected Vary header Origin, got %q", got)
+		}
 		if got := rr.Header().Get("Content-Security-Policy"); got != "default-src 'none'" {
 			t.Fatalf("expected Content-Security-Policy header, got %q", got)
 		}
@@ -87,6 +90,21 @@ func TestSecurityHeaders(t *testing.T) {
 		if rr.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d", rr.Code)
 		}
+		if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "" {
+			t.Fatalf("unexpected Access-Control-Allow-Origin header: %q", got)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Headers"); got != "" {
+			t.Fatalf("unexpected Access-Control-Allow-Headers header: %q", got)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Methods"); got != "" {
+			t.Fatalf("unexpected Access-Control-Allow-Methods header: %q", got)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+			t.Fatalf("unexpected Access-Control-Allow-Credentials header: %q", got)
+		}
+		if got := rr.Header().Get("Vary"); got != "Origin" {
+			t.Fatalf("expected Vary header Origin, got %q", got)
+		}
 	})
 }
 
@@ -99,7 +117,7 @@ func TestCORSPreflight(t *testing.T) {
 		req := httptest.NewRequest(http.MethodOptions, "/healthz", nil)
 		req.Header.Set("Origin", "http://allowed")
 		req.Header.Set("Access-Control-Request-Method", "POST")
-		req.Header.Set("Access-Control-Request-Headers", "Authorization, Content-Type")
+		req.Header.Set("Access-Control-Request-Headers", "Authorization, Content-Type, X-Requested-With")
 		app.r.ServeHTTP(rr, req)
 
 		if rr.Code != http.StatusNoContent {
@@ -111,23 +129,42 @@ func TestCORSPreflight(t *testing.T) {
 		if got := rr.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "POST") || !strings.Contains(got, "OPTIONS") {
 			t.Fatalf("expected Allow-Methods to include POST and OPTIONS, got %q", got)
 		}
-		if got := rr.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Authorization") || !strings.Contains(got, "Content-Type") {
-			t.Fatalf("expected Allow-Headers to include Authorization and Content-Type, got %q", got)
+		if got := rr.Header().Get("Access-Control-Allow-Headers"); got != "Authorization, Content-Type, X-Requested-With" {
+			t.Fatalf("expected Allow-Headers Authorization, Content-Type, X-Requested-With, got %q", got)
 		}
 		if got := rr.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
 			t.Fatalf("expected Allow-Credentials=true, got %q", got)
 		}
+		if got := rr.Header().Get("Vary"); got != "Origin" {
+			t.Fatalf("expected Vary header Origin, got %q", got)
+		}
 	})
 
-	t.Run("preflight disallowed origin", func(t *testing.T) {
+	t.Run("preflight disallowed", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodOptions, "/healthz", nil)
 		req.Header.Set("Origin", "http://bad")
 		req.Header.Set("Access-Control-Request-Method", "POST")
+		req.Header.Set("Access-Control-Request-Headers", "Authorization")
 		app.r.ServeHTTP(rr, req)
 
 		if rr.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d", rr.Code)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "" {
+			t.Fatalf("unexpected Access-Control-Allow-Origin header: %q", got)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Headers"); got != "" {
+			t.Fatalf("unexpected Access-Control-Allow-Headers header: %q", got)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Methods"); got != "" {
+			t.Fatalf("unexpected Access-Control-Allow-Methods header: %q", got)
+		}
+		if got := rr.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+			t.Fatalf("unexpected Access-Control-Allow-Credentials header: %q", got)
+		}
+		if got := rr.Header().Get("Vary"); got != "Origin" {
+			t.Fatalf("expected Vary header Origin, got %q", got)
 		}
 	})
 }
@@ -171,7 +208,7 @@ func TestReadyzFailures(t *testing.T) {
 
 	t.Run("object store", func(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
-    app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, &appcore.FsObjectStore{Base: "/dev/null"}, nil)
+		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, &appcore.FsObjectStore{Base: "/dev/null"}, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
@@ -211,7 +248,7 @@ func TestReadyzFailures(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
 		dir := t.TempDir()
 		// Do not create bucket subdir; readyz should mkdir it and succeed
-    app := NewApp(Config{Env: "test", MinIOBucket: "attachments"}, readyzDB{}, nil, &appcore.FsObjectStore{Base: dir}, nil)
+		app := NewApp(Config{Env: "test", MinIOBucket: "attachments"}, readyzDB{}, nil, &appcore.FsObjectStore{Base: dir}, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
@@ -266,12 +303,12 @@ func TestMe_NoBypass_NoJWKS(t *testing.T) {
 }
 
 func TestRequireRoleMultiple(t *testing.T) {
-    handler := authpkg.RequireRole("agent", "manager")
+	handler := authpkg.RequireRole("agent", "manager")
 
 	t.Run("allowed role", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-        c.Set("user", authpkg.AuthUser{Roles: []string{"manager"}})
+		c.Set("user", authpkg.AuthUser{Roles: []string{"manager"}})
 		handler(c)
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d", w.Code)
@@ -281,7 +318,7 @@ func TestRequireRoleMultiple(t *testing.T) {
 	t.Run("forbidden role", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-        c.Set("user", authpkg.AuthUser{Roles: []string{"user"}})
+		c.Set("user", authpkg.AuthUser{Roles: []string{"user"}})
 		handler(c)
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d", w.Code)
@@ -464,18 +501,18 @@ func TestListTickets(t *testing.T) {
 			wantSQLParts: []string{"t.status = $1", "t.priority = $2"},
 			wantArgs:     []any{"open", 1},
 		},
-        {
-            name:         "with cursor (timestamp only)",
-            url:          "/tickets?cursor=2024-01-02T03:04:05Z",
-            wantSQLParts: []string{"t.created_at <= $1"},
-            wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
-        },
-        {
-            name:         "with composite cursor",
-            url:          "/tickets?cursor=2024-01-02T03:04:05Z|abc123",
-            wantSQLParts: []string{"(t.created_at < $1 OR (t.created_at = $1 AND t.id < $2))"},
-            wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC), "abc123"},
-        },
+		{
+			name:         "with cursor (timestamp only)",
+			url:          "/tickets?cursor=2024-01-02T03:04:05Z",
+			wantSQLParts: []string{"t.created_at <= $1"},
+			wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)},
+		},
+		{
+			name:         "with composite cursor",
+			url:          "/tickets?cursor=2024-01-02T03:04:05Z|abc123",
+			wantSQLParts: []string{"(t.created_at < $1 OR (t.created_at = $1 AND t.id < $2))"},
+			wantArgs:     []any{time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC), "abc123"},
+		},
 	}
 
 	for _, tc := range cases {
@@ -606,7 +643,7 @@ func TestGetAttachment_FileStoreTraversalBlocked(t *testing.T) {
 	dir := t.TempDir()
 	// Configure file store path (no MinIO), and DB returns a traversal key
 	cfg := Config{Env: "test", TestBypassAuth: true, FileStorePath: dir, MinIOBucket: "attachments"}
-    app := NewApp(cfg, &traversalAttachmentDB{}, nil, &appcore.FsObjectStore{Base: dir}, nil)
+	app := NewApp(cfg, &traversalAttachmentDB{}, nil, &appcore.FsObjectStore{Base: dir}, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/att", nil)
@@ -945,8 +982,8 @@ func TestGetRequester(t *testing.T) {
 }
 
 func TestUpdateRequester(t *testing.T) {
-    db := &requesterDB{}
-    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	db := &requesterDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
 
 	rr := httptest.NewRecorder()
 	body := `{"email":"new@example.com","display_name":"New Name"}`
@@ -954,40 +991,40 @@ func TestUpdateRequester(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	app.r.ServeHTTP(rr, req)
 
-    if rr.Code != http.StatusOK {
-        t.Fatalf("expected 200, got %d", rr.Code)
-    }
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
 }
 
 type nonRequesterDB struct{}
 
 func (db *nonRequesterDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
-    return &fakeRows{}, nil
+	return &fakeRows{}, nil
 }
 
 func (db *nonRequesterDB) QueryRow(ctx context.Context, s string, args ...interface{}) pgx.Row {
-    // Simulate update failing due to missing requester role by returning no rows
-    if strings.Contains(strings.ToLower(s), "update users") {
-        return &fakeRow{scan: func(dest ...any) error { return pgx.ErrNoRows }}
-    }
-    return &fakeRow{}
+	// Simulate update failing due to missing requester role by returning no rows
+	if strings.Contains(strings.ToLower(s), "update users") {
+		return &fakeRow{scan: func(dest ...any) error { return pgx.ErrNoRows }}
+	}
+	return &fakeRow{}
 }
 
 func (db *nonRequesterDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
-    return pgconn.CommandTag{}, nil
+	return pgconn.CommandTag{}, nil
 }
 
 func TestUpdateRequester_OnlyRequesterRole(t *testing.T) {
-    db := &nonRequesterDB{}
-    app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	db := &nonRequesterDB{}
+	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
 
-    rr := httptest.NewRecorder()
-    body := `{"email":"new@example.com","display_name":"New Name"}`
-    req := httptest.NewRequest(http.MethodPatch, "/requesters/target-user", strings.NewReader(body))
-    req.Header.Set("Content-Type", "application/json")
-    app.r.ServeHTTP(rr, req)
+	rr := httptest.NewRecorder()
+	body := `{"email":"new@example.com","display_name":"New Name"}`
+	req := httptest.NewRequest(http.MethodPatch, "/requesters/target-user", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.r.ServeHTTP(rr, req)
 
-    if rr.Code != http.StatusNotFound {
-        t.Fatalf("expected 404 for non-requester, got %d body=%s", rr.Code, rr.Body.String())
-    }
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for non-requester, got %d body=%s", rr.Code, rr.Body.String())
+	}
 }
