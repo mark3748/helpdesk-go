@@ -1,0 +1,64 @@
+image:
+  repository: ghcr.io/mark3748/helpdesk-go-api
+  tag: "REPLACE_WITH_TAG"
+  pullPolicy: IfNotPresent
+
+frontendInternal:
+  enabled: true
+  image:
+    repository: ghcr.io/mark3748/helpdesk-go-internal-frontend
+    tag: "REPLACE_WITH_TAG"
+    pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: helpdesk.local
+      paths:
+        - path: /
+          pathType: Prefix
+        - path: /api
+          pathType: Prefix
+        - path: /swagger
+          pathType: Prefix
+
+# If pulling from a private registry, set your secret name here
+# imagePullSecrets:
+#   - ghcr-pull
+
+# PVC-backed filesystem store for attachments
+persistence:
+  enabled: true
+  mountPath: "/data"
+  size: 5Gi
+  # storageClass: ""
+  # existingClaim: ""
+
+# Sensitive env via a Secret created by the chart
+secrets:
+  enabled: true
+  data:
+    ENV: "prod"
+    ADDR: ":8080"
+    AUTH_MODE: "local"
+    AUTH_LOCAL_SECRET: "REPLACE_WITH_STRONG_SECRET"
+    ADMIN_PASSWORD: "admin"
+    DATABASE_URL: "postgres://postgres:postgres@postgres-postgresql.helpdesk.svc.cluster.local:5432/helpdesk?sslmode=disable"
+    REDIS_ADDR: "redis-master.helpdesk.svc.cluster.local:6379"
+    FILESTORE_PATH: "/data"
+    # Optional MinIO (instead of FILESTORE_PATH)
+    # MINIO_ENDPOINT: "minio.helpdesk.svc:9000"
+    # MINIO_ACCESS_KEY: "..."
+    # MINIO_SECRET_KEY: "..."
+    # MINIO_BUCKET: "attachments"
+    # MINIO_USE_SSL: "false"
+
+# Non-sensitive env overrides (optional)
+env:
+  LOG_PATH: "/config/logs"
+
