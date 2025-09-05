@@ -556,6 +556,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/events", handlers.Events(a.q))
 
     auth.GET("/settings", authpkg.RequireRole("admin"), handlers.GetSettings)
+    auth.GET("/features", handlers.Features(a.core()))
     auth.POST("/test-connection", authpkg.RequireRole("admin"), handlers.TestConnection)
     auth.POST("/settings/storage", authpkg.RequireRole("admin"), handlers.SaveStorageSettings)
     auth.POST("/settings/oidc", authpkg.RequireRole("admin"), handlers.SaveOIDCSettings)

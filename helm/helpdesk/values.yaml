@@ -113,3 +113,13 @@ secrets:
   #   DATABASE_URL: "postgres://user:pass@postgres:5432/helpdesk?sslmode=disable"
   #   AUTH_LOCAL_SECRET: "super-secret"
   #   ADMIN_PASSWORD: "admin"
+
+# Optional persistence for FILESTORE_PATH (filesystem object store)
+persistence:
+  enabled: false
+  mountPath: "/data"
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  storageClass: ""
+  existingClaim: ""

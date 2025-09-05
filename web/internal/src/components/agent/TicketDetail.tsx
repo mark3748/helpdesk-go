@@ -4,6 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Typography, Select, List, Form, Input, Button, Upload, message, Tag, Collapse } from 'antd';
 import type { UploadProps } from 'antd';
 import { useTicket, subscribeEvents, useRequester } from '../../api';
+import { apiFetch } from '../../shared/api';
 import type { AppEvent } from '../../api';
 import {
   fetchComments,
@@ -35,6 +36,13 @@ export default function TicketDetail() {
     queryFn: () => fetchAttachments(id),
     enabled: !!id,
     refetchInterval: connected ? false : 5000,
+  });
+
+  const features = useQuery({
+    queryKey: ['features'],
+    queryFn: async () => {
+      try { return await apiFetch<{ attachments: boolean }>('/features'); } catch { return { attachments: false }; }
+    },
   });
 
   const [pendingAtts, setPendingAtts] = useState<{ filename: string; bytes: number }[]>([]);
@@ -142,8 +150,10 @@ export default function TicketDetail() {
         </Collapse.Panel>
       </Collapse>
 
-      <Upload {...uploadProps}>
-        <Button>Upload Attachment</Button>
+      <Upload {...uploadProps} disabled={!features.data?.attachments}>
+        <Button disabled={!features.data?.attachments}>
+          {features.data?.attachments ? 'Upload Attachment' : 'Attachments disabled (no storage)'}
+        </Button>
       </Upload>
       <List
         header="Attachments"
