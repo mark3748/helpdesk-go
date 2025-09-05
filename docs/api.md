@@ -6,6 +6,16 @@ Base URL examples:
 - Local API: `http://localhost:8080`
 - Agent dev server proxy: requests to `/api/...` are proxied to the API in dev.
 
+## CORS
+Browser clients must originate from an allowed origin. Configure `ALLOWED_ORIGINS`
+as a comma-separated list, for example:
+
+`ALLOWED_ORIGINS=https://helpdesk.example.com,https://portal.example.com`
+
+Preflight responses only permit `Authorization`, `Content-Type`, and
+`X-Requested-With` headers. Using broad or wildcard origins can let malicious sites
+read authenticated responses; limit the list to trusted domains.
+
 ## Authentication
 - OIDC (default): Send `Authorization: Bearer <JWT>`. The API validates against `OIDC_JWKS_URL` and optional `OIDC_ISSUER`.
 - Local (dev): `POST /login` issues an HttpOnly cookie. Include cookie on subsequent requests. `POST /logout` clears it.
