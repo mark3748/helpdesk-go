@@ -2,3 +2,5 @@
 .gocache
 **/node_modules
 **/dist
+# Do not ignore vendored swagger assets
+!docker/swagger/
