@@ -99,6 +99,58 @@ Examples:
 - Object storage is optional; when unconfigured, set `FILESTORE_PATH` to store attachments locally.
 - This is a starter kit—intended to be iterated on.
 
+### Secrets and Sensitive Config
+- The chart can read sensitive env vars from a Kubernetes Secret. Enable and either let the chart create one or reference an existing Secret:
+  ```yaml
+  secrets:
+    enabled: true
+    # Use an existing Secret by name (skip creation):
+    # name: helpdesk-secrets
+    data:
+      DATABASE_URL: "postgres://user:pass@postgres:5432/helpdesk?sslmode=disable"
+      AUTH_LOCAL_SECRET: "change-me"
+      ADMIN_PASSWORD: "admin"
+      # Optional:
+      # REDIS_ADDR: "redis-master.helpdesk.svc.cluster.local:6379"
+      # MINIO_ENDPOINT: "minio.helpdesk.svc:9000"
+      # MINIO_ACCESS_KEY: "..."
+      # MINIO_SECRET_KEY: "..."
+      # MINIO_BUCKET: "attachments"
+  ```
+- You can combine `secrets.data` with `env:` in `values.yaml`. Explicit `env:` keys win if duplicated.
+
+### Private Registry Pull
+If your images are in a private registry (e.g., GHCR), add an imagePullSecret and reference it:
+```yaml
+imagePullSecrets:
+  - ghcr-pull
+```
+
+### Persistence for Attachments (Filesystem Store)
+If you are not using MinIO/S3, you can enable a PVC and mount it at `FILESTORE_PATH`:
+```yaml
+persistence:
+  enabled: true
+  mountPath: "/data"
+  size: 5Gi
+#  existingClaim: helpdesk-data   # optionally use an existing PVC
+```
+Then set the app to use that path (via Secret or `env:`):
+```yaml
+secrets:
+  enabled: true
+  data:
+    FILESTORE_PATH: "/data"
+```
+On startup, `/readyz` verifies the object store (MinIO bucket exists or filesystem path is writable).
+
+### Feature Flags (/features)
+The API exposes `GET /api/features` to advertise simple capabilities to the UI. Current fields:
+- `attachments`: true when object storage is configured (MinIO or filesystem). The internal UI disables the upload button when `attachments=false` and avoids presign calls.
+
+### SSE (Events)
+`GET /api/events` streams Server-Sent Events with heartbeat comments (`:hb`) roughly every 30s. For Traefik/Nginx ingress, ensure streaming is not buffered and timeouts are sufficient. The API sets `X-Accel-Buffering: no` and sends an initial heartbeat immediately. If streaming is not possible in some dev proxies, the UI falls back to polling.
+
 ### Testing
 - Unit tests can bypass JWT validation by setting `TEST_BYPASS_AUTH=true`. This injects a synthetic user with the `agent` role so auth-protected routes can be exercised without a JWKS.
 - Handlers depend on database and object storage interfaces, enabling fakes in tests without external services.
