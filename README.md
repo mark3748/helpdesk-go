@@ -202,6 +202,7 @@ API (cmd/api):
 - `OPENAPI_SPEC_PATH`: optional path to the OpenAPI spec for serving `/openapi.yaml` in local dev (default packaged in Docker at `/opt/helpdesk/docs/openapi.yaml`).
 - `LOG_PATH`: directory for API log output (default system temp dir, e.g. `/tmp`). Falls back to stdout if unwritable.
 - `RATE_LIMIT_LOGIN`: max login/logout requests per minute per IP (default unlimited).
+- `rate_limit_rejections_total{route=...}`: Prometheus counter exported by the API indicating the number of requests rejected by rate limiting for a given route label (e.g., `login`, `tickets_create`, `attachments_presign`).
 - `RATE_LIMIT_TICKETS`: max ticket creation requests per minute per user.
 - `RATE_LIMIT_ATTACHMENTS`: max attachment upload/download requests per minute per user.
 
