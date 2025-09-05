@@ -59,10 +59,10 @@ Tracking for the current branch `medium-priority-fixes`. See detailed stubs in `
   - [ ] `/readyz` fails when JWKS configured but cache empty
   - [ ] Tests: invalid alg/kid, clock skew, audience (when configured)
 
-- [ ] PR5 – Reproducible Swagger UI assets
-  - [ ] Vendor Swagger UI into `docker/swagger/` and COPY in `Dockerfile.api`
-  - [ ] Remove any build‑time network fetches; checksum if download kept
-  - [ ] Test: CI build offline; `/api/docs` serves UI
+- [x] PR5 – Reproducible Swagger UI assets
+  - [x] Vendor Swagger UI into `docker/swagger/` and COPY in `Dockerfile.api`
+  - [x] Remove any build‑time network fetches; checksum if download kept
+  - [x] Test: CI build offline; `/api/docs` serves UI
 
 - [ ] PR6 – Multi‑arch Buildx CI
   - [ ] Update `.github/workflows/release.yml` to build `linux/amd64,linux/arm64`
