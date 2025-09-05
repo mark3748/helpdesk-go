@@ -52,22 +52,22 @@ Tracking for the current branch `medium-priority-fixes`. See detailed stubs in `
   - [x] Validate `/attachments/upload/:objectKey` requires UUID (return 400 otherwise)
   - [x] Tests: Redis timeouts soft‑fail behavior; filesystem upload success + invalid key 400
 
-- [ ] PR4 – JWKS hardening
-  - [ ] Replace fixed ticker with jittered exponential backoff refresh; keep last‑good cache
-  - [ ] Enforce allowed JWT algs; require/validate `kid` when present
-  - [ ] Metrics: `jwks_refresh_total`, `jwks_refresh_errors_total`
-  - [ ] `/readyz` fails when JWKS configured but cache empty
-  - [ ] Tests: invalid alg/kid, clock skew, audience (when configured)
+- [x] PR4 – JWKS hardening
+  - [x] Replace fixed ticker with jittered exponential backoff refresh; keep last‑good cache
+  - [x] Enforce allowed JWT algs; require/validate `kid` when present
+  - [x] Metrics: `jwks_refresh_total`, `jwks_refresh_errors_total`
+  - [x] `/readyz` fails when JWKS configured but cache empty
+  - [x] Tests: invalid alg/kid, clock skew, audience (when configured)
 
 - [x] PR5 – Reproducible Swagger UI assets
   - [x] Vendor Swagger UI into `docker/swagger/` and COPY in `Dockerfile.api`
   - [x] Remove any build‑time network fetches; checksum if download kept
   - [x] Test: CI build offline; `/api/docs` serves UI
 
-- [ ] PR6 – Multi‑arch Buildx CI
-  - [ ] Update `.github/workflows/release.yml` to build `linux/amd64,linux/arm64`
-  - [ ] Pass `--platform` via `docker/build-push-action`; parameterize `GOARCH`
-  - [ ] Test: manifests created; push on tag
+- [x] PR6 – Multi‑arch Buildx CI
+  - [x] Update `.github/workflows/release.yml` to build `linux/amd64,linux/arm64`
+  - [x] Pass `--platform` via `docker/build-push-action`; parameterize `GOARCH`
+  - [x] Test: manifests created; push on tag
 
 - [ ] PR7 – Observability counters
   - [ ] Counters: `tickets_created_total`, `tickets_updated_total`, `auth_failures_total`, `rate_limit_rejections_total`, `attachments_uploaded_total`
