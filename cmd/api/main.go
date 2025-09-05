@@ -737,13 +737,30 @@ func (a *App) openapiSpec(c *gin.Context) {
 }
 
 func (a *App) readyz(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
 
     if a.db != nil {
         var n int
-        cctx, cancel := context.WithTimeout(ctx, time.Duration(a.cfg.DBTimeoutMS)*time.Millisecond)
-        defer cancel()
+        // Apply DB timeout only when configured (>0). Respect the shorter of the
+        // existing deadline and the configured DB timeout to avoid immediate
+        // timeouts when DB_TIMEOUT_MS is 0 or when the parent has a shorter deadline.
+        cctx := ctx
+        var cancel2 context.CancelFunc = func() {}
+        if a.cfg.DBTimeoutMS > 0 {
+            d := time.Duration(a.cfg.DBTimeoutMS) * time.Millisecond
+            if dl, ok := ctx.Deadline(); ok {
+                remain := time.Until(dl)
+                if remain > 0 && remain < d {
+                    cctx, cancel2 = context.WithTimeout(ctx, remain)
+                } else {
+                    cctx, cancel2 = context.WithTimeout(ctx, d)
+                }
+            } else {
+                cctx, cancel2 = context.WithTimeout(ctx, d)
+            }
+        }
+        defer cancel2()
         if err := a.db.QueryRow(cctx, "select 1").Scan(&n); err != nil {
             log.Error().Err(err).Msg("readyz db")
             c.JSON(500, gin.H{"error": "db"})

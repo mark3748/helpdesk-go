@@ -82,3 +82,19 @@ func TestDBTimeout_Readyz(t *testing.T) {
     }
 }
 
+func TestDBTimeout_Readyz_Disabled(t *testing.T) {
+    t.Setenv("ENV", "test")
+    // Disable DB timeout (0) — should not create an immediate deadline.
+    t.Setenv("DB_TIMEOUT_MS", "0")
+    // Ensure mail checks do not trigger external dials in tests
+    setMail(map[string]string{"host": "", "port": ""})
+    app := NewApp(getConfig(), readyzDB{}, nil, nil, nil)
+
+    rr := httptest.NewRecorder()
+    req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+    app.r.ServeHTTP(rr, req)
+
+    if rr.Code != http.StatusOK {
+        t.Fatalf("expected success with DB_TIMEOUT_MS=0, got %d body=%s", rr.Code, rr.Body.String())
+    }
+}
