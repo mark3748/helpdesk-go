@@ -56,8 +56,8 @@ export async function createTicket(data: {
     headers: {
       'Content-Type': 'application/json',
       // Help the API deduplicate accidental double-submits via idempotency keys.
-      'Idempotency-Key': (globalThis.crypto && 'randomUUID' in globalThis.crypto)
-        ? (globalThis.crypto as any).randomUUID()
+      'Idempotency-Key': (typeof globalThis.crypto?.randomUUID === 'function')
+        ? globalThis.crypto.randomUUID()
         : String(Date.now()) + '-' + Math.random().toString(36).slice(2),
     },
     body: JSON.stringify({
