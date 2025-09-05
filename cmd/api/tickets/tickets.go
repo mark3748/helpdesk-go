@@ -210,9 +210,9 @@ func Create(a *app.App) gin.HandlerFunc {
             row := a.DB.QueryRow(c.Request.Context(), `
                 select t.id::text, t.number, t.title, t.description, t.status, t.assignee_id::text, t.priority
                 from tickets t
-                where t.requester_id = $1 and t.title = $2 and t.created_at > now() - interval '15 seconds'
+                where t.requester_id = $1 and t.title = $2 and coalesce(t.description,'') = coalesce($3,'')
                 order by t.created_at desc, t.id desc
-                limit 1`, in.RequesterID, in.Title)
+                limit 1`, in.RequesterID, in.Title, in.Description)
             if err := row.Scan(&existing.ID, &number, &existing.Title, &existing.Description, &status, &assignee, &existing.Priority); err == nil {
                 existing.Number = number
                 existing.Status = status
@@ -251,9 +251,9 @@ returning id::text, number, title, description, status, assignee_id::text, prior
                 erow := a.DB.QueryRow(c.Request.Context(), `
                     select t.id::text, t.number, t.title, t.description, t.status, t.assignee_id::text, t.priority
                     from tickets t
-                    where t.requester_id = $1 and t.title = $2
+                    where t.requester_id = $1 and t.title = $2 and coalesce(t.description,'') = coalesce($3,'')
                     order by t.created_at desc, t.id desc
-                    limit 1`, in.RequesterID, in.Title)
+                    limit 1`, in.RequesterID, in.Title, in.Description)
                 if err2 := erow.Scan(&existing.ID, &enumber, &existing.Title, &existing.Description, &estatus, &eassignee, &existing.Priority); err2 == nil {
                     existing.Number = enumber
                     existing.Status = estatus
