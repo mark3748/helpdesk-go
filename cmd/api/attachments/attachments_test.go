@@ -6,9 +6,12 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	apppkg "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	metrics "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 )
 
 func TestAttachmentHandlers(t *testing.T) {
@@ -44,5 +47,27 @@ func TestAttachmentHandlers(t *testing.T) {
 				t.Fatalf("expected %d, got %d", tt.want, rr.Code)
 			}
 		})
+	}
+}
+
+// Test that the upload handler increments the counter.
+func TestAttachmentCounter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	reg := prometheus.NewRegistry()
+	metrics.AttachmentsUploadedTotal = prometheus.NewCounter(prometheus.CounterOpts{Name: "attachments_uploaded_total"})
+	reg.MustRegister(metrics.AttachmentsUploadedTotal)
+
+	cfg := apppkg.Config{Env: "test", TestBypassAuth: true}
+	a := apppkg.NewApp(cfg, nil, nil, nil, nil)
+	a.R.POST("/tickets/:id/attachments", authpkg.Middleware(a), Upload(a))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/tickets/1/attachments", nil)
+	a.R.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rr.Code)
+	}
+	if v := testutil.ToFloat64(metrics.AttachmentsUploadedTotal); v != 1 {
+		t.Fatalf("attachments_uploaded_total = %v, want 1", v)
 	}
 }

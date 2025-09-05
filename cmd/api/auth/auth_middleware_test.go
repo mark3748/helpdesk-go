@@ -6,10 +6,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	apppkg "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	metrics "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 )
 
 func TestMiddlewarePopulatesUserFromClaims(t *testing.T) {
@@ -48,5 +52,27 @@ func TestMiddlewarePopulatesUserFromClaims(t *testing.T) {
 	}
 	if len(u.Roles) != 2 || u.Roles[0] != "agent" || u.Roles[1] != "manager" {
 		t.Fatalf("roles not populated: %+v", u.Roles)
+	}
+}
+
+// Test that unauthorized requests increment the auth failure counter.
+func TestAuthFailureCounter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	reg := prometheus.NewRegistry()
+	metrics.AuthFailuresTotal = prometheus.NewCounter(prometheus.CounterOpts{Name: "auth_failures_total"})
+	reg.MustRegister(metrics.AuthFailuresTotal)
+
+	cfg := apppkg.Config{Env: "test", AuthMode: "local", AuthLocalSecret: "secret"}
+	a := apppkg.NewApp(cfg, nil, nil, nil, nil)
+	a.R.GET("/protected", authpkg.Middleware(a), func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	a.R.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+	if v := testutil.ToFloat64(metrics.AuthFailuresTotal); v != 1 {
+		t.Fatalf("auth_failures_total = %v, want 1", v)
 	}
 }

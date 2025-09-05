@@ -22,6 +22,7 @@ import (
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
 	eventspkg "github.com/mark3748/helpdesk-go/cmd/api/events"
+	metrics "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 	requesterspkg "github.com/mark3748/helpdesk-go/cmd/api/requesters"
 )
 
@@ -63,6 +64,7 @@ type createTicketReq struct {
 // Create inserts a new ticket and returns a summary.
 func Create(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		metrics.TicketsCreatedTotal.Inc()
 		// Simple idempotency: derive a deterministic key from request content.
 		// We ignore client-provided keys for dedup to avoid double-submits with
 		// different headers bypassing the guard.
@@ -596,6 +598,7 @@ func Get(a *app.App) gin.HandlerFunc {
 // Update allows changing assignee and/or priority and status
 func Update(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		metrics.TicketsUpdatedTotal.Inc()
 		var in struct {
 			AssigneeID *string `json:"assignee_id"`
 			Priority   *int16  `json:"priority"`
