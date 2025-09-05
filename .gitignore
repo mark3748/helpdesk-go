@@ -33,3 +33,6 @@ cmd/api/api
 # Local GOPATH shim/cache
 .gopath/
 **/.gopath/
+
+# Local cookie jar used in curl tests
+/cj

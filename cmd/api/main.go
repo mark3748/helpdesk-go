@@ -506,8 +506,19 @@ func main() {
 }
 
 func (a *App) routes() {
-	a.mountAPI(a.r.Group(""))
-	a.mountAPI(a.r.Group("/api"))
+    // In production, expose API only under /api to avoid duplicate routing via
+    // proxies/ingress that might forward both / and /api to the backend. In
+    // dev and test, keep both for convenience and backward-compat tests.
+    if a.cfg.Env == "prod" {
+        a.mountAPI(a.r.Group("/api"))
+        // Provide top-level health endpoints commonly used by probes
+        a.r.GET("/livez", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+        a.r.GET("/readyz", a.readyz)
+        a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+    } else {
+        a.mountAPI(a.r.Group(""))
+        a.mountAPI(a.r.Group("/api"))
+    }
 }
 
 func (a *App) mountAPI(rg *gin.RouterGroup) {
@@ -545,6 +556,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/events", handlers.Events(a.q))
 
     auth.GET("/settings", authpkg.RequireRole("admin"), handlers.GetSettings)
+    auth.GET("/features", handlers.Features(a.core()))
     auth.POST("/test-connection", authpkg.RequireRole("admin"), handlers.TestConnection)
     auth.POST("/settings/storage", authpkg.RequireRole("admin"), handlers.SaveStorageSettings)
     auth.POST("/settings/oidc", authpkg.RequireRole("admin"), handlers.SaveOIDCSettings)

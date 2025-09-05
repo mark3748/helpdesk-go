@@ -95,3 +95,31 @@ resources: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Pull secrets for private registries (e.g., GHCR)
+imagePullSecrets: []
+  # - ghcr-pull
+
+# Optional Kubernetes Secret support for sensitive env vars
+secrets:
+  enabled: false
+  # If you already have a Secret, set its name here and it will be referenced.
+  # When empty and enabled=true, this chart will create a Secret named
+  # "{{ include \"helpdesk.fullname\" . }}-secret" with the key/values below.
+  name: ""
+  data: {}
+  # Example:
+  # data:
+  #   DATABASE_URL: "postgres://user:pass@postgres:5432/helpdesk?sslmode=disable"
+  #   AUTH_LOCAL_SECRET: "super-secret"
+  #   ADMIN_PASSWORD: "admin"
+
+# Optional persistence for FILESTORE_PATH (filesystem object store)
+persistence:
+  enabled: false
+  mountPath: "/data"
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  storageClass: ""
+  existingClaim: ""

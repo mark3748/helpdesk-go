@@ -53,7 +53,13 @@ export async function createTicket(data: {
 }): Promise<Ticket> {
   return apiFetch<Ticket>('/tickets', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      // Help the API deduplicate accidental double-submits via idempotency keys.
+      'Idempotency-Key': (typeof globalThis.crypto?.randomUUID === 'function')
+        ? globalThis.crypto.randomUUID()
+        : String(Date.now()) + '-' + Math.random().toString(36).slice(2),
+    },
     body: JSON.stringify({
       title: data.title,
       description: data.description || '',
