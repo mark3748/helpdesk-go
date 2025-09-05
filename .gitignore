@@ -36,3 +36,5 @@ cmd/api/api
 
 # Local cookie jar used in curl tests
 /cj
+
+.code/
