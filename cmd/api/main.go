@@ -144,7 +144,9 @@ type Config struct {
     OIDCAudience       string
     JWTClockSkewSeconds int
     // Timeouts
-    DBTimeoutMS        int
+    DBTimeoutMS         int
+    RedisTimeoutMS      int
+    ObjectStoreTimeoutMS int
 }
 
 func getConfig() Config {
@@ -188,6 +190,8 @@ func getConfig() Config {
         OIDCAudience:         getEnv("OIDC_AUDIENCE", ""),
         JWTClockSkewSeconds:  getEnvInt("JWT_CLOCK_SKEW_SECONDS", 0),
         DBTimeoutMS:          getEnvInt("DB_TIMEOUT_MS", 5000),
+        RedisTimeoutMS:       getEnvInt("REDIS_TIMEOUT_MS", 2000),
+        ObjectStoreTimeoutMS: getEnvInt("OBJECTSTORE_TIMEOUT_MS", 10000),
     }
     return cfg
 }
@@ -274,6 +278,8 @@ func (a *App) core() *appcore.App {
         // Filesystem store path (used by FsObjectStore when MinIO is not set)
         FileStorePath:      a.cfg.FileStorePath,
         LogPath:            a.cfg.LogPath,
+        // Timeouts (for modular handlers)
+        ObjectStoreTimeoutMS: a.cfg.ObjectStoreTimeoutMS,
     }
     return &appcore.App{Cfg: cfg, DB: a.db, R: a.r, Keyf: a.keyf, M: a.m, Q: a.q}
 }
@@ -294,6 +300,36 @@ func (a *App) dbCtx(c *gin.Context) (context.Context, context.CancelFunc) {
         }
     }
     return context.WithTimeout(base, timeout)
+}
+
+// redisCtx returns a context with Redis timeout applied relative to the parent.
+func (a *App) redisCtx(parent context.Context) (context.Context, context.CancelFunc) {
+    if a.cfg.RedisTimeoutMS <= 0 {
+        return parent, func() {}
+    }
+    to := time.Duration(a.cfg.RedisTimeoutMS) * time.Millisecond
+    if dl, ok := parent.Deadline(); ok {
+        remain := time.Until(dl)
+        if remain > 0 && remain < to {
+            return context.WithTimeout(parent, remain)
+        }
+    }
+    return context.WithTimeout(parent, to)
+}
+
+// objCtx returns a context with ObjectStore timeout applied relative to the parent.
+func (a *App) objCtx(parent context.Context) (context.Context, context.CancelFunc) {
+    if a.cfg.ObjectStoreTimeoutMS <= 0 {
+        return parent, func() {}
+    }
+    to := time.Duration(a.cfg.ObjectStoreTimeoutMS) * time.Millisecond
+    if dl, ok := parent.Deadline(); ok {
+        remain := time.Until(dl)
+        if remain > 0 && remain < to {
+            return context.WithTimeout(parent, remain)
+        }
+    }
+    return context.WithTimeout(parent, to)
 }
 
 // settingsDB adapts this package's DB interface to the handlers.DB interface
@@ -539,13 +575,18 @@ func main() {
 
 	// Redis client (optional)
 	var rdb *redis.Client
-	if cfg.RedisAddr != "" {
-		rdb = redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
-		if err := rdb.Ping(ctx).Err(); err != nil {
-			log.Error().Err(err).Msg("redis ping")
-		}
-		defer rdb.Close()
-	}
+    if cfg.RedisAddr != "" {
+        rdb = redis.NewClient(&redis.Options{
+            Addr:        cfg.RedisAddr,
+            DialTimeout: time.Duration(cfg.RedisTimeoutMS) * time.Millisecond,
+            ReadTimeout: time.Duration(cfg.RedisTimeoutMS) * time.Millisecond,
+            WriteTimeout: time.Duration(cfg.RedisTimeoutMS) * time.Millisecond,
+        })
+        if err := rdb.Ping(ctx).Err(); err != nil {
+            log.Error().Err(err).Msg("redis ping")
+        }
+        defer rdb.Close()
+    }
 
 	var store ObjectStore
 	if mc != nil {
@@ -768,18 +809,22 @@ func (a *App) readyz(c *gin.Context) {
         }
     }
 
-	if a.pingRedis != nil {
-		if err := a.pingRedis(ctx); err != nil {
-			log.Error().Err(err).Msg("readyz redis")
-			c.JSON(500, gin.H{"error": "redis"})
-			return
-		}
-	}
+    if a.pingRedis != nil {
+        rc, cancel := a.redisCtx(ctx)
+        defer cancel()
+        if err := a.pingRedis(rc); err != nil {
+            log.Error().Err(err).Msg("readyz redis")
+            c.JSON(500, gin.H{"error": "redis"})
+            return
+        }
+    }
 
     if a.m != nil {
         switch s := a.m.(type) {
         case *minio.Client:
-            ok, err := s.BucketExists(ctx, a.cfg.MinIOBucket)
+            oc, cancel := a.objCtx(ctx)
+            defer cancel()
+            ok, err := s.BucketExists(oc, a.cfg.MinIOBucket)
             if err != nil || !ok {
                 log.Error().Err(err).Str("bucket", a.cfg.MinIOBucket).Msg("readyz minio")
                 c.JSON(500, gin.H{"error": "object_store"})
@@ -1337,9 +1382,9 @@ func (a *App) audit(c *gin.Context, actorType, actorID, entityType, entityID, ac
 }
 
 func (a *App) enqueueEmail(ctx context.Context, to, template string, data interface{}) {
-	if a.q == nil {
-		return
-	}
+    if a.q == nil {
+        return
+    }
 	job := struct {
 		Type string      `json:"type"`
 		Data interface{} `json:"data"`
@@ -1356,11 +1401,14 @@ func (a *App) enqueueEmail(ctx context.Context, to, template string, data interf
 		log.Error().Err(err).Msg("marshal email job")
 		return
 	}
-	if err := a.q.RPush(ctx, "jobs", b).Err(); err != nil {
-		log.Error().Err(err).Msg("enqueue job")
-	}
-	size, _ := a.q.LLen(ctx, "jobs").Result()
-	handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
+    // Apply Redis timeout to queue operations
+    rc, cancel := a.redisCtx(ctx)
+    defer cancel()
+    if err := a.q.RPush(rc, "jobs", b).Err(); err != nil {
+        log.Error().Err(err).Msg("enqueue job")
+    }
+    size, _ := a.q.LLen(rc, "jobs").Result()
+    handlers.PublishEvent(rc, a.q, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
 }
 
 func (a *App) addStatusHistory(ctx context.Context, ticketID, from, to, actorID string) {

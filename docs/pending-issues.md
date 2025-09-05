@@ -46,11 +46,11 @@ Tracking for the current branch `medium-priority-fixes`. See detailed stubs in `
   - [x] Wrap DB calls in handlers with `context.WithTimeout` via `a.dbCtx(c)` helper
   - [x] Tests: simulated slow DB returns failure (readyz) using a slow DB stub
 
-- [ ] PR3 – Timeouts (phase 2: Redis/MinIO) + upload key validation
-  - [ ] Add `REDIS_TIMEOUT_MS` (2000) and `OBJECTSTORE_TIMEOUT_MS` (10000)
-  - [ ] Apply to queue ops, limiter ping, presign/put/stat
-  - [ ] Validate `/attachments/upload/:objectKey` requires UUID (return 400 otherwise)
-  - [ ] Tests: Redis timeouts soft‑fail behavior; filesystem upload success + invalid key 400
+- [x] PR3 – Timeouts (phase 2: Redis/MinIO) + upload key validation
+  - [x] Add `REDIS_TIMEOUT_MS` (2000) and `OBJECTSTORE_TIMEOUT_MS` (10000)
+  - [x] Apply to queue ops, limiter ping, presign/put/stat
+  - [x] Validate `/attachments/upload/:objectKey` requires UUID (return 400 otherwise)
+  - [x] Tests: Redis timeouts soft‑fail behavior; filesystem upload success + invalid key 400
 
 - [ ] PR4 – JWKS hardening
   - [ ] Replace fixed ticker with jittered exponential backoff refresh; keep last‑good cache

@@ -46,9 +46,11 @@ type Config struct {
 	// Filesystem object store for dev/local
 	FileStorePath   string
 	OpenAPISpecPath string
-	LogPath         string
-	RateLimitRPS    float64
-	RateLimitBurst  int
+    LogPath         string
+    RateLimitRPS    float64
+    RateLimitBurst  int
+    // Timeouts (used by modular handlers where applicable)
+    ObjectStoreTimeoutMS int
 }
 
 // GetEnv returns the environment variable value or default.
@@ -104,8 +106,8 @@ type DB interface {
 
 // ObjectStore wraps the subset of MinIO we need for tests.
 type ObjectStore interface {
-	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
-	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+    PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+    RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
 }
 
 // fsObjectStore implements ObjectStore on the local filesystem for development/testing.
@@ -197,6 +199,22 @@ type App struct {
 	Keyf jwt.Keyfunc
 	M    ObjectStore
 	Q    *redis.Client
+}
+
+// ObjCtx returns a child context with the configured object-store timeout applied.
+// If no timeout is configured or the parent has a shorter deadline, it preserves it.
+func (a *App) ObjCtx(parent context.Context) (context.Context, context.CancelFunc) {
+    if a.Cfg.ObjectStoreTimeoutMS <= 0 {
+        return parent, func() {}
+    }
+    to := time.Duration(a.Cfg.ObjectStoreTimeoutMS) * time.Millisecond
+    if dl, ok := parent.Deadline(); ok {
+        remain := time.Until(dl)
+        if remain > 0 && remain < to {
+            return context.WithTimeout(parent, remain)
+        }
+    }
+    return context.WithTimeout(parent, to)
 }
 
 // NewApp constructs an App with injected dependencies.

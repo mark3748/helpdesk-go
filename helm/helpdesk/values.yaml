@@ -68,6 +68,9 @@ env:
   # External services (set to your endpoints)
   DATABASE_URL: "postgres://user:pass@postgres:5432/helpdesk?sslmode=disable"
   REDIS_ADDR: "redis:6379"
+  # Timeouts (ms)
+  REDIS_TIMEOUT_MS: "2000"
+  OBJECTSTORE_TIMEOUT_MS: "10000"
   # API auth (optional)
   AUTH_MODE: "oidc"
   AUTH_LOCAL_SECRET: ""

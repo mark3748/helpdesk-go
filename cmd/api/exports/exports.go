@@ -58,13 +58,17 @@ func Tickets(a *app.App) gin.HandlerFunc {
 		}
 		w.Flush()
 		objectKey := uuid.New().String() + ".csv"
-		_, err = a.M.PutObject(ctx, a.Cfg.MinIOBucket, objectKey, bytes.NewReader(buf.Bytes()), int64(buf.Len()), minio.PutObjectOptions{ContentType: "text/csv"})
+        oc, cancel := a.ObjCtx(ctx)
+        defer cancel()
+        _, err = a.M.PutObject(oc, a.Cfg.MinIOBucket, objectKey, bytes.NewReader(buf.Bytes()), int64(buf.Len()), minio.PutObjectOptions{ContentType: "text/csv"})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		if mc, ok := a.M.(*minio.Client); ok {
-			url, err := mc.PresignedGetObject(ctx, a.Cfg.MinIOBucket, objectKey, time.Minute, nil)
+            oc, cancel := a.ObjCtx(ctx)
+            defer cancel()
+            url, err := mc.PresignedGetObject(oc, a.Cfg.MinIOBucket, objectKey, time.Minute, nil)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return

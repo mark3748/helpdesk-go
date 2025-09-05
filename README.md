@@ -197,6 +197,8 @@ API (cmd/api):
 - `ADMIN_PASSWORD`: initial admin password in dev local-auth mode.
 - `FILESTORE_PATH`: local path for attachments (filesystem store).
 - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`: S3/MinIO settings.
+- `REDIS_TIMEOUT_MS`: per-call Redis timeout in milliseconds (default 2000). Applies to readiness ping and queue operations.
+- `OBJECTSTORE_TIMEOUT_MS`: per-call object store timeout in milliseconds (default 10000). Applies to MinIO/S3 presign/put/stat and filesystem operations.
 - `ALLOWED_ORIGINS`: comma-separated origins allowed for cross-origin requests (default none).
 - `TEST_BYPASS_AUTH`: set `true` in tests to bypass JWT and inject a test user.
 - `OPENAPI_SPEC_PATH`: optional path to the OpenAPI spec for serving `/openapi.yaml` in local dev (default packaged in Docker at `/opt/helpdesk/docs/openapi.yaml`).
