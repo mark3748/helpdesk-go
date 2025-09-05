@@ -143,6 +143,8 @@ type Config struct {
     // Optional OIDC audience validation and JWT clock skew
     OIDCAudience       string
     JWTClockSkewSeconds int
+    // Timeouts
+    DBTimeoutMS        int
 }
 
 func getConfig() Config {
@@ -185,6 +187,7 @@ func getConfig() Config {
         AttachmentRateLimit: getEnvInt("RATE_LIMIT_ATTACHMENTS", 0),
         OIDCAudience:         getEnv("OIDC_AUDIENCE", ""),
         JWTClockSkewSeconds:  getEnvInt("JWT_CLOCK_SKEW_SECONDS", 0),
+        DBTimeoutMS:          getEnvInt("DB_TIMEOUT_MS", 5000),
     }
     return cfg
 }
@@ -275,6 +278,24 @@ func (a *App) core() *appcore.App {
     return &appcore.App{Cfg: cfg, DB: a.db, R: a.r, Keyf: a.keyf, M: a.m, Q: a.q}
 }
 
+// dbCtx returns a child context with the configured DB timeout applied.
+// If no timeout is configured or the request already has an earlier deadline,
+// it returns the original context.
+func (a *App) dbCtx(c *gin.Context) (context.Context, context.CancelFunc) {
+    base := c.Request.Context()
+    if a.cfg.DBTimeoutMS <= 0 {
+        return base, func() {}
+    }
+    timeout := time.Duration(a.cfg.DBTimeoutMS) * time.Millisecond
+    if dl, ok := base.Deadline(); ok {
+        remain := time.Until(dl)
+        if remain > 0 && remain < timeout {
+            return context.WithTimeout(base, remain)
+        }
+    }
+    return context.WithTimeout(base, timeout)
+}
+
 // settingsDB adapts this package's DB interface to the handlers.DB interface
 type settingsDB struct{ db DB }
 
@@ -297,6 +318,9 @@ func (s settingsDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.C
 
 // NewApp constructs an App with injected dependencies and registers routes.
 func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client) *App {
+    if db != nil && cfg.DBTimeoutMS > 0 {
+        db = &dbWithTimeout{inner: db, timeout: time.Duration(cfg.DBTimeoutMS) * time.Millisecond}
+    }
     a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
 	if q != nil {
 		a.pingRedis = func(ctx context.Context) error { return q.Ping(ctx).Err() }
@@ -351,6 +375,42 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 	})
     a.routes()
     return a
+}
+
+// dbWithTimeout decorates DB calls with a per-call timeout derived from config.
+type dbWithTimeout struct {
+    inner   DB
+    timeout time.Duration
+}
+
+func (w *dbWithTimeout) with(ctx context.Context) (context.Context, context.CancelFunc) {
+    if w.timeout <= 0 {
+        return ctx, func() {}
+    }
+    if dl, ok := ctx.Deadline(); ok {
+        remain := time.Until(dl)
+        if remain > 0 && remain < w.timeout {
+            return context.WithTimeout(ctx, remain)
+        }
+    }
+    return context.WithTimeout(ctx, w.timeout)
+}
+
+func (w *dbWithTimeout) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+    c, cancel := w.with(ctx)
+    defer cancel()
+    return w.inner.Query(c, sql, args...)
+}
+
+func (w *dbWithTimeout) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+    c, _ := w.with(ctx)
+    return w.inner.QueryRow(c, sql, args...)
+}
+
+func (w *dbWithTimeout) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+    c, cancel := w.with(ctx)
+    defer cancel()
+    return w.inner.Exec(c, sql, args...)
 }
 
 // rlMiddleware wraps a ratelimit.Limiter to record Prometheus counters on rejection.
@@ -680,14 +740,16 @@ func (a *App) readyz(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if a.db != nil {
-		var n int
-		if err := a.db.QueryRow(ctx, "select 1").Scan(&n); err != nil {
-			log.Error().Err(err).Msg("readyz db")
-			c.JSON(500, gin.H{"error": "db"})
-			return
-		}
-	}
+    if a.db != nil {
+        var n int
+        cctx, cancel := context.WithTimeout(ctx, time.Duration(a.cfg.DBTimeoutMS)*time.Millisecond)
+        defer cancel()
+        if err := a.db.QueryRow(cctx, "select 1").Scan(&n); err != nil {
+            log.Error().Err(err).Msg("readyz db")
+            c.JSON(500, gin.H{"error": "db"})
+            return
+        }
+    }
 
 	if a.pingRedis != nil {
 		if err := a.pingRedis(ctx); err != nil {

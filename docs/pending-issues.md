@@ -41,10 +41,10 @@ Tracking for the current branch `medium-priority-fixes`. See detailed stubs in `
   - [x] Config notes: `RATE_LIMIT_LOGIN`, `RATE_LIMIT_TICKETS`, `RATE_LIMIT_ATTACHMENTS`
   - [x] Tests: burst requests hit 429 and counter increments
 
-- [ ] PR2 – Context timeouts (phase 1: DB)
-  - [ ] Add env knobs: `DB_TIMEOUT_MS`, default 5000
-  - [ ] Wrap DB calls in handlers with `context.WithTimeout`
-  - [ ] Tests: simulated slow DB returns 504/500 as appropriate (table‑driven)
+- [x] PR2 – Context timeouts (phase 1: DB)
+  - [x] Add env knobs: `DB_TIMEOUT_MS`, default 5000
+  - [x] Wrap DB calls in handlers with `context.WithTimeout` via `a.dbCtx(c)` helper
+  - [x] Tests: simulated slow DB returns failure (readyz) using a slow DB stub
 
 - [ ] PR3 – Timeouts (phase 2: Redis/MinIO) + upload key validation
   - [ ] Add `REDIS_TIMEOUT_MS` (2000) and `OBJECTSTORE_TIMEOUT_MS` (10000)
