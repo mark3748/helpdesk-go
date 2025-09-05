@@ -1,10 +1,12 @@
 # Build
 FROM golang:1.25-alpine AS build
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /src
 COPY . .
 WORKDIR /src/cmd/api
 RUN go mod tidy \
-    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/api
+    && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -o /out/api
 # Run
 FROM gcr.io/distroless/static:nonroot
 COPY --from=build /out/api /api
