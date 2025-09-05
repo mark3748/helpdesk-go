@@ -33,6 +33,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
     "github.com/pressly/goose/v3"
+    "github.com/prometheus/client_golang/prometheus"
     "github.com/prometheus/client_golang/prometheus/promhttp"
     "github.com/redis/go-redis/v9"
     "github.com/rs/zerolog"
@@ -52,6 +53,7 @@ import (
     metricspkg "github.com/mark3748/helpdesk-go/cmd/api/metrics"
     exportspkg "github.com/mark3748/helpdesk-go/cmd/api/exports"
     rateln "github.com/mark3748/helpdesk-go/internal/ratelimit"
+    "sync"
 )
 
 //go:embed migrations/*.sql
@@ -90,6 +92,17 @@ var (
 	statusEnum   = []string{"New", "Open", "Pending", "Resolved", "Closed"}
 	sourceEnum   = []string{"web", "email"}
 	priorityEnum = []int16{1, 2, 3, 4}
+)
+
+var (
+    rlRejects = prometheus.NewCounterVec(
+        prometheus.CounterOpts{
+            Name: "rate_limit_rejections_total",
+            Help: "Number of requests rejected by rate limiting.",
+        },
+        []string{"route"},
+    )
+    metricsRegisterOnce sync.Once
 )
 
 func enumContains[T comparable](list []T, v T) bool {
@@ -336,8 +349,25 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 		}
 		c.Next()
 	})
-	a.routes()
-	return a
+    a.routes()
+    return a
+}
+
+// rlMiddleware wraps a ratelimit.Limiter to record Prometheus counters on rejection.
+func (a *App) rlMiddleware(l *rateln.Limiter, keyFunc func(*gin.Context) string, route string) gin.HandlerFunc {
+    if l == nil { return func(c *gin.Context) { c.Next() } }
+    // Register metrics once
+    metricsRegisterOnce.Do(func(){ prometheus.MustRegister(rlRejects) })
+    return func(c *gin.Context) {
+        key := keyFunc(c)
+        ok, err := l.Allow(c.Request.Context(), key)
+        if err != nil || !ok {
+            rlRejects.WithLabelValues(route).Inc()
+            c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limited"})
+            return
+        }
+        c.Next()
+    }
 }
 
 func main() {
@@ -536,8 +566,8 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	// Local auth endpoints
     if a.cfg.AuthMode == "local" {
         if a.loginRL != nil {
-            rg.POST("/login", a.loginRL.Middleware(func(c *gin.Context) string { return c.ClientIP() }), authpkg.Login(a.core()))
-            rg.POST("/logout", a.loginRL.Middleware(func(c *gin.Context) string { return c.ClientIP() }), authpkg.Logout())
+            rg.POST("/login", a.rlMiddleware(a.loginRL, func(c *gin.Context) string { return c.ClientIP() }, "login"), authpkg.Login(a.core()))
+            rg.POST("/logout", a.rlMiddleware(a.loginRL, func(c *gin.Context) string { return c.ClientIP() }, "logout"), authpkg.Logout())
         } else {
             rg.POST("/login", authpkg.Login(a.core()))
             rg.POST("/logout", authpkg.Logout())
@@ -578,11 +608,11 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 
 	// Tickets
     auth.GET("/tickets", ticketspkg.List(a.core()))
-	if a.ticketRL != nil {
-		auth.POST("/tickets", a.ticketRL.Middleware(func(c *gin.Context) string {
-			u := c.MustGet("user").(AuthUser)
-			return u.ID
-        }), ticketspkg.Create(a.core()))
+    if a.ticketRL != nil {
+        auth.POST("/tickets", a.rlMiddleware(a.ticketRL, func(c *gin.Context) string {
+            u := c.MustGet("user").(AuthUser)
+            return u.ID
+        }, "tickets_create"), ticketspkg.Create(a.core()))
     } else {
         auth.POST("/tickets", ticketspkg.Create(a.core()))
     }
@@ -592,18 +622,18 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
     auth.POST("/tickets/:id/comments", commentspkg.Add(a.core()))
     auth.GET("/tickets/:id/attachments", attachmentspkg.List(a.core()))
     if a.attRL != nil {
-        auth.POST("/tickets/:id/attachments/presign", a.attRL.Middleware(func(c *gin.Context) string {
+        auth.POST("/tickets/:id/attachments/presign", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
             u := c.MustGet("user").(AuthUser)
             return u.ID
-        }), attachmentspkg.Presign(a.core()))
-        auth.POST("/tickets/:id/attachments", a.attRL.Middleware(func(c *gin.Context) string {
+        }, "attachments_presign"), attachmentspkg.Presign(a.core()))
+        auth.POST("/tickets/:id/attachments", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
             u := c.MustGet("user").(AuthUser)
             return u.ID
-        }), attachmentspkg.Finalize(a.core()))
-        auth.GET("/tickets/:id/attachments/:attID", a.attRL.Middleware(func(c *gin.Context) string {
+        }, "attachments_finalize"), attachmentspkg.Finalize(a.core()))
+        auth.GET("/tickets/:id/attachments/:attID", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
             u := c.MustGet("user").(AuthUser)
             return u.ID
-        }), attachmentspkg.Get(a.core()))
+        }, "attachments_get"), attachmentspkg.Get(a.core()))
     } else {
         auth.POST("/tickets/:id/attachments/presign", attachmentspkg.Presign(a.core()))
         auth.POST("/tickets/:id/attachments", attachmentspkg.Finalize(a.core()))

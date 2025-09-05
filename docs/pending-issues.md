@@ -30,6 +30,61 @@ Additional completions
 - [ ] Observability: unify structured request logging (use `cmd/api/app/middleware.go` logger everywhere), add Prometheus counters for ticket create/update, auth failures, and rate-limit rejections.
 - [ ] Tighten CORS headers: minimize `Access-Control-Allow-Headers` to required set; keep `Vary: Origin`; document `ALLOWED_ORIGINS` usage and risks.
 
+### Medium Implementation Plan (PR Checklist)
+
+Tracking for the current branch `medium-priority-fixes`. See detailed stubs in `docs/plan-medium-prs.md`.
+
+- [x] PR1 – Rate limiting standardization
+  - [x] Ensure `internal/ratelimit` wraps: `POST /login`, `POST /tickets`, `POST /tickets/:id/attachments/presign`, `POST /tickets/:id/attachments`, `GET /tickets/:id/attachments/:attID` (download path gating optional)
+  - [x] Remove any in‑memory limiters in modular handlers (confirm none remain)
+  - [x] Add Prometheus counter `rate_limit_rejections_total{route=...}` and increment from limiter middleware
+  - [x] Config notes: `RATE_LIMIT_LOGIN`, `RATE_LIMIT_TICKETS`, `RATE_LIMIT_ATTACHMENTS`
+  - [x] Tests: burst requests hit 429 and counter increments
+
+- [ ] PR2 – Context timeouts (phase 1: DB)
+  - [ ] Add env knobs: `DB_TIMEOUT_MS`, default 5000
+  - [ ] Wrap DB calls in handlers with `context.WithTimeout`
+  - [ ] Tests: simulated slow DB returns 504/500 as appropriate (table‑driven)
+
+- [ ] PR3 – Timeouts (phase 2: Redis/MinIO) + upload key validation
+  - [ ] Add `REDIS_TIMEOUT_MS` (2000) and `OBJECTSTORE_TIMEOUT_MS` (10000)
+  - [ ] Apply to queue ops, limiter ping, presign/put/stat
+  - [ ] Validate `/attachments/upload/:objectKey` requires UUID (return 400 otherwise)
+  - [ ] Tests: Redis timeouts soft‑fail behavior; filesystem upload success + invalid key 400
+
+- [ ] PR4 – JWKS hardening
+  - [ ] Replace fixed ticker with jittered exponential backoff refresh; keep last‑good cache
+  - [ ] Enforce allowed JWT algs; require/validate `kid` when present
+  - [ ] Metrics: `jwks_refresh_total`, `jwks_refresh_errors_total`
+  - [ ] `/readyz` fails when JWKS configured but cache empty
+  - [ ] Tests: invalid alg/kid, clock skew, audience (when configured)
+
+- [ ] PR5 – Reproducible Swagger UI assets
+  - [ ] Vendor Swagger UI into `docker/swagger/` and COPY in `Dockerfile.api`
+  - [ ] Remove any build‑time network fetches; checksum if download kept
+  - [ ] Test: CI build offline; `/api/docs` serves UI
+
+- [ ] PR6 – Multi‑arch Buildx CI
+  - [ ] Update `.github/workflows/release.yml` to build `linux/amd64,linux/arm64`
+  - [ ] Pass `--platform` via `docker/build-push-action`; parameterize `GOARCH`
+  - [ ] Test: manifests created; push on tag
+
+- [ ] PR7 – Observability counters
+  - [ ] Counters: `tickets_created_total`, `tickets_updated_total`, `auth_failures_total`, `rate_limit_rejections_total`, `attachments_uploaded_total`
+  - [ ] Increment at modular handler entry points
+  - [ ] Tests: unit counter assertions with a test registry
+
+- [ ] PR8 – CORS tightening
+  - [ ] Restrict `Access-Control-Allow-Headers` to `Authorization, Content-Type, X-Requested-With`
+  - [ ] Ensure `Vary: Origin` always set; 403 for disallowed origins
+  - [ ] Docs: `ALLOWED_ORIGINS` risks and examples
+  - [ ] Tests: OPTIONS preflight allowed/blocked
+
+- [ ] PR9 – SLA tests expansion
+  - [ ] Edge cases: holidays, non‑business hours, boundaries
+  - [ ] Table‑driven tests in `internal/sla/*_test.go`
+
+
 ## Low Priority
 
 - [ ] Worker SMTP: add STARTTLS/TLS support and dial/write timeouts; configurable `smtpSendMail` transport.
