@@ -1,16 +1,17 @@
 package auth
 
 import (
-    "net/http"
-    "strings"
-    "time"
+	"net/http"
+	"strings"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "github.com/jackc/pgx/v5"
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
+	metrics "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 )
 
 // AuthUser represents the authenticated user.
@@ -43,6 +44,7 @@ func Middleware(a *app.App) gin.HandlerFunc {
 		if strings.ToLower(a.Cfg.AuthMode) == "local" {
 			cookie, err := c.Request.Cookie("hd_auth")
 			if err != nil || cookie.Value == "" {
+				metrics.AuthFailuresTotal.Inc()
 				app.AbortError(c, http.StatusUnauthorized, "unauthenticated", "unauthenticated", nil)
 				return
 			}
@@ -53,11 +55,13 @@ func Middleware(a *app.App) gin.HandlerFunc {
 				return []byte(a.Cfg.AuthLocalSecret), nil
 			})
 			if err != nil || !token.Valid {
+				metrics.AuthFailuresTotal.Inc()
 				app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
 				return
 			}
 			claims, ok := token.Claims.(jwt.MapClaims)
 			if !ok {
+				metrics.AuthFailuresTotal.Inc()
 				app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
 				return
 			}
@@ -111,54 +115,58 @@ func Middleware(a *app.App) gin.HandlerFunc {
 					}
 				}
 			}
-            // Augment roles with stored DB roles (union). Prefer querying by
-            // resolved user ID; fall back to external_id, then username/email.
-            if a.DB != nil {
-                ctx := c.Request.Context()
-                var rows pgx.Rows
-                var err error
-                switch {
-                case u.ID != "":
-                    rows, err = a.DB.Query(ctx, `
+			// Augment roles with stored DB roles (union). Prefer querying by
+			// resolved user ID; fall back to external_id, then username/email.
+			if a.DB != nil {
+				ctx := c.Request.Context()
+				var rows pgx.Rows
+				var err error
+				switch {
+				case u.ID != "":
+					rows, err = a.DB.Query(ctx, `
 select r.name
 from users u
 left join user_roles ur on ur.user_id = u.id
 left join roles r on r.id = ur.role_id
 where u.id::text = $1`, u.ID)
-                case u.ExternalID != "":
-                    rows, err = a.DB.Query(ctx, `
+				case u.ExternalID != "":
+					rows, err = a.DB.Query(ctx, `
 select r.name
 from users u
 left join user_roles ur on ur.user_id = u.id
 left join roles r on r.id = ur.role_id
 where u.external_id = $1`, u.ExternalID)
-                case u.Email != "":
-                    rows, err = a.DB.Query(ctx, `
+				case u.Email != "":
+					rows, err = a.DB.Query(ctx, `
 select r.name
 from users u
 left join user_roles ur on ur.user_id = u.id
 left join roles r on r.id = ur.role_id
 where lower(u.email) = lower($1)`, u.Email)
-                default:
-                    rows, err = nil, nil
-                }
-                if err == nil && rows != nil {
-                    defer rows.Close()
-                    for rows.Next() {
-                        var name *string
-                        if err := rows.Scan(&name); err == nil {
-                            if name != nil && *name != "" && !hasRole(u.Roles, *name) {
-                                u.Roles = append(u.Roles, *name)
-                            }
-                        }
-                    }
-                }
-                // Ensure local admin always retains baseline roles even if DB links are missing
-                if strings.HasPrefix(u.ExternalID, "local:") && strings.EqualFold(strings.TrimPrefix(u.ExternalID, "local:"), "admin") {
-                    if !hasRole(u.Roles, "admin") { u.Roles = append(u.Roles, "admin") }
-                    if !hasRole(u.Roles, "agent") { u.Roles = append(u.Roles, "agent") }
-                }
-            }
+				default:
+					rows, err = nil, nil
+				}
+				if err == nil && rows != nil {
+					defer rows.Close()
+					for rows.Next() {
+						var name *string
+						if err := rows.Scan(&name); err == nil {
+							if name != nil && *name != "" && !hasRole(u.Roles, *name) {
+								u.Roles = append(u.Roles, *name)
+							}
+						}
+					}
+				}
+				// Ensure local admin always retains baseline roles even if DB links are missing
+				if strings.HasPrefix(u.ExternalID, "local:") && strings.EqualFold(strings.TrimPrefix(u.ExternalID, "local:"), "admin") {
+					if !hasRole(u.Roles, "admin") {
+						u.Roles = append(u.Roles, "admin")
+					}
+					if !hasRole(u.Roles, "agent") {
+						u.Roles = append(u.Roles, "agent")
+					}
+				}
+			}
 			c.Set("user", u)
 			c.Next()
 			return
@@ -171,46 +179,51 @@ where lower(u.email) = lower($1)`, u.Email)
 		}
 		auth := c.GetHeader("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
+			metrics.AuthFailuresTotal.Inc()
 			app.AbortError(c, http.StatusUnauthorized, "unauthenticated", "missing bearer token", nil)
 			return
 		}
 		tokenStr := strings.TrimPrefix(auth, "Bearer ")
-        // Enforce acceptable algorithms and validate standard time-based claims;
-        // allow optional leeway when configured.
-        opts := []jwt.ParserOption{jwt.WithValidMethods([]string{"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "HS256", "HS384", "HS512"})}
-        if a.Cfg.JWTClockSkewSeconds > 0 {
-            opts = append(opts, jwt.WithLeeway(time.Duration(a.Cfg.JWTClockSkewSeconds)*time.Second))
-        }
-        parser := jwt.NewParser(opts...)
-        token, err := parser.Parse(tokenStr, a.Keyf)
-        if err != nil || !token.Valid {
-            app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
-            return
-        }
-    claims, ok := token.Claims.(jwt.MapClaims)
-    if !ok {
-        app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
-        return
-    }
-        // Optional issuer validation when configured
-        if iss := a.Cfg.OIDCIssuer; iss != "" {
-            if got := getStringClaim(claims, "iss"); got != iss {
-                app.AbortError(c, http.StatusUnauthorized, "invalid_issuer", "invalid issuer", nil)
-                return
-            }
-        }
-        // Optional audience validation when configured
-        if aud := a.Cfg.OIDCAudience; aud != "" {
-            if !audienceContains(claims, aud) {
-                app.AbortError(c, http.StatusUnauthorized, "invalid_audience", "invalid audience", nil)
-                return
-            }
-        }
-        u := AuthUser{
-            ExternalID:  getStringClaim(claims, "sub"),
-            Email:       getStringClaim(claims, "email"),
-            DisplayName: getStringClaim(claims, "name"),
-        }
+		// Enforce acceptable algorithms and validate standard time-based claims;
+		// allow optional leeway when configured.
+		opts := []jwt.ParserOption{jwt.WithValidMethods([]string{"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "HS256", "HS384", "HS512"})}
+		if a.Cfg.JWTClockSkewSeconds > 0 {
+			opts = append(opts, jwt.WithLeeway(time.Duration(a.Cfg.JWTClockSkewSeconds)*time.Second))
+		}
+		parser := jwt.NewParser(opts...)
+		token, err := parser.Parse(tokenStr, a.Keyf)
+		if err != nil || !token.Valid {
+			metrics.AuthFailuresTotal.Inc()
+			app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
+			return
+		}
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			metrics.AuthFailuresTotal.Inc()
+			app.AbortError(c, http.StatusUnauthorized, "invalid_token", "invalid token", nil)
+			return
+		}
+		// Optional issuer validation when configured
+		if iss := a.Cfg.OIDCIssuer; iss != "" {
+			if got := getStringClaim(claims, "iss"); got != iss {
+				metrics.AuthFailuresTotal.Inc()
+				app.AbortError(c, http.StatusUnauthorized, "invalid_issuer", "invalid issuer", nil)
+				return
+			}
+		}
+		// Optional audience validation when configured
+		if aud := a.Cfg.OIDCAudience; aud != "" {
+			if !audienceContains(claims, aud) {
+				metrics.AuthFailuresTotal.Inc()
+				app.AbortError(c, http.StatusUnauthorized, "invalid_audience", "invalid audience", nil)
+				return
+			}
+		}
+		u := AuthUser{
+			ExternalID:  getStringClaim(claims, "sub"),
+			Email:       getStringClaim(claims, "email"),
+			DisplayName: getStringClaim(claims, "name"),
+		}
 		if u.DisplayName == "" {
 			u.DisplayName = getStringClaim(claims, "preferred_username")
 		}
@@ -268,36 +281,39 @@ where u.external_id=$1`, u.ExternalID)
 }
 
 func getStringClaim(c jwt.MapClaims, key string) string {
-    if v, ok := c[key].(string); ok {
-        return v
-    }
-    return ""
+	if v, ok := c[key].(string); ok {
+		return v
+	}
+	return ""
 }
 
 func audienceContains(c jwt.MapClaims, want string) bool {
-    if v, ok := c["aud"]; ok {
-        switch t := v.(type) {
-        case string:
-            return t == want
-        case []interface{}:
-            for _, e := range t {
-                if s, ok := e.(string); ok && s == want {
-                    return true
-                }
-            }
-        case []string:
-            for _, s := range t {
-                if s == want { return true }
-            }
-        }
-    }
-    return false
+	if v, ok := c["aud"]; ok {
+		switch t := v.(type) {
+		case string:
+			return t == want
+		case []interface{}:
+			for _, e := range t {
+				if s, ok := e.(string); ok && s == want {
+					return true
+				}
+			}
+		case []string:
+			for _, s := range t {
+				if s == want {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // Me returns the authenticated user.
 func Me(c *gin.Context) {
 	u, ok := c.Get("user")
 	if !ok {
+		metrics.AuthFailuresTotal.Inc()
 		app.AbortError(c, http.StatusUnauthorized, "unauthenticated", "unauthenticated", nil)
 		return
 	}
@@ -309,11 +325,13 @@ func RequireRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uVal, ok := c.Get("user")
 		if !ok {
+			metrics.AuthFailuresTotal.Inc()
 			app.AbortError(c, http.StatusUnauthorized, "unauthenticated", "unauthenticated", nil)
 			return
 		}
 		user, ok := uVal.(AuthUser)
 		if !ok {
+			metrics.AuthFailuresTotal.Inc()
 			app.AbortError(c, http.StatusUnauthorized, "invalid_user", "invalid user", nil)
 			return
 		}
@@ -362,6 +380,7 @@ from users where lower(username)=lower($1) or lower(email)=lower($1) limit 1`
 		if uid == "" {
 			// Fallback: built-in admin via env password
 			if in.Username != "admin" || in.Password != a.Cfg.AdminPassword {
+				metrics.AuthFailuresTotal.Inc()
 				app.AbortError(c, http.StatusUnauthorized, "invalid_credentials", "invalid credentials", nil)
 				return
 			}
@@ -391,6 +410,7 @@ returning id::text`
 		} else {
 			// Validate password for local DB user
 			if hash == "" || bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Password)) != nil {
+				metrics.AuthFailuresTotal.Inc()
 				app.AbortError(c, http.StatusUnauthorized, "invalid_credentials", "invalid credentials", nil)
 				return
 			}

@@ -1,11 +1,11 @@
 package main
 
 import (
-    "bytes"
-    "context"
-    crand "crypto/rand"
-    "crypto/sha256"
-    "database/sql"
+	"bytes"
+	"context"
+	crand "crypto/rand"
+	"crypto/sha256"
+	"database/sql"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
@@ -19,10 +19,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-    "time"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "github.com/golang-jwt/jwt/v5"
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -32,29 +32,30 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-    "github.com/pressly/goose/v3"
-    "github.com/prometheus/client_golang/prometheus"
-    "github.com/prometheus/client_golang/prometheus/promhttp"
-    "github.com/redis/go-redis/v9"
-    "github.com/rs/zerolog"
-    "github.com/rs/zerolog/log"
-    "golang.org/x/crypto/bcrypt"
-    "math/big"
+	"github.com/pressly/goose/v3"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/crypto/bcrypt"
+	"math/big"
 
-    appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
-    appevents "github.com/mark3748/helpdesk-go/cmd/api/events"
-    handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
-    authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
-    userspkg "github.com/mark3748/helpdesk-go/cmd/api/users"
-    roles "github.com/mark3748/helpdesk-go/cmd/api/roles"
-    ticketspkg "github.com/mark3748/helpdesk-go/cmd/api/tickets"
-    commentspkg "github.com/mark3748/helpdesk-go/cmd/api/comments"
-    attachmentspkg "github.com/mark3748/helpdesk-go/cmd/api/attachments"
-    watcherspkg "github.com/mark3748/helpdesk-go/cmd/api/watchers"
-    metricspkg "github.com/mark3748/helpdesk-go/cmd/api/metrics"
-    exportspkg "github.com/mark3748/helpdesk-go/cmd/api/exports"
-    rateln "github.com/mark3748/helpdesk-go/internal/ratelimit"
-    "sync"
+	appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
+	attachmentspkg "github.com/mark3748/helpdesk-go/cmd/api/attachments"
+	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	commentspkg "github.com/mark3748/helpdesk-go/cmd/api/comments"
+	appevents "github.com/mark3748/helpdesk-go/cmd/api/events"
+	exportspkg "github.com/mark3748/helpdesk-go/cmd/api/exports"
+	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	metrics "github.com/mark3748/helpdesk-go/cmd/api/metrics"
+	metricspkg "github.com/mark3748/helpdesk-go/cmd/api/metrics"
+	roles "github.com/mark3748/helpdesk-go/cmd/api/roles"
+	ticketspkg "github.com/mark3748/helpdesk-go/cmd/api/tickets"
+	userspkg "github.com/mark3748/helpdesk-go/cmd/api/users"
+	watcherspkg "github.com/mark3748/helpdesk-go/cmd/api/watchers"
+	rateln "github.com/mark3748/helpdesk-go/internal/ratelimit"
+	"sync"
 )
 
 //go:embed migrations/*.sql
@@ -96,22 +97,15 @@ var (
 )
 
 var (
-    rlRejects = prometheus.NewCounterVec(
-        prometheus.CounterOpts{
-            Name: "rate_limit_rejections_total",
-            Help: "Number of requests rejected by rate limiting.",
-        },
-        []string{"route"},
-    )
-    jwksRefreshTotal = prometheus.NewCounter(prometheus.CounterOpts{
-        Name: "jwks_refresh_total",
-        Help: "Number of JWKS refresh attempts.",
-    })
-    jwksRefreshErrorsTotal = prometheus.NewCounter(prometheus.CounterOpts{
-        Name: "jwks_refresh_errors_total",
-        Help: "Number of JWKS refresh errors.",
-    })
-    metricsRegisterOnce sync.Once
+	jwksRefreshTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "jwks_refresh_total",
+		Help: "Number of JWKS refresh attempts.",
+	})
+	jwksRefreshErrorsTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "jwks_refresh_errors_total",
+		Help: "Number of JWKS refresh errors.",
+	})
+	metricsRegisterOnce sync.Once
 )
 
 func enumContains[T comparable](list []T, v T) bool {
@@ -148,14 +142,14 @@ type Config struct {
 	LogPath             string
 	LoginRateLimit      int
 	TicketRateLimit     int
-    AttachmentRateLimit int
-    // Optional OIDC audience validation and JWT clock skew
-    OIDCAudience       string
-    JWTClockSkewSeconds int
-    // Timeouts
-    DBTimeoutMS         int
-    RedisTimeoutMS      int
-    ObjectStoreTimeoutMS int
+	AttachmentRateLimit int
+	// Optional OIDC audience validation and JWT clock skew
+	OIDCAudience        string
+	JWTClockSkewSeconds int
+	// Timeouts
+	DBTimeoutMS          int
+	RedisTimeoutMS       int
+	ObjectStoreTimeoutMS int
 }
 
 func getConfig() Config {
@@ -187,22 +181,22 @@ func getConfig() Config {
 			}
 			return out
 		}(),
-		TestBypassAuth:      getEnv("TEST_BYPASS_AUTH", "false") == "true",
-		AuthMode:            getEnv("AUTH_MODE", "oidc"),
-		AuthLocalSecret:     getEnv("AUTH_LOCAL_SECRET", ""),
-		FileStorePath:       getEnv("FILESTORE_PATH", ""),
-		OpenAPISpecPath:     getEnv("OPENAPI_SPEC_PATH", ""),
-		LogPath:             getEnv("LOG_PATH", "/config/logs"),
-		LoginRateLimit:      getEnvInt("RATE_LIMIT_LOGIN", 0),
-		TicketRateLimit:     getEnvInt("RATE_LIMIT_TICKETS", 0),
-        AttachmentRateLimit: getEnvInt("RATE_LIMIT_ATTACHMENTS", 0),
-        OIDCAudience:         getEnv("OIDC_AUDIENCE", ""),
-        JWTClockSkewSeconds:  getEnvInt("JWT_CLOCK_SKEW_SECONDS", 0),
-        DBTimeoutMS:          getEnvInt("DB_TIMEOUT_MS", 5000),
-        RedisTimeoutMS:       getEnvInt("REDIS_TIMEOUT_MS", 2000),
-        ObjectStoreTimeoutMS: getEnvInt("OBJECTSTORE_TIMEOUT_MS", 10000),
-    }
-    return cfg
+		TestBypassAuth:       getEnv("TEST_BYPASS_AUTH", "false") == "true",
+		AuthMode:             getEnv("AUTH_MODE", "oidc"),
+		AuthLocalSecret:      getEnv("AUTH_LOCAL_SECRET", ""),
+		FileStorePath:        getEnv("FILESTORE_PATH", ""),
+		OpenAPISpecPath:      getEnv("OPENAPI_SPEC_PATH", ""),
+		LogPath:              getEnv("LOG_PATH", "/config/logs"),
+		LoginRateLimit:       getEnvInt("RATE_LIMIT_LOGIN", 0),
+		TicketRateLimit:      getEnvInt("RATE_LIMIT_TICKETS", 0),
+		AttachmentRateLimit:  getEnvInt("RATE_LIMIT_ATTACHMENTS", 0),
+		OIDCAudience:         getEnv("OIDC_AUDIENCE", ""),
+		JWTClockSkewSeconds:  getEnvInt("JWT_CLOCK_SKEW_SECONDS", 0),
+		DBTimeoutMS:          getEnvInt("DB_TIMEOUT_MS", 5000),
+		RedisTimeoutMS:       getEnvInt("REDIS_TIMEOUT_MS", 2000),
+		ObjectStoreTimeoutMS: getEnvInt("OBJECTSTORE_TIMEOUT_MS", 10000),
+	}
+	return cfg
 }
 
 func getEnv(key, def string) string {
@@ -243,105 +237,105 @@ type DB interface {
 
 // ObjectStore wraps the subset of MinIO we need for tests.
 type ObjectStore interface {
-    PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
-    RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
-    PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error)
-    StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error)
+	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+	PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error)
+	StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error)
 }
 
 // Note: Filesystem object store is provided by appcore.FsObjectStore when MinIO is not configured.
 
 type App struct {
-    cfg  Config
-    db   DB
-    r    *gin.Engine
-    keyf jwt.Keyfunc
-    m    ObjectStore
-    q    *redis.Client
+	cfg  Config
+	db   DB
+	r    *gin.Engine
+	keyf jwt.Keyfunc
+	m    ObjectStore
+	q    *redis.Client
 	// pingRedis allows overriding Redis health check in tests
 	pingRedis func(ctx context.Context) error
-    loginRL   *rateln.Limiter
-    ticketRL  *rateln.Limiter
-    attRL     *rateln.Limiter
-    // JWKS health
-    jwksConfigured bool
-    jwksOK         func() bool
+	loginRL   *rateln.Limiter
+	ticketRL  *rateln.Limiter
+	attRL     *rateln.Limiter
+	// JWKS health
+	jwksConfigured bool
+	jwksOK         func() bool
 }
 
 // core returns a lightweight adapter to the modular app.App for feature handlers.
 func (a *App) core() *appcore.App {
-    // Map required fields so modular handlers (auth, etc.) receive the same config.
-    cfg := appcore.Config{
-        // Environment and testing
-        Env:                a.cfg.Env,
-        TestBypassAuth:     a.cfg.TestBypassAuth,
-        // Auth configuration
-        AuthMode:           a.cfg.AuthMode,
-        AuthLocalSecret:    a.cfg.AuthLocalSecret,
-        AdminPassword:      os.Getenv("ADMIN_PASSWORD"),
-        OIDCIssuer:         a.cfg.OIDCIssuer,
-        OIDCGroupClaim:     a.cfg.OIDCGroupClaim,
-        OIDCAudience:       a.cfg.OIDCAudience,
-        JWTClockSkewSeconds: a.cfg.JWTClockSkewSeconds,
-        // Object storage
-        MinIOBucket:        a.cfg.MinIOBucket,
-        MinIOEndpoint:      a.cfg.MinIOEndpoint,
-        MinIOUseSSL:        a.cfg.MinIOUseSSL,
-        // Filesystem store path (used by FsObjectStore when MinIO is not set)
-        FileStorePath:      a.cfg.FileStorePath,
-        LogPath:            a.cfg.LogPath,
-        // Timeouts (for modular handlers)
-        ObjectStoreTimeoutMS: a.cfg.ObjectStoreTimeoutMS,
-    }
-    return &appcore.App{Cfg: cfg, DB: a.db, R: a.r, Keyf: a.keyf, M: a.m, Q: a.q}
+	// Map required fields so modular handlers (auth, etc.) receive the same config.
+	cfg := appcore.Config{
+		// Environment and testing
+		Env:            a.cfg.Env,
+		TestBypassAuth: a.cfg.TestBypassAuth,
+		// Auth configuration
+		AuthMode:            a.cfg.AuthMode,
+		AuthLocalSecret:     a.cfg.AuthLocalSecret,
+		AdminPassword:       os.Getenv("ADMIN_PASSWORD"),
+		OIDCIssuer:          a.cfg.OIDCIssuer,
+		OIDCGroupClaim:      a.cfg.OIDCGroupClaim,
+		OIDCAudience:        a.cfg.OIDCAudience,
+		JWTClockSkewSeconds: a.cfg.JWTClockSkewSeconds,
+		// Object storage
+		MinIOBucket:   a.cfg.MinIOBucket,
+		MinIOEndpoint: a.cfg.MinIOEndpoint,
+		MinIOUseSSL:   a.cfg.MinIOUseSSL,
+		// Filesystem store path (used by FsObjectStore when MinIO is not set)
+		FileStorePath: a.cfg.FileStorePath,
+		LogPath:       a.cfg.LogPath,
+		// Timeouts (for modular handlers)
+		ObjectStoreTimeoutMS: a.cfg.ObjectStoreTimeoutMS,
+	}
+	return &appcore.App{Cfg: cfg, DB: a.db, R: a.r, Keyf: a.keyf, M: a.m, Q: a.q}
 }
 
 // dbCtx returns a child context with the configured DB timeout applied.
 // If no timeout is configured or the request already has an earlier deadline,
 // it returns the original context.
 func (a *App) dbCtx(c *gin.Context) (context.Context, context.CancelFunc) {
-    base := c.Request.Context()
-    if a.cfg.DBTimeoutMS <= 0 {
-        return base, func() {}
-    }
-    timeout := time.Duration(a.cfg.DBTimeoutMS) * time.Millisecond
-    if dl, ok := base.Deadline(); ok {
-        remain := time.Until(dl)
-        if remain > 0 && remain < timeout {
-            return context.WithTimeout(base, remain)
-        }
-    }
-    return context.WithTimeout(base, timeout)
+	base := c.Request.Context()
+	if a.cfg.DBTimeoutMS <= 0 {
+		return base, func() {}
+	}
+	timeout := time.Duration(a.cfg.DBTimeoutMS) * time.Millisecond
+	if dl, ok := base.Deadline(); ok {
+		remain := time.Until(dl)
+		if remain > 0 && remain < timeout {
+			return context.WithTimeout(base, remain)
+		}
+	}
+	return context.WithTimeout(base, timeout)
 }
 
 // redisCtx returns a context with Redis timeout applied relative to the parent.
 func (a *App) redisCtx(parent context.Context) (context.Context, context.CancelFunc) {
-    if a.cfg.RedisTimeoutMS <= 0 {
-        return parent, func() {}
-    }
-    to := time.Duration(a.cfg.RedisTimeoutMS) * time.Millisecond
-    if dl, ok := parent.Deadline(); ok {
-        remain := time.Until(dl)
-        if remain > 0 && remain < to {
-            return context.WithTimeout(parent, remain)
-        }
-    }
-    return context.WithTimeout(parent, to)
+	if a.cfg.RedisTimeoutMS <= 0 {
+		return parent, func() {}
+	}
+	to := time.Duration(a.cfg.RedisTimeoutMS) * time.Millisecond
+	if dl, ok := parent.Deadline(); ok {
+		remain := time.Until(dl)
+		if remain > 0 && remain < to {
+			return context.WithTimeout(parent, remain)
+		}
+	}
+	return context.WithTimeout(parent, to)
 }
 
 // objCtx returns a context with ObjectStore timeout applied relative to the parent.
 func (a *App) objCtx(parent context.Context) (context.Context, context.CancelFunc) {
-    if a.cfg.ObjectStoreTimeoutMS <= 0 {
-        return parent, func() {}
-    }
-    to := time.Duration(a.cfg.ObjectStoreTimeoutMS) * time.Millisecond
-    if dl, ok := parent.Deadline(); ok {
-        remain := time.Until(dl)
-        if remain > 0 && remain < to {
-            return context.WithTimeout(parent, remain)
-        }
-    }
-    return context.WithTimeout(parent, to)
+	if a.cfg.ObjectStoreTimeoutMS <= 0 {
+		return parent, func() {}
+	}
+	to := time.Duration(a.cfg.ObjectStoreTimeoutMS) * time.Millisecond
+	if dl, ok := parent.Deadline(); ok {
+		remain := time.Until(dl)
+		if remain > 0 && remain < to {
+			return context.WithTimeout(parent, remain)
+		}
+	}
+	return context.WithTimeout(parent, to)
 }
 
 // settingsDB adapts this package's DB interface to the handlers.DB interface
@@ -366,10 +360,10 @@ func (s settingsDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.C
 
 // NewApp constructs an App with injected dependencies and registers routes.
 func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client) *App {
-    if db != nil && cfg.DBTimeoutMS > 0 {
-        db = &dbWithTimeout{inner: db, timeout: time.Duration(cfg.DBTimeoutMS) * time.Millisecond}
-    }
-    a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
+	if db != nil && cfg.DBTimeoutMS > 0 {
+		db = &dbWithTimeout{inner: db, timeout: time.Duration(cfg.DBTimeoutMS) * time.Millisecond}
+	}
+	a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
 	if q != nil {
 		a.pingRedis = func(ctx context.Context) error { return q.Ping(ctx).Err() }
 		if cfg.LoginRateLimit > 0 {
@@ -386,10 +380,10 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 		handlers.InitSettings(context.Background(), settingsDB{db: db}, cfg.LogPath)
 	}
 	handlers.EnqueueEmail = a.enqueueEmail
-    a.r.Use(gin.Recovery())
-    // Structured logging with request IDs
-    a.r.Use(appcore.RequestID())
-    a.r.Use(appcore.Logger())
+	a.r.Use(gin.Recovery())
+	// Structured logging with request IDs
+	a.r.Use(appcore.RequestID())
+	a.r.Use(appcore.Logger())
 	a.r.Use(func(c *gin.Context) {
 		c.Header("Content-Security-Policy", "default-src 'none'")
 		c.Header("X-Content-Type-Options", "nosniff")
@@ -421,65 +415,66 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 		}
 		c.Next()
 	})
-    a.routes()
-    return a
+	a.routes()
+	return a
 }
 
 // dbWithTimeout decorates DB calls with a per-call timeout derived from config.
 type dbWithTimeout struct {
-    inner   DB
-    timeout time.Duration
+	inner   DB
+	timeout time.Duration
 }
 
 func (w *dbWithTimeout) with(ctx context.Context) (context.Context, context.CancelFunc) {
-    if w.timeout <= 0 {
-        return ctx, func() {}
-    }
-    if dl, ok := ctx.Deadline(); ok {
-        remain := time.Until(dl)
-        if remain > 0 && remain < w.timeout {
-            return context.WithTimeout(ctx, remain)
-        }
-    }
-    return context.WithTimeout(ctx, w.timeout)
+	if w.timeout <= 0 {
+		return ctx, func() {}
+	}
+	if dl, ok := ctx.Deadline(); ok {
+		remain := time.Until(dl)
+		if remain > 0 && remain < w.timeout {
+			return context.WithTimeout(ctx, remain)
+		}
+	}
+	return context.WithTimeout(ctx, w.timeout)
 }
 
 func (w *dbWithTimeout) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
-    c, cancel := w.with(ctx)
-    defer cancel()
-    return w.inner.Query(c, sql, args...)
+	c, cancel := w.with(ctx)
+	defer cancel()
+	return w.inner.Query(c, sql, args...)
 }
 
 func (w *dbWithTimeout) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
-    c, _ := w.with(ctx)
-    return w.inner.QueryRow(c, sql, args...)
+	c, _ := w.with(ctx)
+	return w.inner.QueryRow(c, sql, args...)
 }
 
 func (w *dbWithTimeout) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
-    c, cancel := w.with(ctx)
-    defer cancel()
-    return w.inner.Exec(c, sql, args...)
+	c, cancel := w.with(ctx)
+	defer cancel()
+	return w.inner.Exec(c, sql, args...)
 }
 
 // rlMiddleware wraps a ratelimit.Limiter to record Prometheus counters on rejection.
 func (a *App) rlMiddleware(l *rateln.Limiter, keyFunc func(*gin.Context) string, route string) gin.HandlerFunc {
-    if l == nil { return func(c *gin.Context) { c.Next() } }
-    // Register metrics once
-    metricsRegisterOnce.Do(func(){ prometheus.MustRegister(rlRejects) })
-    return func(c *gin.Context) {
-        key := keyFunc(c)
-        ok, err := l.Allow(c.Request.Context(), key)
-        if err != nil || !ok {
-            rlRejects.WithLabelValues(route).Inc()
-            c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limited"})
-            return
-        }
-        c.Next()
-    }
+	if l == nil {
+		return func(c *gin.Context) { c.Next() }
+	}
+	return func(c *gin.Context) {
+		key := keyFunc(c)
+		ok, err := l.Allow(c.Request.Context(), key)
+		if err != nil || !ok {
+			metrics.RateLimitRejectionsTotal.WithLabelValues(route).Inc()
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limited"})
+			return
+		}
+		c.Next()
+	}
 }
 
 func main() {
 	cfg := getConfig()
+	metrics.RegisterCounters()
 	writer := io.Writer(os.Stdout)
 	if cfg.Env == "dev" {
 		writer = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
@@ -527,73 +522,79 @@ func main() {
 		log.Fatal().Err(err).Msg("migrate up")
 	}
 
-    // JWKS-backed Keyfunc with jittered exponential backoff refresh and metrics
-    var keyf jwt.Keyfunc
-    if cfg.JWKSURL != "" {
-        metricsRegisterOnce.Do(func(){
-            prometheus.MustRegister(jwksRefreshTotal)
-            prometheus.MustRegister(jwksRefreshErrorsTotal)
-        })
-        httpClient := &http.Client{Timeout: 10 * time.Second}
-        set, err := jwk.Fetch(ctx, cfg.JWKSURL, jwk.WithHTTPClient(httpClient))
-        if err != nil {
-            log.Fatal().Err(err).Str("jwks_url", cfg.JWKSURL).Msg("fetch jwks")
-        }
-        setPtr := &set
-        // Capture JWKS health for readyz; wired into App after construction
-        _ = true // placeholders removed; wiring handled below
-        _ = func() bool { return true }
-        // Background refresh with jittered exponential backoff; keep last-good cache
-        go func() {
-            base := time.Minute
-            max := 30 * time.Minute
-            delay := base
-            for {
-                // add up to 50% jitter using crypto/rand
-                jitterN, _ := crand.Int(crand.Reader, big.NewInt(int64(delay/2)+1))
-                time.Sleep(delay + time.Duration(jitterN.Int64()))
-                jwksRefreshTotal.Inc()
-                if newSet, err := jwk.Fetch(context.Background(), cfg.JWKSURL, jwk.WithHTTPClient(httpClient)); err == nil && newSet.Len() > 0 {
-                    *setPtr = newSet
-                    delay = base
-                } else {
-                    jwksRefreshErrorsTotal.Inc()
-                    // backoff with cap
-                    delay = delay * 2
-                    if delay > max { delay = max }
-                }
-            }
-        }()
-        allowedAlgs := map[string]bool{"RS256":true, "RS384":true, "RS512":true, "ES256":true, "ES384":true, "ES512":true}
-        keyf = func(t *jwt.Token) (interface{}, error) {
-            // Enforce allowed algs and require kid when header provides one
-            if !allowedAlgs[t.Method.Alg()] {
-                return nil, fmt.Errorf("invalid alg: %s", t.Method.Alg())
-            }
-            kid, _ := t.Header["kid"].(string)
-            if kid != "" {
-                if key, ok := (*setPtr).LookupKeyID(kid); ok {
-                    var pub any
-                    if err := key.Raw(&pub); err != nil { return nil, err }
-                    return pub, nil
-                }
-                return nil, fmt.Errorf("no jwk for kid: %s", kid)
-            }
-            // fallback: use first key
-            it := (*setPtr).Iterate(context.Background())
-            if it.Next(context.Background()) {
-                pair := it.Pair()
-                if key, ok := pair.Value.(jwk.Key); ok {
-                    var pub any
-                    if err := key.Raw(&pub); err != nil { return nil, err }
-                    return pub, nil
-                }
-            }
-            return nil, fmt.Errorf("no jwk available")
-        }
-    }
+	// JWKS-backed Keyfunc with jittered exponential backoff refresh and metrics
+	var keyf jwt.Keyfunc
+	if cfg.JWKSURL != "" {
+		metricsRegisterOnce.Do(func() {
+			prometheus.MustRegister(jwksRefreshTotal)
+			prometheus.MustRegister(jwksRefreshErrorsTotal)
+		})
+		httpClient := &http.Client{Timeout: 10 * time.Second}
+		set, err := jwk.Fetch(ctx, cfg.JWKSURL, jwk.WithHTTPClient(httpClient))
+		if err != nil {
+			log.Fatal().Err(err).Str("jwks_url", cfg.JWKSURL).Msg("fetch jwks")
+		}
+		setPtr := &set
+		// Capture JWKS health for readyz; wired into App after construction
+		_ = true // placeholders removed; wiring handled below
+		_ = func() bool { return true }
+		// Background refresh with jittered exponential backoff; keep last-good cache
+		go func() {
+			base := time.Minute
+			max := 30 * time.Minute
+			delay := base
+			for {
+				// add up to 50% jitter using crypto/rand
+				jitterN, _ := crand.Int(crand.Reader, big.NewInt(int64(delay/2)+1))
+				time.Sleep(delay + time.Duration(jitterN.Int64()))
+				jwksRefreshTotal.Inc()
+				if newSet, err := jwk.Fetch(context.Background(), cfg.JWKSURL, jwk.WithHTTPClient(httpClient)); err == nil && newSet.Len() > 0 {
+					*setPtr = newSet
+					delay = base
+				} else {
+					jwksRefreshErrorsTotal.Inc()
+					// backoff with cap
+					delay = delay * 2
+					if delay > max {
+						delay = max
+					}
+				}
+			}
+		}()
+		allowedAlgs := map[string]bool{"RS256": true, "RS384": true, "RS512": true, "ES256": true, "ES384": true, "ES512": true}
+		keyf = func(t *jwt.Token) (interface{}, error) {
+			// Enforce allowed algs and require kid when header provides one
+			if !allowedAlgs[t.Method.Alg()] {
+				return nil, fmt.Errorf("invalid alg: %s", t.Method.Alg())
+			}
+			kid, _ := t.Header["kid"].(string)
+			if kid != "" {
+				if key, ok := (*setPtr).LookupKeyID(kid); ok {
+					var pub any
+					if err := key.Raw(&pub); err != nil {
+						return nil, err
+					}
+					return pub, nil
+				}
+				return nil, fmt.Errorf("no jwk for kid: %s", kid)
+			}
+			// fallback: use first key
+			it := (*setPtr).Iterate(context.Background())
+			if it.Next(context.Background()) {
+				pair := it.Pair()
+				if key, ok := pair.Value.(jwk.Key); ok {
+					var pub any
+					if err := key.Raw(&pub); err != nil {
+						return nil, err
+					}
+					return pub, nil
+				}
+			}
+			return nil, fmt.Errorf("no jwk available")
+		}
+	}
 
-    var mc *minio.Client
+	var mc *minio.Client
 	if cfg.MinIOEndpoint != "" {
 		mc, err = minio.New(cfg.MinIOEndpoint, &minio.Options{
 			Creds:  credentials.NewStaticV4(cfg.MinIOAccess, cfg.MinIOSecret, ""),
@@ -606,44 +607,44 @@ func main() {
 
 	// Redis client (optional)
 	var rdb *redis.Client
-    if cfg.RedisAddr != "" {
-        rdb = redis.NewClient(&redis.Options{
-            Addr:        cfg.RedisAddr,
-            DialTimeout: time.Duration(cfg.RedisTimeoutMS) * time.Millisecond,
-            ReadTimeout: time.Duration(cfg.RedisTimeoutMS) * time.Millisecond,
-            WriteTimeout: time.Duration(cfg.RedisTimeoutMS) * time.Millisecond,
-        })
-        if err := rdb.Ping(ctx).Err(); err != nil {
-            log.Error().Err(err).Msg("redis ping")
-        }
-        defer rdb.Close()
-    }
+	if cfg.RedisAddr != "" {
+		rdb = redis.NewClient(&redis.Options{
+			Addr:         cfg.RedisAddr,
+			DialTimeout:  time.Duration(cfg.RedisTimeoutMS) * time.Millisecond,
+			ReadTimeout:  time.Duration(cfg.RedisTimeoutMS) * time.Millisecond,
+			WriteTimeout: time.Duration(cfg.RedisTimeoutMS) * time.Millisecond,
+		})
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			log.Error().Err(err).Msg("redis ping")
+		}
+		defer rdb.Close()
+	}
 
 	var store ObjectStore
 	if mc != nil {
 		store = mc
-    } else if cfg.FileStorePath != "" {
-        base := mkdirWithFallback(
-            cfg.FileStorePath,
-            filepath.Join(os.TempDir(), "helpdesk-data"),
-            cfg.Env,
-            "using /tmp filestore path",
-            "create filestore path",
-        )
-        if cfg.MinIOBucket != "" {
-            bucketPath := filepath.Join(base, cfg.MinIOBucket)
-            bucketPath = mkdirWithFallback(
-                bucketPath,
-                filepath.Join(os.TempDir(), "helpdesk-data", cfg.MinIOBucket),
-                cfg.Env,
-                "using /tmp filestore bucket path",
-                "create filestore bucket path",
-            )
-            base = filepath.Dir(bucketPath)
-        }
-        cfg.FileStorePath = base
-        store = &appcore.FsObjectStore{Base: base}
-    }
+	} else if cfg.FileStorePath != "" {
+		base := mkdirWithFallback(
+			cfg.FileStorePath,
+			filepath.Join(os.TempDir(), "helpdesk-data"),
+			cfg.Env,
+			"using /tmp filestore path",
+			"create filestore path",
+		)
+		if cfg.MinIOBucket != "" {
+			bucketPath := filepath.Join(base, cfg.MinIOBucket)
+			bucketPath = mkdirWithFallback(
+				bucketPath,
+				filepath.Join(os.TempDir(), "helpdesk-data", cfg.MinIOBucket),
+				cfg.Env,
+				"using /tmp filestore bucket path",
+				"create filestore bucket path",
+			)
+			base = filepath.Dir(bucketPath)
+		}
+		cfg.FileStorePath = base
+		store = &appcore.FsObjectStore{Base: base}
+	}
 
 	// Seed a dev admin for local auth
 	if cfg.AuthMode == "local" && cfg.Env == "dev" {
@@ -652,13 +653,13 @@ func main() {
 		}
 	}
 
-    a := NewApp(cfg, pool, keyf, store, rdb)
-    // Wire JWKS health flags if JWKS was configured above
-    if cfg.JWKSURL != "" {
-        a.jwksConfigured = true
-        // Consider JWKS ready when at least one key exists in the set via keyfunc resolution
-        a.jwksOK = func() bool { return keyf != nil }
-    }
+	a := NewApp(cfg, pool, keyf, store, rdb)
+	// Wire JWKS health flags if JWKS was configured above
+	if cfg.JWKSURL != "" {
+		a.jwksConfigured = true
+		// Consider JWKS ready when at least one key exists in the set via keyfunc resolution
+		a.jwksOK = func() bool { return keyf != nil }
+	}
 
 	srv := &http.Server{
 		Addr:           cfg.Addr,
@@ -674,19 +675,19 @@ func main() {
 }
 
 func (a *App) routes() {
-    // In production, expose API only under /api to avoid duplicate routing via
-    // proxies/ingress that might forward both / and /api to the backend. In
-    // dev and test, keep both for convenience and backward-compat tests.
-    if a.cfg.Env == "prod" {
-        a.mountAPI(a.r.Group("/api"))
-        // Provide top-level health endpoints commonly used by probes
-        a.r.GET("/livez", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
-        a.r.GET("/readyz", a.readyz)
-        a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
-    } else {
-        a.mountAPI(a.r.Group(""))
-        a.mountAPI(a.r.Group("/api"))
-    }
+	// In production, expose API only under /api to avoid duplicate routing via
+	// proxies/ingress that might forward both / and /api to the backend. In
+	// dev and test, keep both for convenience and backward-compat tests.
+	if a.cfg.Env == "prod" {
+		a.mountAPI(a.r.Group("/api"))
+		// Provide top-level health endpoints commonly used by probes
+		a.r.GET("/livez", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+		a.r.GET("/readyz", a.readyz)
+		a.r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+	} else {
+		a.mountAPI(a.r.Group(""))
+		a.mountAPI(a.r.Group("/api"))
+	}
 }
 
 func (a *App) mountAPI(rg *gin.RouterGroup) {
@@ -702,95 +703,95 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	rg.GET("/docs", a.docsUI)
 	rg.GET("/openapi.yaml", a.openapiSpec)
 	// Local auth endpoints
-    if a.cfg.AuthMode == "local" {
-        if a.loginRL != nil {
-            rg.POST("/login", a.rlMiddleware(a.loginRL, func(c *gin.Context) string { return c.ClientIP() }, "login"), authpkg.Login(a.core()))
-            rg.POST("/logout", a.rlMiddleware(a.loginRL, func(c *gin.Context) string { return c.ClientIP() }, "logout"), authpkg.Logout())
-        } else {
-            rg.POST("/login", authpkg.Login(a.core()))
-            rg.POST("/logout", authpkg.Logout())
-        }
-    }
+	if a.cfg.AuthMode == "local" {
+		if a.loginRL != nil {
+			rg.POST("/login", a.rlMiddleware(a.loginRL, func(c *gin.Context) string { return c.ClientIP() }, "login"), authpkg.Login(a.core()))
+			rg.POST("/logout", a.rlMiddleware(a.loginRL, func(c *gin.Context) string { return c.ClientIP() }, "logout"), authpkg.Logout())
+		} else {
+			rg.POST("/login", authpkg.Login(a.core()))
+			rg.POST("/logout", authpkg.Logout())
+		}
+	}
 
-    // Use an empty subpath to avoid introducing a double slash (e.g., 
-    // "/api//me"). The UI expects endpoints like "/api/me".
-    auth := rg.Group("")
-    auth.Use(authpkg.Middleware(a.core()))
-    auth.GET("/me", authpkg.Me)
+	// Use an empty subpath to avoid introducing a double slash (e.g.,
+	// "/api//me"). The UI expects endpoints like "/api/me".
+	auth := rg.Group("")
+	auth.Use(authpkg.Middleware(a.core()))
+	auth.GET("/me", authpkg.Me)
 	// User settings (profile + password)
 	auth.GET("/me/profile", a.getMyProfile)
 	auth.PATCH("/me/profile", a.updateMyProfile)
 	auth.POST("/me/password", a.changeMyPassword)
 	auth.GET("/events", handlers.Events(a.q))
 
-    auth.GET("/settings", authpkg.RequireRole("admin"), handlers.GetSettings)
-    auth.GET("/features", handlers.Features(a.core()))
-    auth.POST("/test-connection", authpkg.RequireRole("admin"), handlers.TestConnection)
-    auth.POST("/settings/storage", authpkg.RequireRole("admin"), handlers.SaveStorageSettings)
-    auth.POST("/settings/oidc", authpkg.RequireRole("admin"), handlers.SaveOIDCSettings)
-    auth.POST("/settings/mail", authpkg.RequireRole("admin"), handlers.SaveMailSettings)
-    auth.POST("/settings/mail/send-test", authpkg.RequireRole("admin"), handlers.SendTestMail)
+	auth.GET("/settings", authpkg.RequireRole("admin"), handlers.GetSettings)
+	auth.GET("/features", handlers.Features(a.core()))
+	auth.POST("/test-connection", authpkg.RequireRole("admin"), handlers.TestConnection)
+	auth.POST("/settings/storage", authpkg.RequireRole("admin"), handlers.SaveStorageSettings)
+	auth.POST("/settings/oidc", authpkg.RequireRole("admin"), handlers.SaveOIDCSettings)
+	auth.POST("/settings/mail", authpkg.RequireRole("admin"), handlers.SaveMailSettings)
+	auth.POST("/settings/mail/send-test", authpkg.RequireRole("admin"), handlers.SendTestMail)
 
-    auth.GET("/users/:id/roles", authpkg.RequireRole("admin"), authpkg.ListUserRoles(a.core()))
-    auth.POST("/users/:id/roles", authpkg.RequireRole("admin"), authpkg.AddUserRole(a.core()))
-    auth.DELETE("/users/:id/roles/:role", authpkg.RequireRole("admin"), authpkg.RemoveUserRole(a.core()))
+	auth.GET("/users/:id/roles", authpkg.RequireRole("admin"), authpkg.ListUserRoles(a.core()))
+	auth.POST("/users/:id/roles", authpkg.RequireRole("admin"), authpkg.AddUserRole(a.core()))
+	auth.DELETE("/users/:id/roles/:role", authpkg.RequireRole("admin"), authpkg.RemoveUserRole(a.core()))
 	// Admin user management
-    auth.GET("/users", authpkg.RequireRole("admin"), userspkg.List(a.core()))
-    auth.GET("/users/:id", authpkg.RequireRole("admin"), userspkg.Get(a.core()))
-    auth.POST("/users", authpkg.RequireRole("admin"), userspkg.CreateLocal(a.core()))
-    auth.GET("/roles", authpkg.RequireRole("admin"), roles.List(a.core()))
+	auth.GET("/users", authpkg.RequireRole("admin"), userspkg.List(a.core()))
+	auth.GET("/users/:id", authpkg.RequireRole("admin"), userspkg.Get(a.core()))
+	auth.POST("/users", authpkg.RequireRole("admin"), userspkg.CreateLocal(a.core()))
+	auth.GET("/roles", authpkg.RequireRole("admin"), roles.List(a.core()))
 
-    auth.GET("/requesters/:id", a.getRequester)
-    auth.POST("/requesters", authpkg.RequireRole("agent", "manager"), a.createRequester)
-    auth.PATCH("/requesters/:id", authpkg.RequireRole("agent", "manager"), a.updateRequester)
+	auth.GET("/requesters/:id", a.getRequester)
+	auth.POST("/requesters", authpkg.RequireRole("agent", "manager"), a.createRequester)
+	auth.PATCH("/requesters/:id", authpkg.RequireRole("agent", "manager"), a.updateRequester)
 
 	// Tickets
-    auth.GET("/tickets", ticketspkg.List(a.core()))
-    if a.ticketRL != nil {
-        auth.POST("/tickets", a.rlMiddleware(a.ticketRL, func(c *gin.Context) string {
-            u := c.MustGet("user").(AuthUser)
-            return u.ID
-        }, "tickets_create"), ticketspkg.Create(a.core()))
-    } else {
-        auth.POST("/tickets", ticketspkg.Create(a.core()))
-    }
-    auth.GET("/tickets/:id", ticketspkg.Get(a.core()))
-    auth.PATCH("/tickets/:id", authpkg.RequireRole("agent", "manager"), ticketspkg.Update(a.core()))
-    auth.GET("/tickets/:id/comments", commentspkg.List(a.core()))
-    auth.POST("/tickets/:id/comments", commentspkg.Add(a.core()))
-    auth.GET("/tickets/:id/attachments", attachmentspkg.List(a.core()))
-    if a.attRL != nil {
-        auth.POST("/tickets/:id/attachments/presign", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
-            u := c.MustGet("user").(AuthUser)
-            return u.ID
-        }, "attachments_presign"), attachmentspkg.Presign(a.core()))
-        auth.POST("/tickets/:id/attachments", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
-            u := c.MustGet("user").(AuthUser)
-            return u.ID
-        }, "attachments_finalize"), attachmentspkg.Finalize(a.core()))
-        auth.GET("/tickets/:id/attachments/:attID", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
-            u := c.MustGet("user").(AuthUser)
-            return u.ID
-        }, "attachments_get"), attachmentspkg.Get(a.core()))
-    } else {
-        auth.POST("/tickets/:id/attachments/presign", attachmentspkg.Presign(a.core()))
-        auth.POST("/tickets/:id/attachments", attachmentspkg.Finalize(a.core()))
-        auth.GET("/tickets/:id/attachments/:attID", attachmentspkg.Get(a.core()))
-    }
-    // Internal upload endpoint used when filesystem store is enabled
-    auth.PUT("/attachments/upload/:objectKey", attachmentspkg.UploadObject(a.core()))
-    auth.DELETE("/tickets/:id/attachments/:attID", attachmentspkg.Delete(a.core()))
-    auth.GET("/tickets/:id/watchers", watcherspkg.List(a.core()))
-    auth.POST("/tickets/:id/watchers", watcherspkg.Add(a.core()))
-    auth.DELETE("/tickets/:id/watchers/:uid", watcherspkg.Remove(a.core()))
-    auth.GET("/metrics/sla", authpkg.RequireRole("agent"), metricspkg.SLA(a.core()))
-    auth.GET("/metrics/resolution", authpkg.RequireRole("agent"), metricspkg.Resolution(a.core()))
-    auth.GET("/metrics/tickets", authpkg.RequireRole("agent"), metricspkg.TicketVolume(a.core()))
-    // Compatibility for UI expectations
-    auth.GET("/metrics/agent", authpkg.RequireRole("agent"), metricspkg.Agent(a.core()))
-    auth.GET("/metrics/manager", authpkg.RequireRole("manager", "admin"), metricspkg.Manager(a.core()))
-    auth.POST("/exports/tickets", authpkg.RequireRole("agent"), a.exportTicketsBridge)
-    auth.GET("/exports/tickets/:job_id", authpkg.RequireRole("agent"), a.exportTicketsStatus)
+	auth.GET("/tickets", ticketspkg.List(a.core()))
+	if a.ticketRL != nil {
+		auth.POST("/tickets", a.rlMiddleware(a.ticketRL, func(c *gin.Context) string {
+			u := c.MustGet("user").(AuthUser)
+			return u.ID
+		}, "tickets_create"), ticketspkg.Create(a.core()))
+	} else {
+		auth.POST("/tickets", ticketspkg.Create(a.core()))
+	}
+	auth.GET("/tickets/:id", ticketspkg.Get(a.core()))
+	auth.PATCH("/tickets/:id", authpkg.RequireRole("agent", "manager"), ticketspkg.Update(a.core()))
+	auth.GET("/tickets/:id/comments", commentspkg.List(a.core()))
+	auth.POST("/tickets/:id/comments", commentspkg.Add(a.core()))
+	auth.GET("/tickets/:id/attachments", attachmentspkg.List(a.core()))
+	if a.attRL != nil {
+		auth.POST("/tickets/:id/attachments/presign", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
+			u := c.MustGet("user").(AuthUser)
+			return u.ID
+		}, "attachments_presign"), attachmentspkg.Presign(a.core()))
+		auth.POST("/tickets/:id/attachments", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
+			u := c.MustGet("user").(AuthUser)
+			return u.ID
+		}, "attachments_finalize"), attachmentspkg.Finalize(a.core()))
+		auth.GET("/tickets/:id/attachments/:attID", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
+			u := c.MustGet("user").(AuthUser)
+			return u.ID
+		}, "attachments_get"), attachmentspkg.Get(a.core()))
+	} else {
+		auth.POST("/tickets/:id/attachments/presign", attachmentspkg.Presign(a.core()))
+		auth.POST("/tickets/:id/attachments", attachmentspkg.Finalize(a.core()))
+		auth.GET("/tickets/:id/attachments/:attID", attachmentspkg.Get(a.core()))
+	}
+	// Internal upload endpoint used when filesystem store is enabled
+	auth.PUT("/attachments/upload/:objectKey", attachmentspkg.UploadObject(a.core()))
+	auth.DELETE("/tickets/:id/attachments/:attID", attachmentspkg.Delete(a.core()))
+	auth.GET("/tickets/:id/watchers", watcherspkg.List(a.core()))
+	auth.POST("/tickets/:id/watchers", watcherspkg.Add(a.core()))
+	auth.DELETE("/tickets/:id/watchers/:uid", watcherspkg.Remove(a.core()))
+	auth.GET("/metrics/sla", authpkg.RequireRole("agent"), metricspkg.SLA(a.core()))
+	auth.GET("/metrics/resolution", authpkg.RequireRole("agent"), metricspkg.Resolution(a.core()))
+	auth.GET("/metrics/tickets", authpkg.RequireRole("agent"), metricspkg.TicketVolume(a.core()))
+	// Compatibility for UI expectations
+	auth.GET("/metrics/agent", authpkg.RequireRole("agent"), metricspkg.Agent(a.core()))
+	auth.GET("/metrics/manager", authpkg.RequireRole("manager", "admin"), metricspkg.Manager(a.core()))
+	auth.POST("/exports/tickets", authpkg.RequireRole("agent"), a.exportTicketsBridge)
+	auth.GET("/exports/tickets/:job_id", authpkg.RequireRole("agent"), a.exportTicketsStatus)
 }
 
 func (a *App) docsUI(c *gin.Context) {
@@ -815,83 +816,83 @@ func (a *App) openapiSpec(c *gin.Context) {
 }
 
 func (a *App) readyz(c *gin.Context) {
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-    if a.db != nil {
-        var n int
-        // Apply DB timeout only when configured (>0). Respect the shorter of the
-        // existing deadline and the configured DB timeout to avoid immediate
-        // timeouts when DB_TIMEOUT_MS is 0 or when the parent has a shorter deadline.
-        cctx := ctx
-        var cancel2 context.CancelFunc = func() {}
-        if a.cfg.DBTimeoutMS > 0 {
-            d := time.Duration(a.cfg.DBTimeoutMS) * time.Millisecond
-            if dl, ok := ctx.Deadline(); ok {
-                remain := time.Until(dl)
-                if remain > 0 && remain < d {
-                    cctx, cancel2 = context.WithTimeout(ctx, remain)
-                } else {
-                    cctx, cancel2 = context.WithTimeout(ctx, d)
-                }
-            } else {
-                cctx, cancel2 = context.WithTimeout(ctx, d)
-            }
-        }
-        defer cancel2()
-        if err := a.db.QueryRow(cctx, "select 1").Scan(&n); err != nil {
-            log.Error().Err(err).Msg("readyz db")
-            c.JSON(500, gin.H{"error": "db"})
-            return
-        }
-    }
+	if a.db != nil {
+		var n int
+		// Apply DB timeout only when configured (>0). Respect the shorter of the
+		// existing deadline and the configured DB timeout to avoid immediate
+		// timeouts when DB_TIMEOUT_MS is 0 or when the parent has a shorter deadline.
+		cctx := ctx
+		var cancel2 context.CancelFunc = func() {}
+		if a.cfg.DBTimeoutMS > 0 {
+			d := time.Duration(a.cfg.DBTimeoutMS) * time.Millisecond
+			if dl, ok := ctx.Deadline(); ok {
+				remain := time.Until(dl)
+				if remain > 0 && remain < d {
+					cctx, cancel2 = context.WithTimeout(ctx, remain)
+				} else {
+					cctx, cancel2 = context.WithTimeout(ctx, d)
+				}
+			} else {
+				cctx, cancel2 = context.WithTimeout(ctx, d)
+			}
+		}
+		defer cancel2()
+		if err := a.db.QueryRow(cctx, "select 1").Scan(&n); err != nil {
+			log.Error().Err(err).Msg("readyz db")
+			c.JSON(500, gin.H{"error": "db"})
+			return
+		}
+	}
 
-    if a.pingRedis != nil {
-        rc, cancel := a.redisCtx(ctx)
-        defer cancel()
-        if err := a.pingRedis(rc); err != nil {
-            log.Error().Err(err).Msg("readyz redis")
-            c.JSON(500, gin.H{"error": "redis"})
-            return
-        }
-    }
+	if a.pingRedis != nil {
+		rc, cancel := a.redisCtx(ctx)
+		defer cancel()
+		if err := a.pingRedis(rc); err != nil {
+			log.Error().Err(err).Msg("readyz redis")
+			c.JSON(500, gin.H{"error": "redis"})
+			return
+		}
+	}
 
-    if a.m != nil {
-        switch s := a.m.(type) {
-        case *minio.Client:
-            oc, cancel := a.objCtx(ctx)
-            defer cancel()
-            ok, err := s.BucketExists(oc, a.cfg.MinIOBucket)
-            if err != nil || !ok {
-                log.Error().Err(err).Str("bucket", a.cfg.MinIOBucket).Msg("readyz minio")
-                c.JSON(500, gin.H{"error": "object_store"})
-                return
-            }
-        default:
-            // Filesystem store: ensure directory exists and is writable
-            dir := a.cfg.FileStorePath
-            if fs, ok := a.m.(*appcore.FsObjectStore); ok && fs.Base != "" {
-                dir = fs.Base
-            }
-            if a.cfg.MinIOBucket != "" {
-                dir = filepath.Join(dir, a.cfg.MinIOBucket)
-            }
-            if err := os.MkdirAll(dir, 0o755); err != nil {
-                log.Error().Err(err).Str("dir", dir).Msg("readyz filestore mkdir")
-                c.JSON(500, gin.H{"error": "object_store"})
-                return
-            }
-            testFile := filepath.Join(dir, ".readyz")
-            if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
-                log.Error().Err(err).Msg("readyz filestore")
-                c.JSON(500, gin.H{"error": "object_store"})
-                return
-            }
-            _ = os.Remove(testFile)
-        }
-    }
+	if a.m != nil {
+		switch s := a.m.(type) {
+		case *minio.Client:
+			oc, cancel := a.objCtx(ctx)
+			defer cancel()
+			ok, err := s.BucketExists(oc, a.cfg.MinIOBucket)
+			if err != nil || !ok {
+				log.Error().Err(err).Str("bucket", a.cfg.MinIOBucket).Msg("readyz minio")
+				c.JSON(500, gin.H{"error": "object_store"})
+				return
+			}
+		default:
+			// Filesystem store: ensure directory exists and is writable
+			dir := a.cfg.FileStorePath
+			if fs, ok := a.m.(*appcore.FsObjectStore); ok && fs.Base != "" {
+				dir = fs.Base
+			}
+			if a.cfg.MinIOBucket != "" {
+				dir = filepath.Join(dir, a.cfg.MinIOBucket)
+			}
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				log.Error().Err(err).Str("dir", dir).Msg("readyz filestore mkdir")
+				c.JSON(500, gin.H{"error": "object_store"})
+				return
+			}
+			testFile := filepath.Join(dir, ".readyz")
+			if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
+				log.Error().Err(err).Msg("readyz filestore")
+				c.JSON(500, gin.H{"error": "object_store"})
+				return
+			}
+			_ = os.Remove(testFile)
+		}
+	}
 
-    if ms := handlers.MailSettings(); ms != nil {
+	if ms := handlers.MailSettings(); ms != nil {
 		host := ms["host"]
 		port := ms["port"]
 		if host == "" && port == "" {
@@ -1093,8 +1094,8 @@ func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
 	if pw == "" {
 		// Generate a secure random password if not set
 		const pwLen = 16
-    b := make([]byte, pwLen)
-    if _, err := crand.Read(b); err != nil {
+		b := make([]byte, pwLen)
+		if _, err := crand.Read(b); err != nil {
 			return fmt.Errorf("failed to generate random admin password: %w", err)
 		}
 		pw = hex.EncodeToString(b)
@@ -1118,7 +1119,7 @@ select $1, r.id from roles r on conflict do nothing`, uid)
 // login/logout/role checks are provided by cmd/api/auth
 
 type roleRequest struct {
-    Role string `json:"role" binding:"required"`
+	Role string `json:"role" binding:"required"`
 }
 
 // Users and roles handlers are now delegated to modular packages under cmd/api/users and cmd/api/auth
@@ -1127,143 +1128,171 @@ type roleRequest struct {
 // Ticket, SLAStatus, and Comment types are provided by modular packages
 
 type Requester struct {
-    ID          string `json:"id"`
-    Email       string `json:"email"`
-    DisplayName string `json:"display_name"`
+	ID          string `json:"id"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
 }
 
 // exportTicketsStatus returns status for async export jobs (for backward-compat tests).
 func (a *App) exportTicketsStatus(c *gin.Context) {
-    if a.q == nil {
-        c.JSON(500, gin.H{"error": "queue not configured"})
-        return
-    }
+	if a.q == nil {
+		c.JSON(500, gin.H{"error": "queue not configured"})
+		return
+	}
 
-    // JWKS readiness: if configured but cache appears empty, report not ready
-    if a.cfg.JWKSURL != "" {
-        // If keyfunc is nil or we have no way to confirm keys exist, fail closed
-        if a.keyf == nil {
-            c.JSON(500, gin.H{"error": "jwks"})
-            return
-        }
-    }
-    jobID := c.Param("job_id")
-    ctx := c.Request.Context()
-    val, err := a.q.Get(ctx, "export_tickets:"+jobID).Result()
-    if err == redis.Nil {
-        c.JSON(404, gin.H{"error": "not found"})
-        return
-    }
-    if err != nil {
-        c.JSON(500, gin.H{"error": "redis"})
-        return
-    }
-    var st struct {
-        Requester string `json:"requester"`
-        Status    string `json:"status"`
-        URL       string `json:"url"`
-        ObjectKey string `json:"object_key"`
-        Error     string `json:"error"`
-    }
-    if err := json.Unmarshal([]byte(val), &st); err != nil {
-        c.JSON(500, gin.H{"error": "decode"})
-        return
-    }
-    if v, ok := c.Get("user"); ok {
-        switch u := v.(type) {
-        case AuthUser:
-            if st.Requester != "" && st.Requester != u.ID { c.JSON(404, gin.H{"error": "not found"}); return }
-        case authpkg.AuthUser:
-            if st.Requester != "" && st.Requester != u.ID { c.JSON(404, gin.H{"error": "not found"}); return }
-        }
-    }
-    if st.Status != "done" {
-        out := gin.H{"status": st.Status}
-        if st.Error != "" { out["error"] = st.Error }
-        c.JSON(200, out)
-        return
-    }
-    if st.URL != "" { c.JSON(200, gin.H{"url": st.URL}); return }
-    if st.ObjectKey == "" { c.JSON(500, gin.H{"error": "missing object key"}); return }
-    if mc, ok := a.m.(*minio.Client); ok {
-        u, err := mc.PresignedGetObject(ctx, a.cfg.MinIOBucket, st.ObjectKey, 15*time.Minute, nil)
-        if err != nil { c.JSON(500, gin.H{"error": "sign url"}); return }
-        c.JSON(200, gin.H{"url": u.String()})
-        return
-    }
-    scheme := "http"
-    if a.cfg.MinIOUseSSL { scheme = "https" }
-    url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, st.ObjectKey)
-    c.JSON(200, gin.H{"url": url})
+	// JWKS readiness: if configured but cache appears empty, report not ready
+	if a.cfg.JWKSURL != "" {
+		// If keyfunc is nil or we have no way to confirm keys exist, fail closed
+		if a.keyf == nil {
+			c.JSON(500, gin.H{"error": "jwks"})
+			return
+		}
+	}
+	jobID := c.Param("job_id")
+	ctx := c.Request.Context()
+	val, err := a.q.Get(ctx, "export_tickets:"+jobID).Result()
+	if err == redis.Nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(500, gin.H{"error": "redis"})
+		return
+	}
+	var st struct {
+		Requester string `json:"requester"`
+		Status    string `json:"status"`
+		URL       string `json:"url"`
+		ObjectKey string `json:"object_key"`
+		Error     string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(val), &st); err != nil {
+		c.JSON(500, gin.H{"error": "decode"})
+		return
+	}
+	if v, ok := c.Get("user"); ok {
+		switch u := v.(type) {
+		case AuthUser:
+			if st.Requester != "" && st.Requester != u.ID {
+				c.JSON(404, gin.H{"error": "not found"})
+				return
+			}
+		case authpkg.AuthUser:
+			if st.Requester != "" && st.Requester != u.ID {
+				c.JSON(404, gin.H{"error": "not found"})
+				return
+			}
+		}
+	}
+	if st.Status != "done" {
+		out := gin.H{"status": st.Status}
+		if st.Error != "" {
+			out["error"] = st.Error
+		}
+		c.JSON(200, out)
+		return
+	}
+	if st.URL != "" {
+		c.JSON(200, gin.H{"url": st.URL})
+		return
+	}
+	if st.ObjectKey == "" {
+		c.JSON(500, gin.H{"error": "missing object key"})
+		return
+	}
+	if mc, ok := a.m.(*minio.Client); ok {
+		u, err := mc.PresignedGetObject(ctx, a.cfg.MinIOBucket, st.ObjectKey, 15*time.Minute, nil)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "sign url"})
+			return
+		}
+		c.JSON(200, gin.H{"url": u.String()})
+		return
+	}
+	scheme := "http"
+	if a.cfg.MinIOUseSSL {
+		scheme = "https"
+	}
+	url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, st.ObjectKey)
+	c.JSON(200, gin.H{"url": url})
 }
 
 // exportTicketsBridge preserves async behavior for large exports while delegating
 // small exports to the modular exports package for CSV generation.
 func (a *App) exportTicketsBridge(c *gin.Context) {
-    // Read raw body so we can delegate after parsing
-    body, _ := io.ReadAll(c.Request.Body)
-    type req struct{ IDs []string `json:"ids"` }
-    var in req
-    if err := json.Unmarshal(body, &in); err != nil || len(in.IDs) == 0 {
-        c.JSON(400, gin.H{"error": "ids required"})
-        return
-    }
-    // Count tickets in DB for compatibility with existing tests
-    placeholders := make([]string, len(in.IDs))
-    args := make([]any, len(in.IDs))
-    for i, id := range in.IDs { placeholders[i] = fmt.Sprintf("$%d", i+1); args[i] = id }
-    countQ := fmt.Sprintf("select count(*) from tickets where id in (%s)", strings.Join(placeholders, ","))
-    var count int
-    if a.db != nil {
-        if err := a.db.QueryRow(c.Request.Context(), countQ, args...).Scan(&count); err != nil {
-            c.JSON(500, gin.H{"error": err.Error()})
-            return
-        }
-    } else {
-        count = len(in.IDs)
-    }
-    if count > exportSyncLimit {
-        if a.q == nil {
-            c.JSON(500, gin.H{"error": "queue not configured"})
-            return
-        }
-        // Enqueue job and return 202 with job_id; worker not exercised in tests
-        uVal, _ := c.Get("user")
-        requester := ""
-        switch u := uVal.(type) {
-        case AuthUser:
-            requester = u.ID
-        case authpkg.AuthUser:
-            requester = u.ID
-        }
-        if requester == "" { requester = "test-user" }
-        jobID := uuid.New().String()
-        // Store initial status
-        st := struct {
-            Requester string `json:"requester"`
-            Status    string `json:"status"`
-        }{requester, "queued"}
-        sb, _ := json.Marshal(st)
-        if err := a.q.Set(c.Request.Context(), "export_tickets:"+jobID, sb, 0).Err(); err != nil {
-            c.JSON(500, gin.H{"error": "redis"})
-            return
-        }
-        // Enqueue minimal job payload
-        job := struct {
-            ID   string      `json:"id"`
-            Type string      `json:"type"`
-            Data interface{} `json:"data"`
-        }{ID: jobID, Type: "export_tickets", Data: struct{ IDs []string `json:"ids"` }{in.IDs}}
-        jb, _ := json.Marshal(job)
-        _ = a.q.RPush(c.Request.Context(), "jobs", jb).Err()
-        size, _ := a.q.LLen(c.Request.Context(), "jobs").Result()
-        handlers.PublishEvent(c.Request.Context(), a.q, handlers.Event{Type: "queue_changed", Data: map[string]any{"size": size}})
-        c.JSON(202, gin.H{"job_id": jobID})
-        return
-    }
-    // Delegate small exports to modular implementation (restore body for handler)
-    c.Request.Body = io.NopCloser(bytes.NewReader(body))
-    exportspkg.Tickets(a.core())(c)
+	// Read raw body so we can delegate after parsing
+	body, _ := io.ReadAll(c.Request.Body)
+	type req struct {
+		IDs []string `json:"ids"`
+	}
+	var in req
+	if err := json.Unmarshal(body, &in); err != nil || len(in.IDs) == 0 {
+		c.JSON(400, gin.H{"error": "ids required"})
+		return
+	}
+	// Count tickets in DB for compatibility with existing tests
+	placeholders := make([]string, len(in.IDs))
+	args := make([]any, len(in.IDs))
+	for i, id := range in.IDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	countQ := fmt.Sprintf("select count(*) from tickets where id in (%s)", strings.Join(placeholders, ","))
+	var count int
+	if a.db != nil {
+		if err := a.db.QueryRow(c.Request.Context(), countQ, args...).Scan(&count); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+	} else {
+		count = len(in.IDs)
+	}
+	if count > exportSyncLimit {
+		if a.q == nil {
+			c.JSON(500, gin.H{"error": "queue not configured"})
+			return
+		}
+		// Enqueue job and return 202 with job_id; worker not exercised in tests
+		uVal, _ := c.Get("user")
+		requester := ""
+		switch u := uVal.(type) {
+		case AuthUser:
+			requester = u.ID
+		case authpkg.AuthUser:
+			requester = u.ID
+		}
+		if requester == "" {
+			requester = "test-user"
+		}
+		jobID := uuid.New().String()
+		// Store initial status
+		st := struct {
+			Requester string `json:"requester"`
+			Status    string `json:"status"`
+		}{requester, "queued"}
+		sb, _ := json.Marshal(st)
+		if err := a.q.Set(c.Request.Context(), "export_tickets:"+jobID, sb, 0).Err(); err != nil {
+			c.JSON(500, gin.H{"error": "redis"})
+			return
+		}
+		// Enqueue minimal job payload
+		job := struct {
+			ID   string      `json:"id"`
+			Type string      `json:"type"`
+			Data interface{} `json:"data"`
+		}{ID: jobID, Type: "export_tickets", Data: struct {
+			IDs []string `json:"ids"`
+		}{in.IDs}}
+		jb, _ := json.Marshal(job)
+		_ = a.q.RPush(c.Request.Context(), "jobs", jb).Err()
+		size, _ := a.q.LLen(c.Request.Context(), "jobs").Result()
+		handlers.PublishEvent(c.Request.Context(), a.q, handlers.Event{Type: "queue_changed", Data: map[string]any{"size": size}})
+		c.JSON(202, gin.H{"job_id": jobID})
+		return
+	}
+	// Delegate small exports to modular implementation (restore body for handler)
+	c.Request.Body = io.NopCloser(bytes.NewReader(body))
+	exportspkg.Tickets(a.core())(c)
 }
 
 // ===== Handlers =====
@@ -1428,9 +1457,9 @@ func (a *App) audit(c *gin.Context, actorType, actorID, entityType, entityID, ac
 }
 
 func (a *App) enqueueEmail(ctx context.Context, to, template string, data interface{}) {
-    if a.q == nil {
-        return
-    }
+	if a.q == nil {
+		return
+	}
 	job := struct {
 		Type string      `json:"type"`
 		Data interface{} `json:"data"`
@@ -1447,14 +1476,14 @@ func (a *App) enqueueEmail(ctx context.Context, to, template string, data interf
 		log.Error().Err(err).Msg("marshal email job")
 		return
 	}
-    // Apply Redis timeout to queue operations
-    rc, cancel := a.redisCtx(ctx)
-    defer cancel()
-    if err := a.q.RPush(rc, "jobs", b).Err(); err != nil {
-        log.Error().Err(err).Msg("enqueue job")
-    }
-    size, _ := a.q.LLen(rc, "jobs").Result()
-    handlers.PublishEvent(rc, a.q, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
+	// Apply Redis timeout to queue operations
+	rc, cancel := a.redisCtx(ctx)
+	defer cancel()
+	if err := a.q.RPush(rc, "jobs", b).Err(); err != nil {
+		log.Error().Err(err).Msg("enqueue job")
+	}
+	size, _ := a.q.LLen(rc, "jobs").Result()
+	handlers.PublishEvent(rc, a.q, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
 }
 
 func (a *App) addStatusHistory(ctx context.Context, ticketID, from, to, actorID string) {
@@ -1892,11 +1921,11 @@ func (a *App) uploadAttachmentObject(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "object store not configured"})
 		return
 	}
-    // Only support when using filesystem store; MinIO uses presigned URLs directly
-    if _, ok := a.m.(*minio.Client); ok {
-        c.JSON(400, gin.H{"error": "invalid upload target"})
-        return
-    }
+	// Only support when using filesystem store; MinIO uses presigned URLs directly
+	if _, ok := a.m.(*minio.Client); ok {
+		c.JSON(400, gin.H{"error": "invalid upload target"})
+		return
+	}
 	objectKey := strings.TrimSpace(c.Param("objectKey"))
 	if _, err := uuid.Parse(objectKey); err != nil {
 		c.JSON(400, gin.H{"error": "invalid object key"})
@@ -2047,15 +2076,15 @@ func (a *App) createRequester(c *gin.Context) {
 		if err == nil {
 			_, _ = a.db.Exec(ctx, `insert into user_roles (user_id, role_id) select $1, id from roles where name='requester' on conflict do nothing`, id)
 		}
-    } else {
-        // Create or update requester by email (case-insensitive), return id
-        err = a.db.QueryRow(ctx, `
+	} else {
+		// Create or update requester by email (case-insensitive), return id
+		err = a.db.QueryRow(ctx, `
             insert into requesters (id, email, name)
             values (gen_random_uuid(), lower($1), $2)
             on conflict (email) do update set name = excluded.name
             returning id::text
         `, in.Email, in.DisplayName).Scan(&id)
-    }
+	}
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

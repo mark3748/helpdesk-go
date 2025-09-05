@@ -15,9 +15,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	apppkg "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	metrics "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 )
 
 func TestTicketHandlers(t *testing.T) {
@@ -60,6 +63,42 @@ func TestTicketHandlers(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Test that create and update handlers increment their counters.
+func TestTicketCounters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	reg := prometheus.NewRegistry()
+	metrics.TicketsCreatedTotal = prometheus.NewCounter(prometheus.CounterOpts{Name: "tickets_created_total"})
+	metrics.TicketsUpdatedTotal = prometheus.NewCounter(prometheus.CounterOpts{Name: "tickets_updated_total"})
+	reg.MustRegister(metrics.TicketsCreatedTotal, metrics.TicketsUpdatedTotal)
+
+	cfg := apppkg.Config{Env: "test", TestBypassAuth: true}
+	a := apppkg.NewApp(cfg, nil, nil, nil, nil)
+	a.R.POST("/tickets", authpkg.Middleware(a), Create(a))
+	a.R.PUT("/tickets/:id", authpkg.Middleware(a), Update(a))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(`{"title":"abc","requester_id":"00000000-0000-0000-0000-000000000000","priority":1}`))
+	req.Header.Set("Content-Type", "application/json")
+	a.R.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rr.Code)
+	}
+	if v := testutil.ToFloat64(metrics.TicketsCreatedTotal); v != 1 {
+		t.Fatalf("tickets_created_total = %v, want 1", v)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPut, "/tickets/1", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	a.R.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if v := testutil.ToFloat64(metrics.TicketsUpdatedTotal); v != 1 {
+		t.Fatalf("tickets_updated_total = %v, want 1", v)
 	}
 }
 
