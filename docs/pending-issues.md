@@ -69,20 +69,20 @@ Tracking for the current branch `medium-priority-fixes`. See detailed stubs in `
   - [x] Pass `--platform` via `docker/build-push-action`; parameterize `GOARCH`
   - [x] Test: manifests created; push on tag
 
-- [ ] PR7 – Observability counters
-  - [ ] Counters: `tickets_created_total`, `tickets_updated_total`, `auth_failures_total`, `rate_limit_rejections_total`, `attachments_uploaded_total`
-  - [ ] Increment at modular handler entry points
-  - [ ] Tests: unit counter assertions with a test registry
+- [x] PR7 – Observability counters
+  - [x] Counters: `tickets_created_total`, `tickets_updated_total`, `auth_failures_total`, `rate_limit_rejections_total`, `attachments_uploaded_total`
+  - [x] Increment at modular handler entry points
+  - [x] Tests: unit counter assertions with a test registry
 
-- [ ] PR8 – CORS tightening
-  - [ ] Restrict `Access-Control-Allow-Headers` to `Authorization, Content-Type, X-Requested-With`
-  - [ ] Ensure `Vary: Origin` always set; 403 for disallowed origins
-  - [ ] Docs: `ALLOWED_ORIGINS` risks and examples
-  - [ ] Tests: OPTIONS preflight allowed/blocked
+- [x] PR8 – CORS tightening
+  - [x] Restrict `Access-Control-Allow-Headers` to `Authorization, Content-Type, X-Requested-With`
+  - [x] Ensure `Vary: Origin` always set; 403 for disallowed origins
+  - [x] Docs: `ALLOWED_ORIGINS` risks and examples
+  - [x] Tests: OPTIONS preflight allowed/blocked
 
-- [ ] PR9 – SLA tests expansion
-  - [ ] Edge cases: holidays, non‑business hours, boundaries
-  - [ ] Table‑driven tests in `internal/sla/*_test.go`
+- [x] PR9 – SLA tests expansion
+  - [x] Edge cases: holidays, non‑business hours, boundaries
+  - [x] Table‑driven tests in `internal/sla/*_test.go`
 
 
 ## Low Priority
