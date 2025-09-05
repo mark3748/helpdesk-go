@@ -13,6 +13,7 @@ jobs:
       packages: write
     strategy:
       matrix:
+        platform: [linux/amd64, linux/arm64]
         include:
           - name: api
             file: Dockerfile.api
@@ -25,17 +26,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:latest
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push ${{ matrix.name }} image
+      - name: Build and push ${{ matrix.name }} image for ${{ matrix.platform }}
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ${{ matrix.file }}
           push: true
+          platforms: ${{ matrix.platform }}
           tags: |
             ghcr.io/${{ github.repository }}-${{ matrix.name }}:${{ github.ref_name }}
             ghcr.io/${{ github.repository }}-${{ matrix.name }}:latest
+          provenance: false
+          sbom: false
