@@ -2,6 +2,7 @@ package tickets
 
 import (
     "errors"
+    "context"
     "crypto/sha256"
     "encoding/binary"
     "encoding/hex"
@@ -81,14 +82,9 @@ func Create(a *app.App) gin.HandlerFunc {
             }
             return
         }
-        {
-            h := sha256.Sum256([]byte(strings.Join([]string{
-                strings.TrimSpace(in.Title),
-                strings.TrimSpace(in.RequesterID),
-                strings.TrimSpace(in.Description),
-            }, "|")))
-            idemKey = hex.EncodeToString(h[:])
-        }
+        // Compute content hash once; reuse for Redis idempotency and advisory lock
+        sum := computeTicketHash(in.Title, in.RequesterID, in.Description)
+        idemKey = hex.EncodeToString(sum[:])
         if a.Q != nil && idemKey != "" {
             // Only treat as duplicate when Redis responds without error and key already exists.
             // If Redis is down or errors, continue to DB/advisory-lock dedup so we don't drop creates.
@@ -101,11 +97,6 @@ func Create(a *app.App) gin.HandlerFunc {
         // Serialize same-content creates with a DB advisory lock to defeat
         // simultaneous retries even without Redis.
         if a.DB != nil {
-            sum := sha256.Sum256([]byte(strings.Join([]string{
-                strings.TrimSpace(in.Title),
-                strings.TrimSpace(in.RequesterID),
-                strings.TrimSpace(in.Description),
-            }, "|")))
             key := int64(binary.BigEndian.Uint64(sum[:8]))
             _, _ = a.DB.Exec(c.Request.Context(), "select pg_advisory_lock($1)", key)
             defer func() { _, _ = a.DB.Exec(c.Request.Context(), "select pg_advisory_unlock($1)", key) }()
@@ -533,6 +524,42 @@ func List(a *app.App) gin.HandlerFunc {
 		// For UI compatibility, return items under "items" and keep legacy "tickets" key.
 		c.JSON(http.StatusOK, gin.H{"items": out, "tickets": out, "next_cursor": next})
 	}
+}
+
+// computeTicketHash returns a sha256 of normalized ticket content used for
+// idempotency and advisory locks.
+func computeTicketHash(title, requesterID, description string) [32]byte {
+    return sha256.Sum256([]byte(strings.Join([]string{
+        strings.TrimSpace(title),
+        strings.TrimSpace(requesterID),
+        strings.TrimSpace(description),
+    }, "|")))
+}
+
+// findExistingTicket returns the most recent ticket that exactly matches the
+// requester, title and description. ok is true when a row was found.
+func findExistingTicket(ctx context.Context, a *app.App, requesterID, title, description string) (Ticket, bool) {
+    var out Ticket
+    if a.DB == nil {
+        return out, false
+    }
+    var assignee *string
+    var number any
+    var status string
+    row := a.DB.QueryRow(ctx, `
+        select t.id::text, t.number, t.title, t.description, t.status, t.assignee_id::text, t.priority
+        from tickets t
+        where t.requester_id = $1 and t.title = $2 and coalesce(t.description,'') = coalesce($3,'')
+        order by t.created_at desc, t.id desc
+        limit 1`, requesterID, title, description)
+    if err := row.Scan(&out.ID, &number, &out.Title, &out.Description, &status, &assignee, &out.Priority); err != nil || out.ID == "" {
+        return Ticket{}, false
+    }
+    out.Number = number
+    out.Status = status
+    out.AssigneeID = assignee
+    out.RequesterID = requesterID
+    return out, true
 }
 
 // Get returns a ticket by id
