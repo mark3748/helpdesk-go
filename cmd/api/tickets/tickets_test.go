@@ -141,8 +141,8 @@ func TestTicketListPagination(t *testing.T) {
 	if resp.NextCursor == "" {
 		t.Fatalf("expected next cursor")
 	}
-    // Cursor should reference the last returned ticket (rows[0])
-    want := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s,%s", db.rows[0].Updated.Format(time.RFC3339Nano), db.rows[0].ID)))
+	// Cursor should reference the last returned ticket (rows[0])
+	want := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s,%s", db.rows[0].Updated.Format(time.RFC3339Nano), db.rows[0].ID)))
 	if resp.NextCursor != want {
 		t.Fatalf("unexpected cursor %q want %q", resp.NextCursor, want)
 	}
