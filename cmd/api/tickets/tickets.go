@@ -90,7 +90,9 @@ func Create(a *app.App) gin.HandlerFunc {
             idemKey = hex.EncodeToString(h[:])
         }
         if a.Q != nil && idemKey != "" {
-            if ok, _ := a.Q.SetNX(c.Request.Context(), "idemp:ticket:"+idemKey, "1", 30*time.Second).Result(); !ok {
+            // Only treat as duplicate when Redis responds without error and key already exists.
+            // If Redis is down or errors, continue to DB/advisory-lock dedup so we don't drop creates.
+            if ok, err := a.Q.SetNX(c.Request.Context(), "idemp:ticket:"+idemKey, "1", 30*time.Second).Result(); err == nil && !ok {
                 // Duplicate within window; return 204 so client treats as success and refreshes via events.
                 c.Status(http.StatusNoContent)
                 return
