@@ -175,7 +175,9 @@ func PresignUpload(a *app.App) gin.HandlerFunc {
 			key += "-" + sn
 		}
 		svc := s3svc.Service{Client: mc, Bucket: a.Cfg.MinIOBucket, MaxTTL: time.Minute}
-		u, err := svc.PresignPut(c.Request.Context(), key, req.ContentType, time.Minute)
+        oc, cancel := a.ObjCtx(c.Request.Context())
+        defer cancel()
+        u, err := svc.PresignPut(oc, key, req.ContentType, time.Minute)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -202,7 +204,9 @@ func PresignDownload(a *app.App) gin.HandlerFunc {
 			return
 		}
 		svc := s3svc.Service{Client: mc, Bucket: a.Cfg.MinIOBucket, MaxTTL: time.Minute}
-		u, err := svc.PresignGet(c.Request.Context(), key, sanitizeFilename(fn), time.Minute)
+        oc, cancel := a.ObjCtx(c.Request.Context())
+        defer cancel()
+        u, err := svc.PresignGet(oc, key, sanitizeFilename(fn), time.Minute)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -317,7 +321,9 @@ func UploadObject(a *app.App) gin.HandlerFunc {
         }
         ct := c.GetHeader("Content-Type")
         if ct == "" { ct = "application/octet-stream" }
-        if _, err := a.M.PutObject(c.Request.Context(), a.Cfg.MinIOBucket, objectKey, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{ContentType: ct}); err != nil {
+        oc, cancel := a.ObjCtx(c.Request.Context())
+        defer cancel()
+        if _, err := a.M.PutObject(oc, a.Cfg.MinIOBucket, objectKey, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{ContentType: ct}); err != nil {
             c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
             return
         }
@@ -356,7 +362,9 @@ func Finalize(a *app.App) gin.HandlerFunc {
         }
         var size int64
         if mc, ok := a.M.(*minio.Client); ok {
-            info, err := mc.StatObject(c.Request.Context(), a.Cfg.MinIOBucket, in.AttachmentID, minio.StatObjectOptions{})
+            oc, cancel := a.ObjCtx(c.Request.Context())
+            defer cancel()
+            info, err := mc.StatObject(oc, a.Cfg.MinIOBucket, in.AttachmentID, minio.StatObjectOptions{})
             if err != nil { c.JSON(http.StatusBadRequest, gin.H{"error": "upload incomplete"}); return }
             size = info.Size
         } else if fs, ok := a.M.(*app.FsObjectStore); ok {
