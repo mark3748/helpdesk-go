@@ -213,7 +213,7 @@ func Create(a *app.App) gin.HandlerFunc {
                 where t.requester_id = $1 and t.title = $2 and coalesce(t.description,'') = coalesce($3,'')
                 order by t.created_at desc, t.id desc
                 limit 1`, in.RequesterID, in.Title, in.Description)
-            if err := row.Scan(&existing.ID, &number, &existing.Title, &existing.Description, &status, &assignee, &existing.Priority); err == nil {
+            if err := row.Scan(&existing.ID, &number, &existing.Title, &existing.Description, &status, &assignee, &existing.Priority); err == nil && existing.ID != "" {
                 existing.Number = number
                 existing.Status = status
                 existing.AssigneeID = assignee
@@ -254,7 +254,7 @@ returning id::text, number, title, description, status, assignee_id::text, prior
                     where t.requester_id = $1 and t.title = $2 and coalesce(t.description,'') = coalesce($3,'')
                     order by t.created_at desc, t.id desc
                     limit 1`, in.RequesterID, in.Title, in.Description)
-                if err2 := erow.Scan(&existing.ID, &enumber, &existing.Title, &existing.Description, &estatus, &eassignee, &existing.Priority); err2 == nil {
+                if err2 := erow.Scan(&existing.ID, &enumber, &existing.Title, &existing.Description, &estatus, &eassignee, &existing.Priority); err2 == nil && existing.ID != "" {
                     existing.Number = enumber
                     existing.Status = estatus
                     existing.AssigneeID = eassignee
