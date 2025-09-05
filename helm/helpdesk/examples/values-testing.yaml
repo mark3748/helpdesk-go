@@ -1,0 +1,53 @@
+image:
+  repository: ghcr.io/mark3748/helpdesk-go-api
+  tag: "REPLACE_WITH_TAG"
+  pullPolicy: IfNotPresent
+
+# Internal frontend (set to false if you don't have an image yet)
+frontendInternal:
+  enabled: true
+  image:
+    repository: ghcr.io/mark3748/helpdesk-go-internal-frontend
+    tag: "REPLACE_WITH_TAG"
+    pullPolicy: IfNotPresent
+
+# Requester portal (optional for testing)
+frontendRequester:
+  enabled: false
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: helpdesk.local
+      paths:
+        - path: /
+          pathType: Prefix
+        - path: /api
+          pathType: Prefix
+        - path: /swagger
+          pathType: Prefix
+  tls: []
+
+env:
+  ENV: "prod"
+  ADDR: ":8080"
+  AUTH_MODE: "local"
+  AUTH_LOCAL_SECRET: "REPLACE_WITH_STRONG_SECRET"
+  ADMIN_PASSWORD: "admin"
+  LOG_PATH: "/config/logs"
+  DATABASE_URL: "postgres://postgres:postgres@postgres-postgresql.helpdesk.svc.cluster.local:5432/helpdesk?sslmode=disable"
+  REDIS_ADDR: "redis-master.helpdesk.svc.cluster.local:6379"
+  # If your UI is served via this same ingress host, keep empty.
+  # If you serve UI elsewhere, set the origin here.
+  ALLOWED_ORIGINS: ""
+  # Optional local filestore (use MinIO instead in real envs). If you enable it,
+  # also mount a PVC to the same path by editing the Deployment template or
+  # keeping it ephemeral for smoke testing.
+  # FILESTORE_PATH: "/data"
+
+resources: {}

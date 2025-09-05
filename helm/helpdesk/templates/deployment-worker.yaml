@@ -20,10 +20,33 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: worker
     spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.imagePullSecrets }}
+        - name: {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: worker
           image: "{{ .Values.workerImage.repository }}:{{ .Values.workerImage.tag }}"
           imagePullPolicy: {{ .Values.workerImage.pullPolicy }}
+          {{- if .Values.secrets.enabled }}
+          envFrom:
+            - secretRef:
+                name: {{ if .Values.secrets.name }}{{ .Values.secrets.name }}{{ else }}{{ include "helpdesk.fullname" . }}-secret{{ end }}
+          {{- end }}
           env:
             {{- range $k, $v := .Values.env }}
             - name: {{ $k | quote }}

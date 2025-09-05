@@ -1,17 +1,22 @@
 package tickets
 
 import (
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"reflect"
-	"strconv"
-	"strings"
-	"time"
+    "errors"
+    "crypto/sha256"
+    "encoding/binary"
+    "encoding/hex"
+    "encoding/base64"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "reflect"
+    "strconv"
+    "strings"
+    "time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
+    "github.com/gin-gonic/gin"
+    "github.com/go-playground/validator/v10"
+    "github.com/jackc/pgconn"
 
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
@@ -56,8 +61,12 @@ type createTicketReq struct {
 
 // Create inserts a new ticket and returns a summary.
 func Create(a *app.App) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var in createTicketReq
+    return func(c *gin.Context) {
+        // Simple idempotency: derive a deterministic key from request content.
+        // We ignore client-provided keys for dedup to avoid double-submits with
+        // different headers bypassing the guard.
+        idemKey := ""
+        var in createTicketReq
         if err := c.ShouldBindJSON(&in); err != nil {
             errs := map[string]string{}
             if ve, ok := err.(validator.ValidationErrors); ok {
@@ -71,6 +80,33 @@ func Create(a *app.App) gin.HandlerFunc {
                 app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", errs)
             }
             return
+        }
+        {
+            h := sha256.Sum256([]byte(strings.Join([]string{
+                strings.TrimSpace(in.Title),
+                strings.TrimSpace(in.RequesterID),
+                strings.TrimSpace(in.Description),
+            }, "|")))
+            idemKey = hex.EncodeToString(h[:])
+        }
+        if a.Q != nil && idemKey != "" {
+            if ok, _ := a.Q.SetNX(c.Request.Context(), "idemp:ticket:"+idemKey, "1", 30*time.Second).Result(); !ok {
+                // Duplicate within window; return 204 so client treats as success and refreshes via events.
+                c.Status(http.StatusNoContent)
+                return
+            }
+        }
+        // Serialize same-content creates with a DB advisory lock to defeat
+        // simultaneous retries even without Redis.
+        if a.DB != nil {
+            sum := sha256.Sum256([]byte(strings.Join([]string{
+                strings.TrimSpace(in.Title),
+                strings.TrimSpace(in.RequesterID),
+                strings.TrimSpace(in.Description),
+            }, "|")))
+            key := int64(binary.BigEndian.Uint64(sum[:8]))
+            _, _ = a.DB.Exec(c.Request.Context(), "select pg_advisory_lock($1)", key)
+            defer func() { _, _ = a.DB.Exec(c.Request.Context(), "select pg_advisory_unlock($1)", key) }()
         }
 		if len(in.CustomJSON) > 0 {
 			var tmp interface{}
@@ -130,35 +166,64 @@ func Create(a *app.App) gin.HandlerFunc {
             c.JSON(http.StatusCreated, Ticket{Title: in.Title, Priority: in.Priority})
             return
         }
-		// Determine default assignee: if current user has the agent role, assign to them
-		var defaultAssignee string
-		if v, ok := c.Get("user"); ok {
-			if u, ok := v.(authpkg.AuthUser); ok {
-				for _, r := range u.Roles {
-					if r == "agent" {
-						defaultAssignee = u.ID
-						break
-					}
-				}
-			}
-		}
+        // Determine default assignee: if current user has agent/admin role, assign to them
+        var defaultAssignee string
+        if v, ok := c.Get("user"); ok {
+            if u, ok := v.(authpkg.AuthUser); ok {
+                for _, r := range u.Roles {
+                    if r == "agent" || r == "admin" {
+                        defaultAssignee = u.ID
+                        break
+                    }
+                }
+            }
+        }
 		if in.AssigneeID != nil && *in.AssigneeID != "" {
 			defaultAssignee = *in.AssigneeID
 		}
-		// Fallback: if still empty, check DB roles for this user id
-		if defaultAssignee == "" && a.DB != nil {
-			if v, ok := c.Get("user"); ok {
-				if u, ok := v.(authpkg.AuthUser); ok && u.ID != "" {
-					var hasAgent bool
-					_ = a.DB.QueryRow(c.Request.Context(), `select exists(select 1 from user_roles ur join roles r on r.id=ur.role_id where ur.user_id=$1 and r.name='agent')`, u.ID).Scan(&hasAgent)
-					if hasAgent {
-						defaultAssignee = u.ID
-					}
-				}
-			}
-		}
+        // Fallback: if still empty, check DB roles for this user id
+        if defaultAssignee == "" && a.DB != nil {
+            if v, ok := c.Get("user"); ok {
+                if u, ok := v.(authpkg.AuthUser); ok && u.ID != "" {
+                    var hasRole bool
+                    _ = a.DB.QueryRow(c.Request.Context(), `
+                        select exists(
+                            select 1 from user_roles ur
+                            join roles r on r.id=ur.role_id
+                            where ur.user_id=$1 and r.name = any($2)
+                        )`, u.ID, []string{"agent", "admin"}).Scan(&hasRole)
+                    if hasRole {
+                        defaultAssignee = u.ID
+                    }
+                }
+            }
+        }
 
-		// Insert ticket
+        // DB-side soft dedup: if an identical (title + requester) ticket was
+        // created very recently, return it instead of inserting another. This
+        // protects against client/proxy retries even when Redis is unavailable.
+        if a.DB != nil {
+            var existing Ticket
+            var assignee *string
+            var number any
+            var status string
+            row := a.DB.QueryRow(c.Request.Context(), `
+                select t.id::text, t.number, t.title, t.description, t.status, t.assignee_id::text, t.priority
+                from tickets t
+                where t.requester_id = $1 and t.title = $2 and t.created_at > now() - interval '15 seconds'
+                order by t.created_at desc, t.id desc
+                limit 1`, in.RequesterID, in.Title)
+            if err := row.Scan(&existing.ID, &number, &existing.Title, &existing.Description, &status, &assignee, &existing.Priority); err == nil {
+                existing.Number = number
+                existing.Status = status
+                existing.AssigneeID = assignee
+                existing.RequesterID = in.RequesterID
+                c.JSON(http.StatusOK, existing)
+                return
+            }
+        }
+
+        // Insert ticket
         const q = `with s as (select nextval('ticket_seq') n)
 insert into tickets (number, title, description, requester_id, priority, status, source, custom_json)
 values ((select 'HD-'||n from s), $1, $2, $3, $4, coalesce(nullif($5,''),'New'), $6, coalesce(nullif($7,''),'{}')::jsonb)
@@ -176,6 +241,28 @@ returning id::text, number, title, description, status, assignee_id::text, prior
             row = a.DB.QueryRow(c.Request.Context(), qAssign, in.Title, in.Description, in.RequesterID, defaultAssignee, in.Priority, in.Status, in.Source, string(in.CustomJSON))
         }
         if err := row.Scan(&t.ID, &number, &t.Title, &t.Description, &status, &assignee, &t.Priority); err != nil {
+            var pge *pgconn.PgError
+            if errors.As(err, &pge) && pge.Code == "23505" { // unique_violation (dedup index)
+                // Select the most recent matching ticket and return it
+                var existing Ticket
+                var eassignee *string
+                var estatus string
+                var enumber any
+                erow := a.DB.QueryRow(c.Request.Context(), `
+                    select t.id::text, t.number, t.title, t.description, t.status, t.assignee_id::text, t.priority
+                    from tickets t
+                    where t.requester_id = $1 and t.title = $2
+                    order by t.created_at desc, t.id desc
+                    limit 1`, in.RequesterID, in.Title)
+                if err2 := erow.Scan(&existing.ID, &enumber, &existing.Title, &existing.Description, &estatus, &eassignee, &existing.Priority); err2 == nil {
+                    existing.Number = enumber
+                    existing.Status = estatus
+                    existing.AssigneeID = eassignee
+                    existing.RequesterID = in.RequesterID
+                    c.JSON(http.StatusOK, existing)
+                    return
+                }
+            }
             c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
             return
         }
