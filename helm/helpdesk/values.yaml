@@ -39,13 +39,6 @@ ingress:
   className: nginx
   hosts:
     - host: helpdesk.local
-      paths:
-        - path: /
-          pathType: Prefix
-        - path: /api
-          pathType: Prefix
-        - path: /swagger
-          pathType: Prefix
   tls: []
 
 # Separate ingress for requester portal (optional)
