@@ -1,14 +1,29 @@
-# Helpdesk (Go) — MVP Scaffold
-
-A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migrations and a Helm chart for Kubernetes.
+# Helpdesk (Go) — Complete Ticketing System
+A fully functional FootPrints-style ticketing system built in Go, with PostgreSQL backend and Kubernetes deployment ready out of the box.
 
 ## What You Get
-- Go API service (Gin): tickets, comments, attachments, watchers, exports, metrics.
-- Embedded SQL migrations (goose) for Postgres (JSONB custom fields, FTS index, CSAT columns).
-- Redis-driven worker: email notifications (SMTP), SLA clock updates, optional IMAP poller.
-- Object storage: S3-compatible (MinIO) or local filesystem for attachments.
-- Web apps: internal workspace (`web/internal`) and requester portal (`web/requester`).
-- Dockerfiles for API & Worker and a Helm chart (deployments, service, ingress, config).
+- Go API service (Gin): Complete ticket management with comments, attachments, watchers, exports, and metrics
+- PostgreSQL backend with embedded migrations (goose): JSONB custom fields, full-text search, CSAT tracking
+- Redis-powered worker: Email notifications (SMTP), SLA foundation (in development), optional IMAP integration
+- Flexible storage: S3-compatible (MinIO) or local filesystem for attachments
+- Dual web interfaces: Internal workspace (web/internal) and customer portal (web/requester)
+- Production-ready deployment: Docker images and Helm chart with ingress, secrets, persistence
+
+## Authentication & Access
+- OIDC integration (Keycloak, Authentik) with JWKS validation
+- Local auth fallback for development and simple deployments
+- Role-based access: Admin, Manager, Agent permissions with appropriate UI views
+- Customer portal with separate authentication flow
+
+## Key Features
+- Full ticket lifecycle management with status tracking
+- Comment threads and file attachments
+- Email notifications and ticket lifecycle management
+- CSV exports and Prometheus metrics
+- Server-sent events for real-time updates
+- OpenAPI documentation with embedded Swagger UI
+- Rate limiting and CORS configuration
+- Test coverage varies by component (0-89%)
 
 ## Quickstart (local, Docker Compose-free)
 1. Provision Postgres 14+ and create a db (e.g., `helpdesk`). Set env:
@@ -68,7 +83,7 @@ Notes:
 - Watchers: `GET /tickets/:id/watchers`, `POST /tickets/:id/watchers`, `DELETE /tickets/:id/watchers/:userID`
 - Exports: `POST /exports/tickets` (CSV)
 - CSAT: `GET /csat/:token` form, `POST /csat/:token` score=good|bad (public)
-- Metrics (agent role): `GET /metrics/sla`, `GET /metrics/resolution`, `GET /metrics/tickets`
+- Metrics (agent role): `GET /metrics/resolution`, `GET /metrics/tickets` (SLA endpoint exists but returns stub data)
 - Prometheus metrics: `GET /metrics` (no auth)
 - Events: `GET /events` (SSE) with heartbeat comments `:hb` ~every 30s
 
