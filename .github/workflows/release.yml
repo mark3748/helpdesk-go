@@ -38,7 +38,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ matrix.include[0].file }}
+          file: ${{ matrix.file }}
           push: true
           platforms: ${{ matrix.platform }}
           tags: |
