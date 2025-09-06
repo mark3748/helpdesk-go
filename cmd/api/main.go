@@ -646,8 +646,9 @@ func main() {
 		store = &appcore.FsObjectStore{Base: base}
 	}
 
-	// Seed a dev admin for local auth
-	if cfg.AuthMode == "local" && cfg.Env == "dev" {
+	// Seed a local admin when enabled. In dev, the password is generated if
+	// ADMIN_PASSWORD is omitted (logged once).
+	if cfg.AuthMode == "local" && (cfg.Env == "dev" || os.Getenv("ADMIN_PASSWORD") != "") {
 		if err := seedLocalAdmin(context.Background(), pool); err != nil {
 			log.Error().Err(err).Msg("seed local admin")
 		}
@@ -1082,6 +1083,8 @@ func (a *App) authMiddleware() gin.HandlerFunc {
 	}
 }
 
+// seedLocalAdmin inserts an admin user for local auth if one doesn't already
+// exist. It is safe to call multiple times.
 func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
 	var exists bool
 	if err := db.QueryRow(ctx, "select exists(select 1 from users where lower(username)='admin')").Scan(&exists); err != nil {
