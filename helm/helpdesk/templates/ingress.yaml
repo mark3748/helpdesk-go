@@ -6,36 +6,34 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: {{ .Values.ingress.className }}
 spec:
+  ingressClassName: {{ .Values.ingress.className }}
   rules:
+    {{- $root := . }}
     {{- range .Values.ingress.hosts }}
     - host: {{ .host }}
       http:
         paths:
-          {{- $root := $ }}
-          {{- range .paths }}
-          - path: {{ .path }}
-            pathType: {{ .pathType }}
+          - path: /api
+            pathType: Prefix
             backend:
               service:
-                {{- if $root.Values.frontendInternal.enabled }}
-                {{- if or (regexMatch "^/api($|/)" .path) (regexMatch "^/swagger" .path) }}
                 name: {{ include "helpdesk.fullname" $root }}-api
                 port:
                   name: http
-                {{- else }}
-                name: {{ include "helpdesk.fullname" $root }}-frontend-internal
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                {{- $frontendServiceName := (printf "%s-frontend-internal" (include "helpdesk.fullname" $root)) -}}
+                {{- if not $root.Values.frontendInternal.enabled }}
+                  {{- $frontendServiceName = (printf "%s-api" (include "helpdesk.fullname" $root)) -}}
+                {{- end }}
+                name: {{ $frontendServiceName }}
                 port:
                   name: http
-                {{- end }}
-                {{- else }}
-                name: {{ include "helpdesk.fullname" $root }}-api
-                port:
-                  name: http
-                {{- end }}
-          {{- end }}
     {{- end }}
   {{- if .Values.ingress.tls }}
   tls:
-    {{- toYaml .Values.ingress.tls | nindent 8 }}
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
   {{- end }}
 {{- end }}

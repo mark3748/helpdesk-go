@@ -33,7 +33,7 @@ export default function Login() {
     <div style={{ maxWidth: 360, margin: '10vh auto', background: '#fff', padding: 24, borderRadius: 8 }}>
       <Typography.Title level={4} style={{ textAlign: 'center' }}>Sign in</Typography.Title>
       {error && <Alert type="error" message={error} style={{ marginBottom: 12 }} />}
-      <Form layout="vertical" onFinish={onFinish} initialValues={{ username: 'admin', password: 'admin' }}>
+      <Form layout="vertical" onFinish={onFinish} initialValues={(import.meta as any).env?.DEV ? { username: 'admin', password: 'admin' } : {}}>
         <Form.Item label="Username" name="username" rules={[{ required: true }]}>
           <Input autoFocus />
         </Form.Item>
@@ -43,9 +43,11 @@ export default function Login() {
         <Button type="primary" htmlType="submit" block loading={loading}>
           Log in
         </Button>
-        <Typography.Paragraph type="secondary" style={{ marginTop: 12, textAlign: 'center' }}>
-          Dev default: admin / admin
-        </Typography.Paragraph>
+        {(import.meta as any).env?.DEV && (
+          <Typography.Paragraph type="secondary" style={{ marginTop: 12, textAlign: 'center' }}>
+            Dev default: admin / admin
+          </Typography.Paragraph>
+        )}
       </Form>
     </div>
   );

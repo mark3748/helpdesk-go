@@ -13,7 +13,8 @@ jobs:
       packages: write
     strategy:
       matrix:
-        platform: [linux/amd64, linux/arm64]
+        name: [api, worker, internal-frontend, requester-frontend]
+        platform: [linux/amd64]
         include:
           - name: api
             file: Dockerfile.api

@@ -37,5 +37,9 @@ jobs:
           version: v3.13.3
       - name: Lint Helm chart
         run: helm lint helm/helpdesk
+      - name: Verify ingress API mapping
+        run: |
+          helm template test helm/helpdesk > rendered.yaml
+          grep -A 5 'path: /api' rendered.yaml | grep 'name: test-helpdesk-api'
       - name: Package Helm chart
         run: helm package helm/helpdesk

@@ -33,7 +33,7 @@ A minimal FootPrints-style ticketing system scaffold in Go, with PostgreSQL migr
    ```
 
 Notes:
-- In `AUTH_MODE=local` and `ENV=dev`, an admin user is auto-seeded. Set `ADMIN_PASSWORD` to control it; otherwise a random password is generated and logged once.
+- In `AUTH_MODE=local`, an admin user is auto-seeded if `ADMIN_PASSWORD` is set or when running with `ENV=dev`. If `ADMIN_PASSWORD` is omitted, a random password is generated and logged once.
 - For MinIO, set `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL` and omit `FILESTORE_PATH`.
 
 ## Local Development
@@ -86,6 +86,15 @@ Examples:
   ```bash
   helm upgrade --install helpdesk ./helm/helpdesk -n helpdesk \
     -f helm/helpdesk/examples/values-local-auth.yaml
+  ```
+- To supply secrets out-of-band, create a `Secret` with the local auth keys and point the chart to it:
+  ```bash
+  kubectl create secret generic helpdesk-auth \
+    --from-literal=AUTH_LOCAL_SECRET=change-me \
+    --from-literal=ADMIN_PASSWORD=admin
+  helm upgrade --install helpdesk ./helm/helpdesk -n helpdesk --create-namespace \
+    -f helm/helpdesk/examples/values-local-auth.yaml \
+    --set secrets.name=helpdesk-auth --set secrets.enabled=true
   ```
 - OIDC (Authentik/Keycloak), both frontends, CORS + JWKS configured:
   ```bash
@@ -194,7 +203,7 @@ API (cmd/api):
 - `OIDC_GROUP_CLAIM`: JWT claim name containing group roles (default `groups`).
 - `AUTH_MODE`: `oidc` or `local`.
 - `AUTH_LOCAL_SECRET`: HMAC secret for local auth cookie JWTs.
-- `ADMIN_PASSWORD`: initial admin password in dev local-auth mode.
+- `ADMIN_PASSWORD`: initial admin password for local auth; if omitted in dev, a random password is generated and logged once.
 - `FILESTORE_PATH`: local path for attachments (filesystem store).
 - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`: S3/MinIO settings.
 - `REDIS_TIMEOUT_MS`: per-call Redis timeout in milliseconds (default 2000). Applies to readiness ping and queue operations.
