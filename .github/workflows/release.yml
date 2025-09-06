@@ -13,6 +13,7 @@ jobs:
       packages: write
     strategy:
       matrix:
+        name: [api, worker, internal-frontend, requester-frontend]
         platform: [linux/amd64, linux/arm64]
         include:
           - name: api
@@ -37,7 +38,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ matrix.file }}
+          file: ${{ matrix.include[0].file }}
           push: true
           platforms: ${{ matrix.platform }}
           tags: |
