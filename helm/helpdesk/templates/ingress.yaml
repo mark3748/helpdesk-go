@@ -7,32 +7,25 @@ metadata:
     kubernetes.io/ingress.class: {{ .Values.ingress.className }}
 spec:
   rules:
+    {{- $root := . }}
     {{- range .Values.ingress.hosts }}
     - host: {{ .host }}
       http:
         paths:
-          {{- $root := $ }}
-          {{- range .paths }}
-          - path: {{ .path }}
-            pathType: {{ .pathType }}
+          - path: /api
+            pathType: Prefix
             backend:
               service:
-                {{- if $root.Values.frontendInternal.enabled }}
-                {{- if or (regexMatch "^/api($|/)" .path) (regexMatch "^/swagger" .path) }}
                 name: {{ include "helpdesk.fullname" $root }}-api
                 port:
                   name: http
-                {{- else }}
-                name: {{ include "helpdesk.fullname" $root }}-frontend-internal
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{- if $root.Values.frontendInternal.enabled }}{{ include "helpdesk.fullname" $root }}-frontend-internal{{ else }}{{ include "helpdesk.fullname" $root }}-api{{ end }}
                 port:
                   name: http
-                {{- end }}
-                {{- else }}
-                name: {{ include "helpdesk.fullname" $root }}-api
-                port:
-                  name: http
-                {{- end }}
-          {{- end }}
     {{- end }}
   {{- if .Values.ingress.tls }}
   tls:
