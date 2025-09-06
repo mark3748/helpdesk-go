@@ -6,6 +6,7 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: {{ .Values.ingress.className }}
 spec:
+  ingressClassName: {{ .Values.ingress.className }}
   rules:
     {{- $root := . }}
     {{- range .Values.ingress.hosts }}
