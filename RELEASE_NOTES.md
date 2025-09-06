@@ -1,3 +1,32 @@
+# 0.4.3: Security Hardening + Production Polish
+
+**Summary:**
+- Enhanced security: Removed default credentials from Helm values and login UI in production builds
+- Fixed CORS configuration for HTTPS deployments (resolves 403 authentication errors)
+- Improved Helm template maintainability with cleaner conditional logic
+- Chart version bumped to 0.4.3 with production-ready defaults
+
+**Security Improvements:**
+- Default `ADMIN_PASSWORD` removed from `helm/helpdesk/values.yaml` (now empty string)
+- Login form no longer pre-fills credentials in production builds
+- Development hints ("Dev default: admin / admin") hidden in production
+- Development mode still shows defaults for easier local testing
+
+**Fixes:**
+- CORS `ALLOWED_ORIGINS` now correctly set to HTTPS for browser authentication
+- Ingress template conditional logic refactored for better readability
+- Resolved 403 Forbidden errors when accessing `/api/login` via HTTPS
+
+**Testing:**
+- Deploy with `helm upgrade --install helpdesk ./helm/helpdesk --values your-values.yaml`
+- Verify login works at `https://your-domain.com` (no 403 errors)
+- Confirm login form is clean (no pre-filled fields in production)
+- Development mode: `npm run dev` still shows pre-filled admin/admin
+
+**Migration:**
+- Update your values file to explicitly set `ADMIN_PASSWORD` if using default charts
+- Ensure `ALLOWED_ORIGINS` matches your HTTPS domain (not HTTP)
+
 # Functional Dev Environment Release: Attachments, Comments, Swagger UI
 
 **Summary:**
