@@ -104,7 +104,7 @@ secrets:
   name: ""
   data:
     AUTH_LOCAL_SECRET: "change-me"
-    ADMIN_PASSWORD: "admin"
+    ADMIN_PASSWORD: ""
 
 # Optional persistence for FILESTORE_PATH (filesystem object store)
 persistence:

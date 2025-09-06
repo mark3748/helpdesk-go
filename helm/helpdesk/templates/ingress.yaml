@@ -24,7 +24,11 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ if $root.Values.frontendInternal.enabled }}{{ include "helpdesk.fullname" $root }}-frontend-internal{{ else }}{{ include "helpdesk.fullname" $root }}-api{{ end }}
+                {{- $frontendServiceName := (printf "%s-frontend-internal" (include "helpdesk.fullname" $root)) -}}
+                {{- if not $root.Values.frontendInternal.enabled }}
+                  {{- $frontendServiceName = (printf "%s-api" (include "helpdesk.fullname" $root)) -}}
+                {{- end }}
+                name: {{ $frontendServiceName }}
                 port:
                   name: http
     {{- end }}
