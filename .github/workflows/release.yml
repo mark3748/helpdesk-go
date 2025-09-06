@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         name: [api, worker, internal-frontend, requester-frontend]
-        platform: [linux/amd64, linux/arm64]
+        platform: [linux/amd64]
         include:
           - name: api
             file: Dockerfile.api

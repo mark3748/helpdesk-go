@@ -23,12 +23,12 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{- if $root.Values.frontendInternal.enabled }}{{ include "helpdesk.fullname" $root }}-frontend-internal{{ else }}{{ include "helpdesk.fullname" $root }}-api{{ end }}
+                name: {{ if $root.Values.frontendInternal.enabled }}{{ include "helpdesk.fullname" $root }}-frontend-internal{{ else }}{{ include "helpdesk.fullname" $root }}-api{{ end }}
                 port:
                   name: http
     {{- end }}
   {{- if .Values.ingress.tls }}
   tls:
-    {{- toYaml .Values.ingress.tls | nindent 8 }}
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
   {{- end }}
 {{- end }}
