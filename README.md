@@ -87,6 +87,15 @@ Examples:
   helm upgrade --install helpdesk ./helm/helpdesk -n helpdesk \
     -f helm/helpdesk/examples/values-local-auth.yaml
   ```
+- To supply secrets out-of-band, create a `Secret` with the local auth keys and point the chart to it:
+  ```bash
+  kubectl create secret generic helpdesk-auth \
+    --from-literal=AUTH_LOCAL_SECRET=change-me \
+    --from-literal=ADMIN_PASSWORD=admin
+  helm upgrade --install helpdesk ./helm/helpdesk -n helpdesk --create-namespace \
+    -f helm/helpdesk/examples/values-local-auth.yaml \
+    --set secrets.name=helpdesk-auth --set secrets.enabled=true
+  ```
 - OIDC (Authentik/Keycloak), both frontends, CORS + JWKS configured:
   ```bash
   helm upgrade --install helpdesk ./helm/helpdesk -n helpdesk \

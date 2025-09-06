@@ -72,8 +72,7 @@ env:
   REDIS_TIMEOUT_MS: "2000"
   OBJECTSTORE_TIMEOUT_MS: "10000"
   # API auth (optional)
-  AUTH_MODE: "oidc"
-  AUTH_LOCAL_SECRET: ""
+  AUTH_MODE: "local"
   OIDC_ISSUER: ""
   OIDC_JWKS_URL: ""
   # Object storage (optional)
@@ -105,17 +104,14 @@ imagePullSecrets: []
 
 # Optional Kubernetes Secret support for sensitive env vars
 secrets:
-  enabled: false
+  enabled: true
   # If you already have a Secret, set its name here and it will be referenced.
   # When empty and enabled=true, this chart will create a Secret named
   # "{{ include \"helpdesk.fullname\" . }}-secret" with the key/values below.
   name: ""
-  data: {}
-  # Example:
-  # data:
-  #   DATABASE_URL: "postgres://user:pass@postgres:5432/helpdesk?sslmode=disable"
-  #   AUTH_LOCAL_SECRET: "super-secret"
-  #   ADMIN_PASSWORD: "admin"
+  data:
+    AUTH_LOCAL_SECRET: "change-me"
+    ADMIN_PASSWORD: "admin"
 
 # Optional persistence for FILESTORE_PATH (filesystem object store)
 persistence:

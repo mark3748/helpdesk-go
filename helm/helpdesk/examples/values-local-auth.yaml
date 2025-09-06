@@ -56,7 +56,6 @@ env:
 
   # Local auth (no OIDC)
   AUTH_MODE: "local"
-  AUTH_LOCAL_SECRET: "change-me"
   OIDC_ISSUER: ""
   OIDC_JWKS_URL: ""
 
@@ -66,3 +65,9 @@ env:
   MINIO_SECRET_KEY: ""
   MINIO_BUCKET: "attachments"
   MINIO_USE_SSL: "false"
+
+secrets:
+  enabled: true
+  data:
+    AUTH_LOCAL_SECRET: "change-me"
+    ADMIN_PASSWORD: "admin"
