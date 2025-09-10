@@ -45,9 +45,13 @@ func CreateAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
-		if u == nil {
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
 		}
@@ -111,9 +115,13 @@ func UpdateAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
-		if u == nil {
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
 		}
@@ -154,9 +162,13 @@ func DeleteAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
-		if u == nil {
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
 		}
@@ -187,9 +199,13 @@ func AssignAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
-		if u == nil {
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
 		}
