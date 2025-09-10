@@ -18,6 +18,7 @@ const groups: NavGroup[] = [
     children: [
       { key: 'tickets', label: 'Tickets', path: '/tickets' },
       { key: 'metrics', label: 'Metrics', path: '/metrics' },
+      { key: 'assets', label: 'Assets', path: '/assets' },
     ],
   },
   {
@@ -27,6 +28,8 @@ const groups: NavGroup[] = [
     children: [
       { key: 'manager', label: 'Queue Manager', path: '/manager' },
       { key: 'manager-analytics', label: 'Analytics', path: '/manager/analytics' },
+      { key: 'assets-dashboard', label: 'Asset Dashboard', path: '/assets/dashboard' },
+      { key: 'assets-checkouts', label: 'Asset Checkouts', path: '/assets/checkouts' },
     ],
   },
   {
@@ -39,6 +42,9 @@ const groups: NavGroup[] = [
       { key: 'settings-oidc', label: 'OIDC Settings', path: '/settings/oidc' },
       { key: 'settings-storage', label: 'Storage Settings', path: '/settings/storage' },
       { key: 'settings-users', label: 'User Roles', path: '/settings/users' },
+      { key: 'asset-categories', label: 'Asset Categories', path: '/assets/categories' },
+      { key: 'assets-import', label: 'Asset Import', path: '/assets/import' },
+      { key: 'assets-analytics', label: 'Asset Analytics', path: '/assets/analytics' },
     ],
   },
 ];
