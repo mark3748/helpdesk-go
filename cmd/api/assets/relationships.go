@@ -598,8 +598,9 @@ func (s *Service) getDownstreamAssetCount(ctx context.Context, assetID uuid.UUID
 }
 
 func (s *Service) getCriticalPathAssets(_ context.Context, _ uuid.UUID) ([]uuid.UUID, error) {
-	// Implementation would identify assets in the critical path
-	// This is a placeholder for more complex graph analysis
+	// TODO: Implement critical path analysis for asset dependencies.
+	// This should identify assets that are part of the critical path using graph traversal algorithms.
+	// See issue tracker: https://github.com/your-org/your-repo/issues/XXX
 	return []uuid.UUID{}, nil
 }
 
