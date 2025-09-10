@@ -1,13 +1,24 @@
-import { Card, Row, Col, Statistic, Progress, Table, Tag, Typography, Alert, List } from 'antd';
-import { 
-  DesktopOutlined, 
-  ToolOutlined, 
-  CheckCircleOutlined, 
-  ClockCircleOutlined
-} from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { api } from '../../shared/api';
+import {
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Progress,
+  Table,
+  Tag,
+  Typography,
+  Alert,
+  List,
+} from "antd";
+import {
+  DesktopOutlined,
+  ToolOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+} from "@ant-design/icons";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { api } from "../../shared/api";
 
 const { Title } = Typography;
 
@@ -46,30 +57,29 @@ interface DashboardStats {
 }
 
 const statusColors = {
-  active: '#52c41a',
-  inactive: '#d9d9d9',
-  maintenance: '#faad14',
-  retired: '#ff4d4f',
-  disposed: '#ff7875',
+  active: "#52c41a",
+  inactive: "#d9d9d9",
+  maintenance: "#faad14",
+  retired: "#ff4d4f",
+  disposed: "#ff7875",
 };
 
 const conditionColors = {
-  excellent: '#52c41a',
-  good: '#1890ff',
-  fair: '#faad14',
-  poor: '#ff7a45',
-  broken: '#ff4d4f',
+  excellent: "#52c41a",
+  good: "#1890ff",
+  fair: "#faad14",
+  poor: "#ff7a45",
+  broken: "#ff4d4f",
 };
 
 export default function AssetDashboard() {
   const { data, isLoading, error } = useQuery<DashboardStats>({
-    queryKey: ['assets', 'dashboard'],
+    queryKey: ["assets", "dashboard"],
     queryFn: async () => {
-      // This would typically come from a dedicated dashboard endpoint
-      // For now, we'll simulate the data structure
-      await api.get('/assets?limit=1');
-      
-      // Mock dashboard data - in real implementation, create a dedicated endpoint
+      // TODO: Replace mock data with real dashboard endpoint
+      await api.get("/assets?limit=1");
+
+      // Placeholder dashboard data to be replaced once endpoint exists
       return {
         total_assets: 150,
         active_assets: 125,
@@ -93,38 +103,38 @@ export default function AssetDashboard() {
         },
         recent_activity: [
           {
-            id: '1',
-            action: 'Asset Created',
-            asset_name: 'Dell Laptop',
-            asset_tag: 'LP-001',
-            actor: 'admin@company.com',
-            created_at: '2024-01-15T10:30:00Z',
+            id: "1",
+            action: "Asset Created",
+            asset_name: "Dell Laptop",
+            asset_tag: "LP-001",
+            actor: "admin@company.com",
+            created_at: "2024-01-15T10:30:00Z",
           },
           {
-            id: '2',
-            action: 'Asset Assigned',
-            asset_name: 'iPhone 15',
-            asset_tag: 'PH-042',
-            actor: 'manager@company.com',
-            created_at: '2024-01-15T09:15:00Z',
+            id: "2",
+            action: "Asset Assigned",
+            asset_name: "iPhone 15",
+            asset_tag: "PH-042",
+            actor: "manager@company.com",
+            created_at: "2024-01-15T09:15:00Z",
           },
         ],
         overdue_items: [
           {
-            id: '1',
-            asset_tag: 'CAM-001',
-            asset_name: 'Canon Camera',
-            checked_out_to: 'john.doe@company.com',
-            expected_return_date: '2024-01-10',
+            id: "1",
+            asset_tag: "CAM-001",
+            asset_name: "Canon Camera",
+            checked_out_to: "john.doe@company.com",
+            expected_return_date: "2024-01-10",
             days_overdue: 5,
           },
         ],
         upcoming_maintenance: [
           {
-            id: '1',
-            asset_tag: 'SRV-001',
-            asset_name: 'Main Server',
-            next_maintenance_date: '2024-01-20',
+            id: "1",
+            asset_tag: "SRV-001",
+            asset_name: "Main Server",
+            next_maintenance_date: "2024-01-20",
             days_until: 3,
           },
         ],
@@ -144,8 +154,12 @@ export default function AssetDashboard() {
     );
   }
 
-  const overallHealth = data ? Math.round((data.active_assets / data.total_assets) * 100) : 0;
-  const utilizationRate = data ? Math.round((data.active_checkouts / data.active_assets) * 100) : 0;
+  const overallHealth = data
+    ? Math.round((data.active_assets / data.total_assets) * 100)
+    : 0;
+  const utilizationRate = data
+    ? Math.round((data.active_checkouts / data.active_assets) * 100)
+    : 0;
 
   return (
     <div>
@@ -169,7 +183,7 @@ export default function AssetDashboard() {
               title="Active Assets"
               value={data?.active_assets || 0}
               loading={isLoading}
-              valueStyle={{ color: '#52c41a' }}
+              valueStyle={{ color: "#52c41a" }}
               prefix={<CheckCircleOutlined />}
             />
           </Card>
@@ -180,7 +194,7 @@ export default function AssetDashboard() {
               title="In Maintenance"
               value={data?.maintenance_assets || 0}
               loading={isLoading}
-              valueStyle={{ color: '#faad14' }}
+              valueStyle={{ color: "#faad14" }}
               prefix={<ToolOutlined />}
             />
           </Card>
@@ -205,9 +219,15 @@ export default function AssetDashboard() {
               type="circle"
               percent={overallHealth}
               format={(percent) => `${percent}%`}
-              status={overallHealth > 90 ? 'success' : overallHealth > 70 ? 'normal' : 'exception'}
+              status={
+                overallHealth > 90
+                  ? "success"
+                  : overallHealth > 70
+                    ? "normal"
+                    : "exception"
+              }
             />
-            <div style={{ marginTop: 16, textAlign: 'center' }}>
+            <div style={{ marginTop: 16, textAlign: "center" }}>
               <div>Overall Health Score</div>
             </div>
           </Card>
@@ -220,7 +240,7 @@ export default function AssetDashboard() {
               format={(percent) => `${percent}%`}
               strokeColor="#1890ff"
             />
-            <div style={{ marginTop: 16, textAlign: 'center' }}>
+            <div style={{ marginTop: 16, textAlign: "center" }}>
               <div>Assets Currently in Use</div>
             </div>
           </Card>
@@ -228,101 +248,136 @@ export default function AssetDashboard() {
       </Row>
 
       {/* Alerts & Issues */}
-      {data && (data.overdue_checkouts > 0 || data.upcoming_maintenance.length > 0) && (
-        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-          {data.overdue_checkouts > 0 && (
-            <Col xs={24} lg={12}>
-              <Card title="Overdue Returns" extra={<Link to="/assets/checkouts/overdue">View All</Link>}>
-                <Alert
-                  message={`${data.overdue_checkouts} overdue checkout${data.overdue_checkouts !== 1 ? 's' : ''}`}
-                  type="error"
-                  showIcon
-                  style={{ marginBottom: 16 }}
-                />
-                <List
-                  size="small"
-                  dataSource={data.overdue_items}
-                  renderItem={(item) => (
-                    <List.Item>
-                      <div>
-                        <strong>{item.asset_tag}</strong> - {item.asset_name}
-                        <br />
-                        <small>
-                          Checked out to: {item.checked_out_to} • {item.days_overdue} days overdue
-                        </small>
-                      </div>
-                    </List.Item>
-                  )}
-                />
-              </Card>
-            </Col>
-          )}
-          
-          {data.upcoming_maintenance.length > 0 && (
-            <Col xs={24} lg={12}>
-              <Card title="Upcoming Maintenance" extra={<Link to="/assets/maintenance">View All</Link>}>
-                <Alert
-                  message={`${data.upcoming_maintenance.length} asset${data.upcoming_maintenance.length !== 1 ? 's' : ''} need maintenance soon`}
-                  type="warning"
-                  showIcon
-                  style={{ marginBottom: 16 }}
-                />
-                <List
-                  size="small"
-                  dataSource={data.upcoming_maintenance}
-                  renderItem={(item) => (
-                    <List.Item>
-                      <div>
-                        <strong>{item.asset_tag}</strong> - {item.asset_name}
-                        <br />
-                        <small>Due in {item.days_until} days</small>
-                      </div>
-                    </List.Item>
-                  )}
-                />
-              </Card>
-            </Col>
-          )}
-        </Row>
-      )}
+      {data &&
+        (data.overdue_checkouts > 0 ||
+          data.upcoming_maintenance.length > 0) && (
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            {data.overdue_checkouts > 0 && (
+              <Col xs={24} lg={12}>
+                <Card
+                  title="Overdue Returns"
+                  extra={<Link to="/assets/checkouts/overdue">View All</Link>}
+                >
+                  <Alert
+                    message={`${data.overdue_checkouts} overdue checkout${data.overdue_checkouts !== 1 ? "s" : ""}`}
+                    type="error"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                  />
+                  <List
+                    size="small"
+                    dataSource={data.overdue_items}
+                    renderItem={(item) => (
+                      <List.Item>
+                        <div>
+                          <strong>{item.asset_tag}</strong> - {item.asset_name}
+                          <br />
+                          <small>
+                            Checked out to: {item.checked_out_to} •{" "}
+                            {item.days_overdue} days overdue
+                          </small>
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                </Card>
+              </Col>
+            )}
+
+            {data.upcoming_maintenance.length > 0 && (
+              <Col xs={24} lg={12}>
+                <Card
+                  title="Upcoming Maintenance"
+                  extra={<Link to="/assets/maintenance">View All</Link>}
+                >
+                  <Alert
+                    message={`${data.upcoming_maintenance.length} asset${data.upcoming_maintenance.length !== 1 ? "s" : ""} need maintenance soon`}
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                  />
+                  <List
+                    size="small"
+                    dataSource={data.upcoming_maintenance}
+                    renderItem={(item) => (
+                      <List.Item>
+                        <div>
+                          <strong>{item.asset_tag}</strong> - {item.asset_name}
+                          <br />
+                          <small>Due in {item.days_until} days</small>
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                </Card>
+              </Col>
+            )}
+          </Row>
+        )}
 
       {/* Status Distribution */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={12}>
           <Card title="Assets by Status" loading={isLoading}>
-            {data?.assets_by_status && Object.entries(data.assets_by_status).map(([status, count]) => (
-              <div key={status} style={{ marginBottom: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ textTransform: 'capitalize' }}>{status}</span>
-                  <span>{count}</span>
+            {data?.assets_by_status &&
+              Object.entries(data.assets_by_status).map(([status, count]) => (
+                <div key={status} style={{ marginBottom: 8 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <span style={{ textTransform: "capitalize" }}>
+                      {status}
+                    </span>
+                    <span>{count}</span>
+                  </div>
+                  <Progress
+                    percent={(count / data.total_assets) * 100}
+                    strokeColor={
+                      statusColors[status as keyof typeof statusColors]
+                    }
+                    showInfo={false}
+                    size="small"
+                  />
                 </div>
-                <Progress
-                  percent={(count / data.total_assets) * 100}
-                  strokeColor={statusColors[status as keyof typeof statusColors]}
-                  showInfo={false}
-                  size="small"
-                />
-              </div>
-            ))}
+              ))}
           </Card>
         </Col>
 
         <Col xs={24} lg={12}>
           <Card title="Assets by Condition" loading={isLoading}>
-            {data?.assets_by_condition && Object.entries(data.assets_by_condition).map(([condition, count]) => (
-              <div key={condition} style={{ marginBottom: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ textTransform: 'capitalize' }}>{condition}</span>
-                  <span>{count}</span>
-                </div>
-                <Progress
-                  percent={(count / data.total_assets) * 100}
-                  strokeColor={conditionColors[condition as keyof typeof conditionColors]}
-                  showInfo={false}
-                  size="small"
-                />
-              </div>
-            ))}
+            {data?.assets_by_condition &&
+              Object.entries(data.assets_by_condition).map(
+                ([condition, count]) => (
+                  <div key={condition} style={{ marginBottom: 8 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <span style={{ textTransform: "capitalize" }}>
+                        {condition}
+                      </span>
+                      <span>{count}</span>
+                    </div>
+                    <Progress
+                      percent={(count / data.total_assets) * 100}
+                      strokeColor={
+                        conditionColors[
+                          condition as keyof typeof conditionColors
+                        ]
+                      }
+                      showInfo={false}
+                      size="small"
+                    />
+                  </div>
+                ),
+              )}
           </Card>
         </Col>
       </Row>
@@ -333,14 +388,14 @@ export default function AssetDashboard() {
           dataSource={data?.recent_activity || []}
           columns={[
             {
-              title: 'Action',
-              dataIndex: 'action',
-              key: 'action',
+              title: "Action",
+              dataIndex: "action",
+              key: "action",
               render: (action) => <Tag>{action}</Tag>,
             },
             {
-              title: 'Asset',
-              key: 'asset',
+              title: "Asset",
+              key: "asset",
               render: (_, record) => (
                 <div>
                   <strong>{record.asset_tag}</strong> - {record.asset_name}
@@ -348,14 +403,14 @@ export default function AssetDashboard() {
               ),
             },
             {
-              title: 'Actor',
-              dataIndex: 'actor',
-              key: 'actor',
+              title: "Actor",
+              dataIndex: "actor",
+              key: "actor",
             },
             {
-              title: 'Time',
-              dataIndex: 'created_at',
-              key: 'created_at',
+              title: "Time",
+              dataIndex: "created_at",
+              key: "created_at",
               render: (date) => new Date(date).toLocaleString(),
             },
           ]}
