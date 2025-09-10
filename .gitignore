@@ -38,3 +38,5 @@ cmd/api/api
 /cj
 
 .code/
+.serena/
+CLAUDE.md
