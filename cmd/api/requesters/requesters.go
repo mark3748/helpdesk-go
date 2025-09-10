@@ -66,7 +66,7 @@ func Create(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusCreated, Requester{Email: in.Email, Name: in.Name, Phone: in.Phone})
 			return
 		}
-    const q = `
+		const q = `
         insert into requesters (email, name, phone)
         values (nullif(lower($1),''), nullif($2,''), nullif($3,''))
         on conflict (email) do update set name = coalesce(excluded.name, requesters.name)
@@ -130,16 +130,16 @@ func Update(a *app.App) gin.HandlerFunc {
 			args = append(args, *in.Name)
 			idx++
 		}
-    if in.Phone != nil {
-        if *in.Phone != "" && !ValidPhone(*in.Phone) {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_phone"})
-            return
-        }
-        // Store empty string as NULL for consistency with Create
-        set = append(set, fmt.Sprintf("phone=nullif($%d,'')", idx))
-        args = append(args, *in.Phone)
-        idx++
-    }
+		if in.Phone != nil {
+			if *in.Phone != "" && !ValidPhone(*in.Phone) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_phone"})
+				return
+			}
+			// Store empty string as NULL for consistency with Create
+			set = append(set, fmt.Sprintf("phone=nullif($%d,'')", idx))
+			args = append(args, *in.Phone)
+			idx++
+		}
 		if a.DB == nil {
 			c.JSON(http.StatusOK, Requester{ID: c.Param("id")})
 			return

@@ -1,21 +1,21 @@
 package events
 
 import (
-    "context"
-    "net/http"
-    "net/http/httptest"
-    "sort"
-    "strings"
-    "testing"
-    "time"
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"sort"
+	"strings"
+	"testing"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "github.com/google/uuid"
-    "github.com/jackc/pgx/v5"
-    "github.com/jackc/pgx/v5/pgconn"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
-    apppkg "github.com/mark3748/helpdesk-go/cmd/api/app"
-    authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	apppkg "github.com/mark3748/helpdesk-go/cmd/api/app"
+	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
 )
 
 // fakeRow and fakeRows provide minimal pgx interfaces for the event store.
@@ -85,22 +85,22 @@ func (db *fakeEventDB) add(typ, payload string) string {
 }
 
 func (db *fakeEventDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
-    since, _ := args[0].(time.Time)
-    sinceID, _ := args[1].(string)
-    out := []event{}
-    for _, e := range db.events {
-        if e.createdAt.After(since) || (e.createdAt.Equal(since) && e.id != sinceID) {
-            out = append(out, e)
-        }
-    }
-    // Ensure stable ordering to match ORDER BY created_at ASC, id ASC
-    sort.Slice(out, func(i, j int) bool {
-        if out[i].createdAt.Equal(out[j].createdAt) {
-            return out[i].id < out[j].id
-        }
-        return out[i].createdAt.Before(out[j].createdAt)
-    })
-    return &eventRows{evs: out}, nil
+	since, _ := args[0].(time.Time)
+	sinceID, _ := args[1].(string)
+	out := []event{}
+	for _, e := range db.events {
+		if e.createdAt.After(since) || (e.createdAt.Equal(since) && e.id != sinceID) {
+			out = append(out, e)
+		}
+	}
+	// Ensure stable ordering to match ORDER BY created_at ASC, id ASC
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].createdAt.Equal(out[j].createdAt) {
+			return out[i].id < out[j].id
+		}
+		return out[i].createdAt.Before(out[j].createdAt)
+	})
+	return &eventRows{evs: out}, nil
 }
 
 func (db *fakeEventDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
@@ -122,6 +122,10 @@ func (db *fakeEventDB) QueryRow(ctx context.Context, sql string, args ...interfa
 
 func (db *fakeEventDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
+}
+
+func (db *fakeEventDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
 }
 
 func TestStreamResume(t *testing.T) {
@@ -159,40 +163,40 @@ func TestStreamResume(t *testing.T) {
 }
 
 func TestStreamResume_SameTimestamp(t *testing.T) {
-    gin.SetMode(gin.TestMode)
-    db := &fakeEventDB{}
-    ts := time.Now()
-    // Manually craft two events with identical timestamps
-    firstID := uuid.New().String()
-    secondID := uuid.New().String()
-    db.events = append(db.events,
-        event{id: firstID, typ: "ticket_created", payload: []byte(`{"id":"1"}`), createdAt: ts},
-        event{id: secondID, typ: "ticket_updated", payload: []byte(`{"id":"1"}`), createdAt: ts},
-    )
+	gin.SetMode(gin.TestMode)
+	db := &fakeEventDB{}
+	ts := time.Now()
+	// Manually craft two events with identical timestamps
+	firstID := uuid.New().String()
+	secondID := uuid.New().String()
+	db.events = append(db.events,
+		event{id: firstID, typ: "ticket_created", payload: []byte(`{"id":"1"}`), createdAt: ts},
+		event{id: secondID, typ: "ticket_updated", payload: []byte(`{"id":"1"}`), createdAt: ts},
+	)
 
-    a := apppkg.NewApp(apppkg.Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
-    a.R.GET("/events", authpkg.Middleware(a), Stream(a))
+	a := apppkg.NewApp(apppkg.Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	a.R.GET("/events", authpkg.Middleware(a), Stream(a))
 
-    rr := httptest.NewRecorder()
-    req := httptest.NewRequest(http.MethodGet, "/events", nil)
-    req.Header.Set("Last-Event-ID", firstID)
-    ctx, cancel := context.WithCancel(context.Background())
-    req = req.WithContext(ctx)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	req.Header.Set("Last-Event-ID", firstID)
+	ctx, cancel := context.WithCancel(context.Background())
+	req = req.WithContext(ctx)
 
-    done := make(chan struct{})
-    go func() {
-        a.R.ServeHTTP(rr, req)
-        close(done)
-    }()
-    time.Sleep(20 * time.Millisecond)
-    cancel()
-    <-done
+	done := make(chan struct{})
+	go func() {
+		a.R.ServeHTTP(rr, req)
+		close(done)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	<-done
 
-    body := rr.Body.String()
-    if strings.Contains(body, firstID) {
-        t.Fatalf("stream included old event: %s", body)
-    }
-    if !strings.Contains(body, secondID) {
-        t.Fatalf("stream missing new equal-timestamp event: %s", body)
-    }
+	body := rr.Body.String()
+	if strings.Contains(body, firstID) {
+		t.Fatalf("stream included old event: %s", body)
+	}
+	if !strings.Contains(body, secondID) {
+		t.Fatalf("stream missing new equal-timestamp event: %s", body)
+	}
 }

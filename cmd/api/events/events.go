@@ -20,11 +20,11 @@ type Envelope struct {
 // It supports resuming from the Last-Event-ID header and emits periodic
 // heartbeat comments to keep connections alive.
 func Stream(a *apppkg.App) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        if a.DB == nil {
-            c.Status(http.StatusOK)
-            return
-        }
+	return func(c *gin.Context) {
+		if a.DB == nil {
+			c.Status(http.StatusOK)
+			return
+		}
 		// Standard SSE headers
 		c.Writer.Header().Set("Content-Type", "text/event-stream")
 		c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -39,47 +39,47 @@ func Stream(a *apppkg.App) gin.HandlerFunc {
 
 		ctx := c.Request.Context()
 
-        // Determine starting point based on Last-Event-ID
-        // Use a stable resume cursor (created_at, id) to avoid dropping
-        // events that share the same timestamp as the last delivered event.
-        last := time.Time{}
-        lastID := ""
-        if id := c.GetHeader("Last-Event-ID"); id != "" {
-            _ = a.DB.QueryRow(ctx, `select created_at from ticket_events where id=$1`, id).Scan(&last)
-            lastID = id
-        }
+		// Determine starting point based on Last-Event-ID
+		// Use a stable resume cursor (created_at, id) to avoid dropping
+		// events that share the same timestamp as the last delivered event.
+		last := time.Time{}
+		lastID := ""
+		if id := c.GetHeader("Last-Event-ID"); id != "" {
+			_ = a.DB.QueryRow(ctx, `select created_at from ticket_events where id=$1`, id).Scan(&last)
+			lastID = id
+		}
 
-        // Helper to send all events newer than the provided cursor.
-        send := func(since time.Time, sinceID string) (time.Time, string) {
-            rows, err := a.DB.Query(ctx, `
+		// Helper to send all events newer than the provided cursor.
+		send := func(since time.Time, sinceID string) (time.Time, string) {
+			rows, err := a.DB.Query(ctx, `
                 select id::text, event_type, payload, created_at
                 from ticket_events
                 where created_at > $1 or (created_at = $1 and id <> $2)
                 order by created_at asc, id asc`, since, sinceID)
-            if err != nil {
-                return since, sinceID
-            }
-            defer rows.Close()
-            for rows.Next() {
-                var id, typ string
-                var payload []byte
-                var ts time.Time
-                if err := rows.Scan(&id, &typ, &payload, &ts); err != nil {
-                    continue
-                }
-                env := Envelope{Type: typ, Data: payload}
-                b, _ := json.Marshal(env)
-                fmt.Fprintf(c.Writer, "id: %s\n", id)
-                fmt.Fprintf(c.Writer, "event: %s\n", typ)
-                fmt.Fprintf(c.Writer, "data: %s\n\n", b)
-                flusher.Flush()
-                since = ts
-                sinceID = id
-            }
-            return since, sinceID
-        }
+			if err != nil {
+				return since, sinceID
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var id, typ string
+				var payload []byte
+				var ts time.Time
+				if err := rows.Scan(&id, &typ, &payload, &ts); err != nil {
+					continue
+				}
+				env := Envelope{Type: typ, Data: payload}
+				b, _ := json.Marshal(env)
+				fmt.Fprintf(c.Writer, "id: %s\n", id)
+				fmt.Fprintf(c.Writer, "event: %s\n", typ)
+				fmt.Fprintf(c.Writer, "data: %s\n\n", b)
+				flusher.Flush()
+				since = ts
+				sinceID = id
+			}
+			return since, sinceID
+		}
 
-        last, lastID = send(last, lastID)
+		last, lastID = send(last, lastID)
 
 		poll := time.NewTicker(time.Second)
 		heart := time.NewTicker(25 * time.Second)
@@ -90,8 +90,8 @@ func Stream(a *apppkg.App) gin.HandlerFunc {
 			select {
 			case <-ctx.Done():
 				return
-            case <-poll.C:
-                last, lastID = send(last, lastID)
+			case <-poll.C:
+				last, lastID = send(last, lastID)
 			case <-heart.C:
 				fmt.Fprint(c.Writer, ": heartbeat\n\n")
 				flusher.Flush()

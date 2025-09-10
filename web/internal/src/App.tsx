@@ -15,6 +15,12 @@ import ManagerAnalytics from './components/manager/ManagerAnalytics';
 import Login from './components/Login';
 import ComingSoon from './shared/ComingSoon';
 import UserSettings from './components/UserSettings';
+import AssetDashboard from './components/assets/AssetDashboard';
+import AssetList from './components/assets/AssetList';
+import AssetForm from './components/assets/AssetForm';
+import AssetCheckout from './components/assets/AssetCheckout';
+import BulkOperations from './components/assets/BulkOperations';
+import AssetAudit from './components/assets/AssetAudit';
 
 const queryClient = new QueryClient();
 
@@ -33,6 +39,9 @@ export default function App() {
               <Route path="/tickets" element={<QueueList />} />
               <Route path="/tickets/:id" element={<TicketDetail />} />
               <Route path="/metrics" element={<AgentMetrics />} />
+              <Route path="/assets" element={<AssetList />} />
+              <Route path="/assets/dashboard" element={<AssetDashboard />} />
+              <Route path="/assets/checkout" element={<AssetCheckout />} />
             </Route>
             <Route element={<RequireRole role="admin" />}>
               <Route path="/settings" element={<AdminSettings />} />
@@ -47,6 +56,10 @@ export default function App() {
             <Route element={<RequireRole role="manager" />}>
               <Route path="/manager" element={<QueueManager />} />
               <Route path="/manager/analytics" element={<ManagerAnalytics />} />
+              <Route path="/assets/new" element={<AssetForm />} />
+              <Route path="/assets/:id/edit" element={<AssetForm />} />
+              <Route path="/assets/bulk" element={<BulkOperations />} />
+              <Route path="/assets/audit" element={<AssetAudit />} />
             </Route>
             {/* 404 catch-all inside the layout: redirect to a sensible default */}
             <Route path="*" element={<NotFoundRedirect />} />

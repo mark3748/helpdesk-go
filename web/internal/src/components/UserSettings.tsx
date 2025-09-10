@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Form, Input, Button, Alert, Space, Divider, Typography } from 'antd';
+import { useEffect, useState, useCallback } from 'react';
+import { Button, Form, Input, Alert, Typography, Space, Divider } from 'antd';
 
 export default function UserSettings() {
   const [loading, setLoading] = useState(false);
@@ -8,7 +8,7 @@ export default function UserSettings() {
   const [profile, setProfile] = useState<{ email?: string; display_name?: string }>({});
   const [form] = Form.useForm();
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       setError(null);
       const res = await fetch('/api/me/profile', { credentials: 'include' });
@@ -20,9 +20,9 @@ export default function UserSettings() {
     } catch (e: any) {
       setError(e?.message || 'Failed to load profile');
     }
-  }
+  }, [form]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   async function saveProfile(values: any) {
     setLoading(true);

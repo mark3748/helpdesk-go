@@ -11,6 +11,7 @@ help:
 	@echo "  dev-up       - Start development stack with Docker Compose"
 	@echo "  dev-down     - Stop development stack"
 	@echo "  frontend     - Install and build frontend applications"
+	@echo "  gen-types    - Generate TypeScript types from OpenAPI spec"
 
 # Build binaries
 build:
@@ -78,6 +79,20 @@ frontend:
 	@echo "Setting up requester UI..."
 	cd web/requester && npm install && npm run build
 	@echo "Frontend setup complete!"
+
+# Generate TypeScript types from OpenAPI spec
+gen-types:
+	@echo "Generating TypeScript types from OpenAPI spec..."
+	@echo "Copying OpenAPI spec to frontend directories..."
+	cp docs/openapi.yaml web/internal/
+	cp docs/openapi.yaml web/requester/
+	@echo "Generating types for internal frontend..."
+	cd web/internal && npm run gen:api:file
+	@echo "Generating types for requester frontend..."
+	cd web/requester && npm run gen:api:file
+	@echo "Cleaning up..."
+	rm web/internal/openapi.yaml web/requester/openapi.yaml
+	@echo "TypeScript types generation complete!"
 
 # Development with frontends
 dev-full:

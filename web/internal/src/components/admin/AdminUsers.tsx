@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Table, Input, Button, Space, Tag, Typography, message, Select, Form, Card } from 'antd';
 import { apiFetch } from '../../shared/api';
 
@@ -20,7 +20,7 @@ export default function AdminUsers() {
   const [newRole, setNewRole] = useState('');
   const [creating, setCreating] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await apiFetch<User[]>(`/users${q ? `?q=${encodeURIComponent(q)}` : ''}`);
@@ -34,10 +34,10 @@ export default function AdminUsers() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [q, selected]);
 
-  useEffect(() => { load(); /* initial */ }, []);
-  useEffect(() => { (async () => { try { setRoles(await apiFetch<string[]>('/roles')); } catch {} })(); }, []);
+  useEffect(() => { load(); /* initial */ }, [load]);
+  useEffect(() => { (async () => { try { setRoles(await apiFetch<string[]>('/roles')); } catch { /* Error loading roles */ } })(); }, []);
 
   const columns = useMemo(() => ([
     { title: 'Name', dataIndex: 'display_name', key: 'display_name' },

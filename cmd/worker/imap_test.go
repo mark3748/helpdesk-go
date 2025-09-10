@@ -88,6 +88,10 @@ func (f *fakeDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgc
 	return pgconn.CommandTag{}, nil
 }
 
+func (f *fakeDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 const sampleEmail = "Subject: Test\r\nFrom: sender@example.com\r\nMessage-Id: <msg1@example.com>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=BOUND\r\n\r\n--BOUND\r\nContent-Type: text/plain\r\n\r\nhello body\r\n--BOUND\r\nContent-Type: text/plain; name=\"note.txt\"\r\nContent-Disposition: attachment; filename=\"note.txt\"\r\n\r\nattachment data\r\n--BOUND--\r\n"
 
 func TestProcessIMAPMessage_Attachment(t *testing.T) {

@@ -109,7 +109,7 @@ func (db *fakeDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.Com
 
 func TestSettingsRoundTrip(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-    db := &fakeDB{s: Settings{Storage: map[string]string{}, OIDC: OIDCSettings{}, Mail: map[string]string{}}}
+	db := &fakeDB{s: Settings{Storage: map[string]string{}, OIDC: OIDCSettings{}, Mail: map[string]string{}}}
 	InitSettings(context.Background(), db, "/tmp/logs")
 
 	called := false
