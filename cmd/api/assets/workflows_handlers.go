@@ -19,8 +19,16 @@ func RequestStatusChange(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		assetID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
@@ -58,8 +66,16 @@ func ApproveWorkflow(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		workflowID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
@@ -96,8 +112,16 @@ func RejectWorkflow(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		workflowID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
@@ -134,8 +158,16 @@ func CheckoutAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		assetID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
@@ -171,8 +203,16 @@ func CheckinAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		var req CheckinRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -240,8 +280,16 @@ func CreateRelationship(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		parentAssetID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
@@ -336,8 +384,16 @@ func BulkUpdateAssets(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		var req BulkUpdateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -365,8 +421,16 @@ func BulkAssignAssets(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		var req BulkAssignRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -421,8 +485,16 @@ func ImportAssets(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		file, _, err := c.Request.FormFile("file")
 		if err != nil {
@@ -456,8 +528,16 @@ func ExportAssets(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		var req ExportRequest
 		if err := c.ShouldBindJSON(&req); err != nil {

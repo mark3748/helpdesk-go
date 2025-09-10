@@ -113,8 +113,16 @@ func PresignAssetUpload(a *app.App) gin.HandlerFunc {
 func FinalizeAssetAttachment(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		assetID := c.Param("id")
-		u, _ := c.Get("user")
-		authUser := u.(auth.AuthUser)
+		u, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		authUser, ok := u.(auth.AuthUser)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
 
 		type req struct {
 			AttachmentID string `json:"attachment_id" binding:"required"`
