@@ -42,6 +42,7 @@ import (
 	"math/big"
 
 	appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
+	assetspkg "github.com/mark3748/helpdesk-go/cmd/api/assets"
 	attachmentspkg "github.com/mark3748/helpdesk-go/cmd/api/attachments"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
 	commentspkg "github.com/mark3748/helpdesk-go/cmd/api/comments"
@@ -793,6 +794,58 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/metrics/manager", authpkg.RequireRole("manager", "admin"), metricspkg.Manager(a.core()))
 	auth.POST("/exports/tickets", authpkg.RequireRole("agent"), a.exportTicketsBridge)
 	auth.GET("/exports/tickets/:job_id", authpkg.RequireRole("agent"), a.exportTicketsStatus)
+
+	// Asset Management
+	auth.GET("/asset-categories", assetspkg.ListCategories(a.core()))
+	auth.POST("/asset-categories", authpkg.RequireRole("admin", "manager"), assetspkg.CreateCategory(a.core()))
+	auth.GET("/asset-categories/:id", assetspkg.GetCategory(a.core()))
+	
+	auth.GET("/assets", assetspkg.ListAssets(a.core()))
+	auth.POST("/assets", authpkg.RequireRole("admin", "manager"), assetspkg.CreateAsset(a.core()))
+	auth.GET("/assets/:id", assetspkg.GetAsset(a.core()))
+	auth.PATCH("/assets/:id", authpkg.RequireRole("admin", "manager"), assetspkg.UpdateAsset(a.core()))
+	auth.DELETE("/assets/:id", authpkg.RequireRole("admin"), assetspkg.DeleteAsset(a.core()))
+	auth.POST("/assets/:id/assign", authpkg.RequireRole("admin", "manager"), assetspkg.AssignAsset(a.core()))
+	auth.GET("/assets/:id/history", assetspkg.GetAssetHistory(a.core()))
+	auth.GET("/assets/:id/assignments", assetspkg.GetAssetAssignments(a.core()))
+
+	// Asset Attachments
+	auth.GET("/assets/:id/attachments", assetspkg.ListAttachments(a.core()))
+	auth.POST("/assets/:id/attachments/presign", authpkg.RequireRole("admin", "manager"), assetspkg.PresignAssetUpload(a.core()))
+	auth.POST("/assets/:id/attachments", authpkg.RequireRole("admin", "manager"), assetspkg.FinalizeAssetAttachment(a.core()))
+	auth.GET("/assets/:id/attachments/:attachmentID", assetspkg.GetAssetAttachment(a.core()))
+	auth.DELETE("/assets/:id/attachments/:attachmentID", authpkg.RequireRole("admin", "manager"), assetspkg.DeleteAssetAttachment(a.core()))
+	auth.PUT("/assets/attachments/upload/:objectKey", assetspkg.UploadAssetObject(a.core()))
+
+	// Asset Workflows & Lifecycle
+	auth.POST("/assets/:id/status-change", authpkg.RequireRole("admin", "manager"), assetspkg.RequestStatusChange(a.core()))
+	auth.POST("/workflows/:id/approve", authpkg.RequireRole("admin", "manager"), assetspkg.ApproveWorkflow(a.core()))
+	auth.POST("/workflows/:id/reject", authpkg.RequireRole("admin", "manager"), assetspkg.RejectWorkflow(a.core()))
+	
+	// Asset Checkout/Checkin
+	auth.POST("/assets/:id/checkout", authpkg.RequireRole("admin", "manager"), assetspkg.CheckoutAsset(a.core()))
+	auth.POST("/assets/checkin", authpkg.RequireRole("admin", "manager"), assetspkg.CheckinAsset(a.core()))
+	auth.GET("/assets/checkouts/active", assetspkg.GetActiveCheckouts(a.core()))
+	auth.GET("/assets/checkouts/overdue", assetspkg.GetOverdueCheckouts(a.core()))
+	
+	// Asset Relationships
+	auth.POST("/assets/:id/relationships", authpkg.RequireRole("admin", "manager"), assetspkg.CreateRelationship(a.core()))
+	auth.GET("/assets/:id/relationships/graph", assetspkg.GetRelationshipGraph(a.core()))
+	auth.GET("/assets/:id/impact-analysis", assetspkg.GetAssetImpactAnalysis(a.core()))
+	
+	// Bulk Operations
+	auth.POST("/assets/bulk/update", authpkg.RequireRole("admin", "manager"), assetspkg.BulkUpdateAssets(a.core()))
+	auth.POST("/assets/bulk/assign", authpkg.RequireRole("admin", "manager"), assetspkg.BulkAssignAssets(a.core()))
+	auth.GET("/assets/bulk/operations/:id", assetspkg.GetBulkOperation(a.core()))
+	
+	// Import/Export
+	auth.POST("/assets/import/preview", authpkg.RequireRole("admin", "manager"), assetspkg.ImportAssetsPreview(a.core()))
+	auth.POST("/assets/import", authpkg.RequireRole("admin", "manager"), assetspkg.ImportAssets(a.core()))
+	auth.POST("/assets/export", authpkg.RequireRole("agent"), assetspkg.ExportAssets(a.core()))
+	
+	// Audit & History
+	auth.GET("/assets/:id/audit", assetspkg.GetAuditHistory(a.core()))
+	auth.GET("/assets/audit/summary", authpkg.RequireRole("admin", "manager"), assetspkg.GetAuditSummary(a.core()))
 }
 
 func (a *App) docsUI(c *gin.Context) {
