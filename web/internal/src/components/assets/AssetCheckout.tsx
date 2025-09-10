@@ -62,7 +62,7 @@ export default function AssetCheckout() {
   const { data: availableAssets } = useQuery<Asset[]>({
     queryKey: ['assets-available'],
     queryFn: () =>
-      api.get<{ items: Asset[] }>('/assets?status=active').then((res) => res.items),
+      api.get<{ assets: Asset[] }>('/assets?status=active').then((res) => res.assets),
   });
 
   // Checkout asset mutation
