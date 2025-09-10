@@ -1,24 +1,24 @@
 package main
 
 import (
-    "github.com/jackc/pgx/v5"
-    "github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // fakeRow implements pgx.Row (for tests in this package)
 type fakeRow struct {
-    err  error
-    scan func(dest ...any) error
+	err  error
+	scan func(dest ...any) error
 }
 
 func (r *fakeRow) Scan(dest ...any) error {
-    if r.err != nil {
-        return r.err
-    }
-    if r.scan != nil {
-        return r.scan(dest...)
-    }
-    return nil
+	if r.err != nil {
+		return r.err
+	}
+	if r.scan != nil {
+		return r.scan(dest...)
+	}
+	return nil
 }
 
 // fakeRows implements pgx.Rows with minimal behavior used in tests

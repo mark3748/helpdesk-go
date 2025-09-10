@@ -73,43 +73,43 @@ type AssetCategory struct {
 
 // Asset represents a managed asset
 type Asset struct {
-	ID           uuid.UUID              `json:"id" db:"id"`
-	AssetTag     string                 `json:"asset_tag" db:"asset_tag"`
-	Name         string                 `json:"name" db:"name"`
-	Description  *string                `json:"description" db:"description"`
-	CategoryID   *uuid.UUID             `json:"category_id" db:"category_id"`
-	Status       AssetStatus            `json:"status" db:"status"`
-	Condition    *AssetCondition        `json:"condition" db:"condition"`
-	
+	ID          uuid.UUID       `json:"id" db:"id"`
+	AssetTag    string          `json:"asset_tag" db:"asset_tag"`
+	Name        string          `json:"name" db:"name"`
+	Description *string         `json:"description" db:"description"`
+	CategoryID  *uuid.UUID      `json:"category_id" db:"category_id"`
+	Status      AssetStatus     `json:"status" db:"status"`
+	Condition   *AssetCondition `json:"condition" db:"condition"`
+
 	// Financial information
-	PurchasePrice     *float64   `json:"purchase_price" db:"purchase_price"`
-	PurchaseDate      *time.Time `json:"purchase_date" db:"purchase_date"`
-	WarrantyExpiry    *time.Time `json:"warranty_expiry" db:"warranty_expiry"`
-	DepreciationRate  *float64   `json:"depreciation_rate" db:"depreciation_rate"`
-	CurrentValue      *float64   `json:"current_value" db:"current_value"`
-	
+	PurchasePrice    *float64   `json:"purchase_price" db:"purchase_price"`
+	PurchaseDate     *time.Time `json:"purchase_date" db:"purchase_date"`
+	WarrantyExpiry   *time.Time `json:"warranty_expiry" db:"warranty_expiry"`
+	DepreciationRate *float64   `json:"depreciation_rate" db:"depreciation_rate"`
+	CurrentValue     *float64   `json:"current_value" db:"current_value"`
+
 	// Physical details
 	SerialNumber *string `json:"serial_number" db:"serial_number"`
 	Model        *string `json:"model" db:"model"`
 	Manufacturer *string `json:"manufacturer" db:"manufacturer"`
 	Location     *string `json:"location" db:"location"`
-	
+
 	// Assignment
 	AssignedToUserID *uuid.UUID `json:"assigned_to_user_id" db:"assigned_to_user_id"`
 	AssignedAt       *time.Time `json:"assigned_at" db:"assigned_at"`
-	
+
 	// Custom fields for flexibility
 	CustomFields map[string]interface{} `json:"custom_fields" db:"custom_fields"`
-	
+
 	// Metadata
 	CreatedBy uuid.UUID `json:"created_by" db:"created_by"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
-	
+
 	// Joined fields (not stored in DB)
-	Category     *AssetCategory `json:"category,omitempty"`
-	AssignedUser *AssetUser     `json:"assigned_user,omitempty"`
-	CreatedByUser *AssetUser    `json:"created_by_user,omitempty"`
+	Category      *AssetCategory `json:"category,omitempty"`
+	AssignedUser  *AssetUser     `json:"assigned_user,omitempty"`
+	CreatedByUser *AssetUser     `json:"created_by_user,omitempty"`
 }
 
 // AssetUser represents user information for asset context
@@ -121,15 +121,15 @@ type AssetUser struct {
 
 // AssetAssignment represents an asset assignment record
 type AssetAssignment struct {
-	ID                 uuid.UUID        `json:"id" db:"id"`
-	AssetID            uuid.UUID        `json:"asset_id" db:"asset_id"`
-	AssignedToUserID   *uuid.UUID       `json:"assigned_to_user_id" db:"assigned_to_user_id"`
-	AssignedByUserID   uuid.UUID        `json:"assigned_by_user_id" db:"assigned_by_user_id"`
-	AssignedAt         time.Time        `json:"assigned_at" db:"assigned_at"`
-	UnassignedAt       *time.Time       `json:"unassigned_at" db:"unassigned_at"`
-	Notes              *string          `json:"notes" db:"notes"`
-	Status             AssignmentStatus `json:"status" db:"status"`
-	
+	ID               uuid.UUID        `json:"id" db:"id"`
+	AssetID          uuid.UUID        `json:"asset_id" db:"asset_id"`
+	AssignedToUserID *uuid.UUID       `json:"assigned_to_user_id" db:"assigned_to_user_id"`
+	AssignedByUserID uuid.UUID        `json:"assigned_by_user_id" db:"assigned_by_user_id"`
+	AssignedAt       time.Time        `json:"assigned_at" db:"assigned_at"`
+	UnassignedAt     *time.Time       `json:"unassigned_at" db:"unassigned_at"`
+	Notes            *string          `json:"notes" db:"notes"`
+	Status           AssignmentStatus `json:"status" db:"status"`
+
 	// Joined fields
 	Asset        *Asset     `json:"asset,omitempty"`
 	AssignedUser *AssetUser `json:"assigned_user,omitempty"`
@@ -144,7 +144,7 @@ type AssetRelationship struct {
 	RelationshipType RelationshipType `json:"relationship_type" db:"relationship_type"`
 	Notes            *string          `json:"notes" db:"notes"`
 	CreatedAt        time.Time        `json:"created_at" db:"created_at"`
-	
+
 	// Joined fields
 	ParentAsset *Asset `json:"parent_asset,omitempty"`
 	ChildAsset  *Asset `json:"child_asset,omitempty"`
@@ -152,15 +152,15 @@ type AssetRelationship struct {
 
 // AssetHistory represents a record in the asset audit trail
 type AssetHistory struct {
-	ID        uuid.UUID                  `json:"id" db:"id"`
-	AssetID   uuid.UUID                  `json:"asset_id" db:"asset_id"`
-	Action    AssetHistoryAction         `json:"action" db:"action"`
-	ActorID   *uuid.UUID                 `json:"actor_id" db:"actor_id"`
-	OldValues map[string]interface{}     `json:"old_values" db:"old_values"`
-	NewValues map[string]interface{}     `json:"new_values" db:"new_values"`
-	Notes     *string                    `json:"notes" db:"notes"`
-	CreatedAt time.Time                  `json:"created_at" db:"created_at"`
-	
+	ID        uuid.UUID              `json:"id" db:"id"`
+	AssetID   uuid.UUID              `json:"asset_id" db:"asset_id"`
+	Action    AssetHistoryAction     `json:"action" db:"action"`
+	ActorID   *uuid.UUID             `json:"actor_id" db:"actor_id"`
+	OldValues map[string]interface{} `json:"old_values" db:"old_values"`
+	NewValues map[string]interface{} `json:"new_values" db:"new_values"`
+	Notes     *string                `json:"notes" db:"notes"`
+	CreatedAt time.Time              `json:"created_at" db:"created_at"`
+
 	// Joined fields
 	Asset *Asset     `json:"asset,omitempty"`
 	Actor *AssetUser `json:"actor,omitempty"`
@@ -228,17 +228,17 @@ type UpdateCategoryRequest struct {
 
 // AssetSearchFilters represents filters for searching assets
 type AssetSearchFilters struct {
-	Query        string         `form:"q"`
-	CategoryID   *uuid.UUID     `form:"category_id"`
-	Status       []AssetStatus  `form:"status"`
+	Query        string          `form:"q"`
+	CategoryID   *uuid.UUID      `form:"category_id"`
+	Status       []AssetStatus   `form:"status"`
 	Condition    *AssetCondition `form:"condition"`
-	AssignedTo   *uuid.UUID     `form:"assigned_to"`
-	Manufacturer *string        `form:"manufacturer"`
-	Location     *string        `form:"location"`
-	Page         int            `form:"page"`
-	Limit        int            `form:"limit"`
-	SortBy       string         `form:"sort_by"`
-	SortOrder    string         `form:"sort_order"`
+	AssignedTo   *uuid.UUID      `form:"assigned_to"`
+	Manufacturer *string         `form:"manufacturer"`
+	Location     *string         `form:"location"`
+	Page         int             `form:"page"`
+	Limit        int             `form:"limit"`
+	SortBy       string          `form:"sort_by"`
+	SortOrder    string          `form:"sort_order"`
 }
 
 // AssetListResponse represents a paginated list of assets

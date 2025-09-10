@@ -22,18 +22,18 @@ type RelationshipRequest struct {
 type AssetDependency struct {
 	AssetID      uuid.UUID         `json:"asset_id"`
 	Dependencies []AssetDependency `json:"dependencies,omitempty"`
-	Asset        *Asset           `json:"asset,omitempty"`
-	Depth        int              `json:"depth"`
+	Asset        *Asset            `json:"asset,omitempty"`
+	Depth        int               `json:"depth"`
 }
 
 // RelationshipGraph represents the full relationship graph for an asset
 type RelationshipGraph struct {
-	RootAsset     *Asset                        `json:"root_asset"`
-	Parents       []AssetRelationship          `json:"parents"`
-	Children      []AssetRelationship          `json:"children"`
-	Dependencies  map[string][]AssetDependency `json:"dependencies"`
-	Components    []AssetRelationship          `json:"components"`
-	Related       []AssetRelationship          `json:"related"`
+	RootAsset    *Asset                       `json:"root_asset"`
+	Parents      []AssetRelationship          `json:"parents"`
+	Children     []AssetRelationship          `json:"children"`
+	Dependencies map[string][]AssetDependency `json:"dependencies"`
+	Components   []AssetRelationship          `json:"components"`
+	Related      []AssetRelationship          `json:"related"`
 }
 
 // CreateRelationship creates a new asset relationship
@@ -597,7 +597,7 @@ func (s *Service) getDownstreamAssetCount(ctx context.Context, assetID uuid.UUID
 	return count
 }
 
-func (s *Service) getCriticalPathAssets(ctx context.Context, assetID uuid.UUID) ([]uuid.UUID, error) {
+func (s *Service) getCriticalPathAssets(_ context.Context, _ uuid.UUID) ([]uuid.UUID, error) {
 	// Implementation would identify assets in the critical path
 	// This is a placeholder for more complex graph analysis
 	return []uuid.UUID{}, nil

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Table, Button, Input, Select, Tag, Space, Card, Typography, Dropdown, Modal, message } from 'antd';
+import { useState } from 'react';
+import { Table, Button, Input, Select, Tag, Card, Typography, Dropdown, Modal, message } from 'antd';
 import { SearchOutlined, PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, MoreOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -74,7 +74,7 @@ export default function AssetList() {
       params.set('page', page.toString());
       params.set('limit', pageSize.toString());
 
-      const response = await api.get(`/assets?${params.toString()}`);
+      const response = await api.get(`/assets?${params.toString()}`) as { data: AssetListResponse };
       return response.data;
     },
   });

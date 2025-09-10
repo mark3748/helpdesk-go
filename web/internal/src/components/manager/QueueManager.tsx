@@ -148,7 +148,9 @@ function AssigneePicker({ value, onChange }: { value?: string; onChange: (v?: st
           const u = await apiFetch<any>(`/users/${encodeURIComponent(value)}`);
           const label = u.display_name || u.email || u.username || u.id;
           setOpts([{ value: String(u.id), label }]);
-        } catch {}
+        } catch {
+          // Error fetching user, ignore
+        }
       }
     })();
   }, [value]);

@@ -1,12 +1,9 @@
-import React from 'react';
 import { Card, Row, Col, Statistic, Progress, Table, Tag, Typography, Alert, List } from 'antd';
 import { 
   DesktopOutlined, 
   ToolOutlined, 
   CheckCircleOutlined, 
-  WarningOutlined,
-  ClockCircleOutlined,
-  ExclamationCircleOutlined
+  ClockCircleOutlined
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -70,7 +67,7 @@ export default function AssetDashboard() {
     queryFn: async () => {
       // This would typically come from a dedicated dashboard endpoint
       // For now, we'll simulate the data structure
-      const response = await api.get('/assets?limit=1');
+      await api.get('/assets?limit=1');
       
       // Mock dashboard data - in real implementation, create a dedicated endpoint
       return {

@@ -17,28 +17,28 @@ import (
 
 // BulkOperation represents a bulk operation request
 type BulkOperation struct {
-	ID          uuid.UUID              `json:"id" db:"id"`
-	Type        string                 `json:"type" db:"type"` // "import", "export", "update", "delete"
-	Status      string                 `json:"status" db:"status"` // "pending", "processing", "completed", "failed"
-	RequestedBy uuid.UUID              `json:"requested_by" db:"requested_by"`
-	Parameters  map[string]interface{} `json:"parameters" db:"parameters"`
-	Progress    int                    `json:"progress" db:"progress"`
-	TotalItems  int                    `json:"total_items" db:"total_items"`
-	ProcessedItems int                 `json:"processed_items" db:"processed_items"`
-	SuccessCount   int                 `json:"success_count" db:"success_count"`
-	ErrorCount     int                 `json:"error_count" db:"error_count"`
-	Errors         []BulkError         `json:"errors" db:"errors"`
+	ID             uuid.UUID              `json:"id" db:"id"`
+	Type           string                 `json:"type" db:"type"`     // "import", "export", "update", "delete"
+	Status         string                 `json:"status" db:"status"` // "pending", "processing", "completed", "failed"
+	RequestedBy    uuid.UUID              `json:"requested_by" db:"requested_by"`
+	Parameters     map[string]interface{} `json:"parameters" db:"parameters"`
+	Progress       int                    `json:"progress" db:"progress"`
+	TotalItems     int                    `json:"total_items" db:"total_items"`
+	ProcessedItems int                    `json:"processed_items" db:"processed_items"`
+	SuccessCount   int                    `json:"success_count" db:"success_count"`
+	ErrorCount     int                    `json:"error_count" db:"error_count"`
+	Errors         []BulkError            `json:"errors" db:"errors"`
 	Results        map[string]interface{} `json:"results" db:"results"`
-	CreatedAt      time.Time           `json:"created_at" db:"created_at"`
-	StartedAt      *time.Time          `json:"started_at" db:"started_at"`
-	CompletedAt    *time.Time          `json:"completed_at" db:"completed_at"`
+	CreatedAt      time.Time              `json:"created_at" db:"created_at"`
+	StartedAt      *time.Time             `json:"started_at" db:"started_at"`
+	CompletedAt    *time.Time             `json:"completed_at" db:"completed_at"`
 }
 
 // BulkError represents an error during bulk operations
 type BulkError struct {
-	Row     int    `json:"row"`
-	Field   string `json:"field,omitempty"`
-	Message string `json:"message"`
+	Row     int                    `json:"row"`
+	Field   string                 `json:"field,omitempty"`
+	Message string                 `json:"message"`
 	Data    map[string]interface{} `json:"data,omitempty"`
 }
 
@@ -51,9 +51,9 @@ type BulkUpdateRequest struct {
 
 // BulkAssignRequest represents a bulk assignment request
 type BulkAssignRequest struct {
-	AssetIDs     []uuid.UUID `json:"asset_ids" binding:"required"`
-	AssignToUserID *uuid.UUID `json:"assign_to_user_id"`
-	Notes        *string     `json:"notes"`
+	AssetIDs       []uuid.UUID `json:"asset_ids" binding:"required"`
+	AssignToUserID *uuid.UUID  `json:"assign_to_user_id"`
+	Notes          *string     `json:"notes"`
 }
 
 // BulkDeleteRequest represents a bulk delete request
@@ -65,22 +65,22 @@ type BulkDeleteRequest struct {
 
 // ImportPreview represents a preview of import data
 type ImportPreview struct {
-	TotalRows      int                      `json:"total_rows"`
-	ValidRows      int                      `json:"valid_rows"`
-	ErrorRows      int                      `json:"error_rows"`
-	Columns        []string                 `json:"columns"`
-	SampleData     []map[string]interface{} `json:"sample_data"`
-	ValidationErrors []BulkError            `json:"validation_errors"`
-	Suggestions    []string                 `json:"suggestions"`
+	TotalRows        int                      `json:"total_rows"`
+	ValidRows        int                      `json:"valid_rows"`
+	ErrorRows        int                      `json:"error_rows"`
+	Columns          []string                 `json:"columns"`
+	SampleData       []map[string]interface{} `json:"sample_data"`
+	ValidationErrors []BulkError              `json:"validation_errors"`
+	Suggestions      []string                 `json:"suggestions"`
 }
 
 // ExportRequest represents an export request
 type ExportRequest struct {
-	Format    string                 `json:"format" binding:"required"` // "csv", "xlsx", "json"
-	AssetIDs  []uuid.UUID            `json:"asset_ids,omitempty"`
-	Filters   AssetSearchFilters     `json:"filters,omitempty"`
-	Columns   []string               `json:"columns,omitempty"`
-	Options   map[string]interface{} `json:"options,omitempty"`
+	Format   string                 `json:"format" binding:"required"` // "csv", "xlsx", "json"
+	AssetIDs []uuid.UUID            `json:"asset_ids,omitempty"`
+	Filters  AssetSearchFilters     `json:"filters,omitempty"`
+	Columns  []string               `json:"columns,omitempty"`
+	Options  map[string]interface{} `json:"options,omitempty"`
 }
 
 // CSV Import Functions
@@ -97,10 +97,10 @@ func (s *Service) PreviewImport(ctx context.Context, file multipart.File, filena
 	}
 
 	preview := &ImportPreview{
-		Columns:     headers,
-		SampleData:  make([]map[string]interface{}, 0),
+		Columns:          headers,
+		SampleData:       make([]map[string]interface{}, 0),
 		ValidationErrors: make([]BulkError, 0),
-		Suggestions: make([]string, 0),
+		Suggestions:      make([]string, 0),
 	}
 
 	// Validate headers
@@ -447,9 +447,9 @@ func (s *Service) BulkAssignAssets(ctx context.Context, req BulkAssignRequest, a
 	operation.ErrorCount = errorCount
 	operation.Errors = errors
 	operation.Results = map[string]interface{}{
-		"assigned_assets": successCount,
+		"assigned_assets":    successCount,
 		"failed_assignments": errorCount,
-		"total_assets": len(req.AssetIDs),
+		"total_assets":       len(req.AssetIDs),
 	}
 
 	err = s.updateBulkOperation(ctx, operation)
@@ -594,7 +594,7 @@ func (s *Service) validateImportRow(rowData map[string]interface{}, rowNum int) 
 	return errors
 }
 
-func (s *Service) createAssetFromImportRow(ctx context.Context, tx pgx.Tx, rowData map[string]interface{}, createdBy uuid.UUID) (*Asset, []BulkError) {
+func (s *Service) createAssetFromImportRow(ctx context.Context, _ pgx.Tx, rowData map[string]interface{}, createdBy uuid.UUID) (*Asset, []BulkError) {
 	var errors []BulkError
 
 	// Map row data to create request

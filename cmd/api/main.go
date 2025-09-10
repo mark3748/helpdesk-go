@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"math/big"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -39,7 +41,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
-	"math/big"
+
+	"sync"
 
 	appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
 	assetspkg "github.com/mark3748/helpdesk-go/cmd/api/assets"
@@ -56,7 +59,6 @@ import (
 	userspkg "github.com/mark3748/helpdesk-go/cmd/api/users"
 	watcherspkg "github.com/mark3748/helpdesk-go/cmd/api/watchers"
 	rateln "github.com/mark3748/helpdesk-go/internal/ratelimit"
-	"sync"
 )
 
 //go:embed migrations/*.sql
@@ -799,7 +801,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/asset-categories", assetspkg.ListCategories(a.core()))
 	auth.POST("/asset-categories", authpkg.RequireRole("admin", "manager"), assetspkg.CreateCategory(a.core()))
 	auth.GET("/asset-categories/:id", assetspkg.GetCategory(a.core()))
-	
+
 	auth.GET("/assets", assetspkg.ListAssets(a.core()))
 	auth.POST("/assets", authpkg.RequireRole("admin", "manager"), assetspkg.CreateAsset(a.core()))
 	auth.GET("/assets/:id", assetspkg.GetAsset(a.core()))
@@ -821,28 +823,28 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.POST("/assets/:id/status-change", authpkg.RequireRole("admin", "manager"), assetspkg.RequestStatusChange(a.core()))
 	auth.POST("/workflows/:id/approve", authpkg.RequireRole("admin", "manager"), assetspkg.ApproveWorkflow(a.core()))
 	auth.POST("/workflows/:id/reject", authpkg.RequireRole("admin", "manager"), assetspkg.RejectWorkflow(a.core()))
-	
+
 	// Asset Checkout/Checkin
 	auth.POST("/assets/:id/checkout", authpkg.RequireRole("admin", "manager"), assetspkg.CheckoutAsset(a.core()))
 	auth.POST("/assets/checkin", authpkg.RequireRole("admin", "manager"), assetspkg.CheckinAsset(a.core()))
 	auth.GET("/assets/checkouts/active", assetspkg.GetActiveCheckouts(a.core()))
 	auth.GET("/assets/checkouts/overdue", assetspkg.GetOverdueCheckouts(a.core()))
-	
+
 	// Asset Relationships
 	auth.POST("/assets/:id/relationships", authpkg.RequireRole("admin", "manager"), assetspkg.CreateRelationship(a.core()))
 	auth.GET("/assets/:id/relationships/graph", assetspkg.GetRelationshipGraph(a.core()))
 	auth.GET("/assets/:id/impact-analysis", assetspkg.GetAssetImpactAnalysis(a.core()))
-	
+
 	// Bulk Operations
 	auth.POST("/assets/bulk/update", authpkg.RequireRole("admin", "manager"), assetspkg.BulkUpdateAssets(a.core()))
 	auth.POST("/assets/bulk/assign", authpkg.RequireRole("admin", "manager"), assetspkg.BulkAssignAssets(a.core()))
 	auth.GET("/assets/bulk/operations/:id", assetspkg.GetBulkOperation(a.core()))
-	
+
 	// Import/Export
 	auth.POST("/assets/import/preview", authpkg.RequireRole("admin", "manager"), assetspkg.ImportAssetsPreview(a.core()))
 	auth.POST("/assets/import", authpkg.RequireRole("admin", "manager"), assetspkg.ImportAssets(a.core()))
 	auth.POST("/assets/export", authpkg.RequireRole("agent"), assetspkg.ExportAssets(a.core()))
-	
+
 	// Audit & History
 	auth.GET("/assets/:id/audit", assetspkg.GetAuditHistory(a.core()))
 	auth.GET("/assets/audit/summary", authpkg.RequireRole("admin", "manager"), assetspkg.GetAuditSummary(a.core()))
@@ -1356,7 +1358,7 @@ func (a *App) exportTicketsBridge(c *gin.Context) {
 type jsonRaw []byte
 
 func (j jsonRaw) MarshalJSON() ([]byte, error) {
-	if j == nil || len(j) == 0 {
+	if len(j) == 0 {
 		return []byte("null"), nil
 	}
 	return j, nil

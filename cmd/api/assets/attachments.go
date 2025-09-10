@@ -8,10 +8,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/minio/minio-go/v7"
 	"github.com/mark3748/helpdesk-go/cmd/api/app"
 	"github.com/mark3748/helpdesk-go/cmd/api/auth"
 	s3svc "github.com/mark3748/helpdesk-go/internal/s3"
+	"github.com/minio/minio-go/v7"
 )
 
 // ListAttachments returns attachments for an asset
@@ -57,7 +57,7 @@ func ListAttachments(a *app.App) gin.HandlerFunc {
 func PresignAssetUpload(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		assetID := c.Param("id")
-		
+
 		// Verify asset exists
 		var exists bool
 		err := a.DB.QueryRow(c.Request.Context(), "SELECT EXISTS(SELECT 1 FROM assets WHERE id = $1)", assetID).Scan(&exists)
@@ -158,7 +158,7 @@ func FinalizeAssetAttachment(a *app.App) gin.HandlerFunc {
 		}
 
 		// Save attachment metadata
-		if _, err := a.DB.Exec(c.Request.Context(), 
+		if _, err := a.DB.Exec(c.Request.Context(),
 			`INSERT INTO attachments (id, asset_id, uploader_id, object_key, filename, bytes, mime) 
 			 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)`,
 			assetID, authUser.ID, in.AttachmentID, in.Filename, in.Bytes, mime); err != nil {
@@ -177,8 +177,8 @@ func GetAssetAttachment(a *app.App) gin.HandlerFunc {
 		attachmentID := c.Param("attachmentID")
 
 		var objectKey, filename, mime string
-		err := a.DB.QueryRow(c.Request.Context(), 
-			"SELECT object_key, filename, mime FROM attachments WHERE id=$1 AND asset_id=$2", 
+		err := a.DB.QueryRow(c.Request.Context(),
+			"SELECT object_key, filename, mime FROM attachments WHERE id=$1 AND asset_id=$2",
 			attachmentID, assetID).Scan(&objectKey, &filename, &mime)
 
 		if err != nil {
@@ -256,8 +256,8 @@ func DeleteAssetAttachment(a *app.App) gin.HandlerFunc {
 		attachmentID := c.Param("attachmentID")
 
 		var objectKey string
-		err := a.DB.QueryRow(c.Request.Context(), 
-			"SELECT object_key FROM attachments WHERE id=$1 AND asset_id=$2", 
+		err := a.DB.QueryRow(c.Request.Context(),
+			"SELECT object_key FROM attachments WHERE id=$1 AND asset_id=$2",
 			attachmentID, assetID).Scan(&objectKey)
 
 		if err != nil {
@@ -274,7 +274,7 @@ func DeleteAssetAttachment(a *app.App) gin.HandlerFunc {
 		// For filesystem, we could delete the file here
 
 		// Delete from database
-		if _, err := a.DB.Exec(c.Request.Context(), 
+		if _, err := a.DB.Exec(c.Request.Context(),
 			"DELETE FROM attachments WHERE id=$1", attachmentID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete attachment"})
 			return

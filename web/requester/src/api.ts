@@ -51,7 +51,7 @@ export async function listComments(id: string, token?: string): Promise<Comment[
 }
 
 export async function addComment(id: string | number, content: string, token?: string): Promise<{ id: string }> {
-  const body = { body_md: content, is_internal: false } as any;
+  const body: { body_md: string; is_internal: boolean } = { body_md: content, is_internal: false };
   return apiFetch<{ id: string }>(`/tickets/${String(id)}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

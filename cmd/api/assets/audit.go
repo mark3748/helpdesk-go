@@ -14,22 +14,22 @@ import (
 
 // AuditEvent represents a comprehensive audit event
 type AuditEvent struct {
-	ID           uuid.UUID              `json:"id" db:"id"`
-	AssetID      uuid.UUID              `json:"asset_id" db:"asset_id"`
-	Action       string                 `json:"action" db:"action"`
-	ActorID      *uuid.UUID             `json:"actor_id" db:"actor_id"`
-	ActorType    string                 `json:"actor_type" db:"actor_type"` // "user", "system", "api"
-	Category     string                 `json:"category" db:"category"`     // "lifecycle", "assignment", "maintenance", "financial"
-	Severity     string                 `json:"severity" db:"severity"`     // "info", "warning", "error", "critical"
-	OldValues    map[string]interface{} `json:"old_values" db:"old_values"`
-	NewValues    map[string]interface{} `json:"new_values" db:"new_values"`
-	Changes      []FieldChange          `json:"changes"`
-	Context      map[string]interface{} `json:"context" db:"context"`
-	IPAddress    *string                `json:"ip_address" db:"ip_address"`
-	UserAgent    *string                `json:"user_agent" db:"user_agent"`
-	Notes        *string                `json:"notes" db:"notes"`
-	CreatedAt    time.Time              `json:"created_at" db:"created_at"`
-	
+	ID        uuid.UUID              `json:"id" db:"id"`
+	AssetID   uuid.UUID              `json:"asset_id" db:"asset_id"`
+	Action    string                 `json:"action" db:"action"`
+	ActorID   *uuid.UUID             `json:"actor_id" db:"actor_id"`
+	ActorType string                 `json:"actor_type" db:"actor_type"` // "user", "system", "api"
+	Category  string                 `json:"category" db:"category"`     // "lifecycle", "assignment", "maintenance", "financial"
+	Severity  string                 `json:"severity" db:"severity"`     // "info", "warning", "error", "critical"
+	OldValues map[string]interface{} `json:"old_values" db:"old_values"`
+	NewValues map[string]interface{} `json:"new_values" db:"new_values"`
+	Changes   []FieldChange          `json:"changes"`
+	Context   map[string]interface{} `json:"context" db:"context"`
+	IPAddress *string                `json:"ip_address" db:"ip_address"`
+	UserAgent *string                `json:"user_agent" db:"user_agent"`
+	Notes     *string                `json:"notes" db:"notes"`
+	CreatedAt time.Time              `json:"created_at" db:"created_at"`
+
 	// Joined fields
 	Asset *Asset     `json:"asset,omitempty"`
 	Actor *AssetUser `json:"actor,omitempty"`
@@ -71,10 +71,10 @@ type AuditSummary struct {
 
 // ActorSummary represents actor activity summary
 type ActorSummary struct {
-	ActorID     uuid.UUID `json:"actor_id"`
-	ActorEmail  string    `json:"actor_email"`
-	EventCount  int       `json:"event_count"`
-	LastAction  time.Time `json:"last_action"`
+	ActorID    uuid.UUID `json:"actor_id"`
+	ActorEmail string    `json:"actor_email"`
+	EventCount int       `json:"event_count"`
+	LastAction time.Time `json:"last_action"`
 }
 
 // RecordAuditEvent records a comprehensive audit event
@@ -399,8 +399,8 @@ func (s *Service) CompareAssetStates(oldAsset, newAsset *Asset) []FieldChange {
 		fieldName := field.Name
 
 		// Skip certain fields that shouldn't be compared
-		if fieldName == "UpdatedAt" || fieldName == "CreatedAt" || 
-		   fieldName == "Category" || fieldName == "AssignedUser" || fieldName == "CreatedByUser" {
+		if fieldName == "UpdatedAt" || fieldName == "CreatedAt" ||
+			fieldName == "Category" || fieldName == "AssignedUser" || fieldName == "CreatedByUser" {
 			continue
 		}
 
@@ -484,8 +484,8 @@ func (s *Service) RecordAssetCheckedOut(ctx context.Context, checkout *AssetChec
 		Category:  "assignment",
 		Severity:  "info",
 		NewValues: map[string]interface{}{
-			"checked_out_to":       checkout.CheckedOutToUserID,
-			"expected_return_date": checkout.ExpectedReturnDate,
+			"checked_out_to":        checkout.CheckedOutToUserID,
+			"expected_return_date":  checkout.ExpectedReturnDate,
 			"condition_at_checkout": checkout.ConditionAtCheckout,
 		},
 		Context: context,
@@ -563,7 +563,7 @@ func (s *Service) scanAuditEvent(row pgx.Row) (*AuditEvent, error) {
 
 func (s *Service) assetToMap(asset *Asset) map[string]interface{} {
 	result := make(map[string]interface{})
-	
+
 	val := reflect.ValueOf(*asset)
 	typ := reflect.TypeOf(*asset)
 
@@ -571,22 +571,22 @@ func (s *Service) assetToMap(asset *Asset) map[string]interface{} {
 		field := typ.Field(i)
 		fieldName := strings.ToLower(field.Name)
 		fieldValue := val.Field(i).Interface()
-		
+
 		// Skip unexported fields and joined fields
-		if !field.IsExported() || 
-		   fieldName == "category" || fieldName == "assigneduser" || fieldName == "createdbyuser" {
+		if !field.IsExported() ||
+			fieldName == "category" || fieldName == "assigneduser" || fieldName == "createdbyuser" {
 			continue
 		}
-		
+
 		result[fieldName] = fieldValue
 	}
-	
+
 	return result
 }
 
 func (s *Service) generateFieldChanges(oldValues, newValues map[string]interface{}) []FieldChange {
 	var changes []FieldChange
-	
+
 	// Check for updates and additions
 	for key, newVal := range newValues {
 		if oldVal, exists := oldValues[key]; exists {
@@ -607,7 +607,7 @@ func (s *Service) generateFieldChanges(oldValues, newValues map[string]interface
 			})
 		}
 	}
-	
+
 	// Check for deletions
 	for key, oldVal := range oldValues {
 		if _, exists := newValues[key]; !exists {
@@ -619,7 +619,7 @@ func (s *Service) generateFieldChanges(oldValues, newValues map[string]interface
 			})
 		}
 	}
-	
+
 	return changes
 }
 

@@ -445,106 +445,30 @@ export interface paths {
   };
   "/livez": {
     /** Liveness check */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-      };
-    };
+    get: operations["healthLiveness"];
   };
   "/readyz": {
     /** Readiness check */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Dependency failure */
-        500: {
-          content: never;
-        };
-      };
-    };
+    get: operations["healthReadiness"];
   };
   "/healthz": {
     /** Health check */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              ok?: boolean;
-            };
-          };
-        };
-      };
-    };
+    get: operations["healthCheck"];
   };
   "/login": {
     /**
      * Login (local mode)
      * @description Enabled only when `AUTH_MODE=local`.
      */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": {
-            username: string;
-            password: string;
-          };
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Unauthorized */
-        401: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    post: operations["authLogin"];
   };
   "/logout": {
     /** Logout (local mode) */
-    post: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-      };
-    };
+    post: operations["authLogout"];
   };
   "/me": {
     /** Current user */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["AuthUser"];
-          };
-        };
-        /** @description Unauthorized */
-        401: {
-          content: never;
-        };
-      };
-    };
+    get: operations["getCurrentUser"];
   };
   "/me/profile": {
     /** Current user's profile (local auth) */
@@ -1125,386 +1049,79 @@ export interface paths {
   };
   "/users/{id}": {
     /** Get user (admin) */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["UserSummary"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-      };
-    };
+    get: operations["getUserByIdAdmin"];
   };
   "/roles": {
     /** List available roles (admin) */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": string[];
-          };
-        };
-      };
-    };
+    get: operations["listRoles"];
   };
   "/metrics/agent": {
     /** Agent metrics (per-status counts for current user) */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              [key: string]: number;
-            };
-          };
-        };
-      };
-    };
+    get: operations["getAgentMetrics"];
   };
   "/metrics/manager": {
     /** Manager metrics (global per-status counts) */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              [key: string]: number;
-            };
-          };
-        };
-      };
-    };
+    get: operations["getManagerMetrics"];
   };
   "/tickets/{id}/attachments/{attID}": {
     /** Download attachment */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-          attID: string;
-        };
-      };
-      responses: {
-        /** @description File content */
-        200: {
-          content: {
-            "application/octet-stream": string;
-          };
-        };
-        /** @description Redirect to object storage */
-        302: {
-          content: never;
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    get: operations["downloadAttachment"];
     /** Delete attachment */
-    delete: {
-      parameters: {
-        path: {
-          id: string;
-          attID: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    delete: operations["deleteAttachment"];
   };
   "/tickets/{id}/watchers": {
     /** List watcher user IDs */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": string[];
-          };
-        };
-      };
-    };
+    get: operations["listWatchers"];
     /** Add watcher */
-    post: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["WatcherRequest"];
-        };
-      };
-      responses: {
-        /** @description Created */
-        201: {
-          content: never;
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    post: operations["addWatcher"];
   };
   "/tickets/{id}/watchers/{userID}": {
     /** Remove watcher */
-    delete: {
-      parameters: {
-        path: {
-          id: string;
-          userID: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    delete: operations["removeWatcher"];
   };
   "/csat/{token}": {
     /**
      * CSAT form
      * @description Public endpoint embedded in emails.
      */
-    get: {
-      parameters: {
-        path: {
-          token: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "text/html": string;
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    get: operations["getCsatForm"];
     /**
      * Submit CSAT score
      * @description Public endpoint embedded in emails.
      */
-    post: {
-      parameters: {
-        path: {
-          token: string;
-        };
-      };
-      requestBody: {
-        content: {
-          "application/x-www-form-urlencoded": {
-            /** @enum {string} */
-            score: "good" | "bad";
-          };
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Invalid score */
-        400: {
-          content: never;
-        };
-        /** @description Invalid token */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    post: operations["submitCsatScore"];
   };
   "/metrics/sla": {
     /**
      * SLA attainment
      * @description Requires `agent` role.
      */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              total?: number;
-              met?: number;
-              sla_attainment?: number;
-            };
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    get: operations["getSlaMetrics"];
   };
   "/metrics/resolution": {
     /**
      * Average resolution time
      * @description Requires `agent` role.
      */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              avg_resolution_ms?: number;
-            };
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    get: operations["getResolutionMetrics"];
   };
   "/metrics/tickets": {
     /**
      * Ticket volume per day (30)
      * @description Requires `agent` role.
      */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              daily?: {
-                  /** Format: date */
-                  day?: string;
-                  count?: number;
-                }[];
-            };
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    get: operations["getTicketVolumeMetrics"];
   };
   "/exports/tickets": {
     /**
      * Export tickets to CSV
      * @description Requires object store configuration. Requires `agent` role.
      */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ExportTicketsRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              /** Format: uri */
-              url?: string;
-            };
-          };
-        };
-        /** @description Accepted */
-        202: {
-          content: {
-            "application/json": components["schemas"]["ExportJobAccepted"];
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    post: operations["exportTickets"];
   };
   "/exports/tickets/{job_id}": {
     /** Check export job status */
-    get: {
-      parameters: {
-        path: {
-          job_id: string;
-        };
-      };
-      responses: {
-        /** @description Status */
-        200: {
-          content: {
-            "application/json": components["schemas"]["ExportJobStatus"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
+    get: operations["getExportJobStatus"];
   };
 }
 
@@ -1688,7 +1305,7 @@ export interface components {
       /** Format: uuid */
       category_id?: string | null;
       status?: components["schemas"]["AssetStatus"];
-      condition?: components["schemas"]["AssetCondition"];
+      condition?: components["schemas"]["AssetCondition"] | null;
       purchase_price?: number | null;
       /** Format: date-time */
       purchase_date?: string | null;
@@ -1711,9 +1328,9 @@ export interface components {
       created_at?: string;
       /** Format: date-time */
       updated_at?: string;
-      category?: components["schemas"]["AssetCategory"];
-      assigned_user?: components["schemas"]["AssetUser"];
-      created_by_user?: components["schemas"]["AssetUser"];
+      category?: components["schemas"]["AssetCategory"] | null;
+      assigned_user?: components["schemas"]["AssetUser"] | null;
+      created_by_user?: components["schemas"]["AssetUser"] | null;
     };
     AssetUser: {
       /** Format: uuid */
@@ -1769,6 +1386,7 @@ export interface components {
       location?: string;
       custom_fields?: Record<string, never>;
     };
+    notes: string;
     AssignAssetRequest: {
       /** Format: uuid */
       assigned_to_user_id?: string | null;
@@ -1798,12 +1416,12 @@ export interface components {
       actual_return_date?: string | null;
       checkout_notes?: string | null;
       return_notes?: string | null;
-      condition_at_checkout?: components["schemas"]["AssetCondition"];
-      condition_at_return?: components["schemas"]["AssetCondition"];
+      condition_at_checkout?: components["schemas"]["AssetCondition"] | null;
+      condition_at_return?: components["schemas"]["AssetCondition"] | null;
       status?: string;
-      asset?: components["schemas"]["Asset"];
-      checked_out_to_user?: components["schemas"]["AssetUser"];
-      checked_out_by_user?: components["schemas"]["AssetUser"];
+      asset?: components["schemas"]["Asset"] | null;
+      checked_out_to_user?: components["schemas"]["AssetUser"] | null;
+      checked_out_by_user?: components["schemas"]["AssetUser"] | null;
     };
     CheckoutRequest: {
       /** Format: uuid */
@@ -1836,8 +1454,8 @@ export interface components {
       notes?: string | null;
       /** Format: date-time */
       created_at?: string;
-      asset?: components["schemas"]["Asset"];
-      actor?: components["schemas"]["AssetUser"];
+      asset?: components["schemas"]["Asset"] | null;
+      actor?: components["schemas"]["AssetUser"] | null;
     };
     AssetAssignment: {
       /** Format: uuid */
@@ -1854,9 +1472,9 @@ export interface components {
       unassigned_at?: string | null;
       notes?: string | null;
       status?: string;
-      asset?: components["schemas"]["Asset"];
-      assigned_user?: components["schemas"]["AssetUser"];
-      assigned_by?: components["schemas"]["AssetUser"];
+      asset?: components["schemas"]["Asset"] | null;
+      assigned_user?: components["schemas"]["AssetUser"] | null;
+      assigned_by?: components["schemas"]["AssetUser"] | null;
     };
   };
   responses: never;
@@ -1870,4 +1488,454 @@ export type $defs = Record<string, never>;
 
 export type external = Record<string, never>;
 
-export type operations = Record<string, never>;
+export interface operations {
+
+  /** Liveness check */
+  healthLiveness: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: never;
+      };
+    };
+  };
+  /** Readiness check */
+  healthReadiness: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: never;
+      };
+      /** @description Dependency failure */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /** Health check */
+  healthCheck: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": {
+            ok?: boolean;
+          };
+        };
+      };
+    };
+  };
+  /**
+   * Login (local mode)
+   * @description Enabled only when `AUTH_MODE=local`.
+   */
+  authLogin: {
+    requestBody: {
+      content: {
+        "application/json": {
+          username: string;
+          password: string;
+        };
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: never;
+      };
+      /** @description Bad Request */
+      400: {
+        content: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        content: never;
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /** Logout (local mode) */
+  authLogout: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: never;
+      };
+    };
+  };
+  /** Current user */
+  getCurrentUser: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AuthUser"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        content: never;
+      };
+    };
+  };
+  /** Get user (admin) */
+  getUserByIdAdmin: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": components["schemas"]["UserSummary"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        content: never;
+      };
+    };
+  };
+  /** List available roles (admin) */
+  listRoles: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": string[];
+        };
+      };
+    };
+  };
+  /** Agent metrics (per-status counts for current user) */
+  getAgentMetrics: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": {
+            [key: string]: number;
+          };
+        };
+      };
+    };
+  };
+  /** Manager metrics (global per-status counts) */
+  getManagerMetrics: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": {
+            [key: string]: number;
+          };
+        };
+      };
+    };
+  };
+  /** Download attachment */
+  downloadAttachment: {
+    parameters: {
+      path: {
+        id: string;
+        attID: string;
+      };
+    };
+    responses: {
+      /** @description File content */
+      200: {
+        content: {
+          "application/octet-stream": string;
+        };
+      };
+      /** @description Redirect to object storage */
+      302: {
+        content: never;
+      };
+      /** @description Not Found */
+      404: {
+        content: never;
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /** Delete attachment */
+  deleteAttachment: {
+    parameters: {
+      path: {
+        id: string;
+        attID: string;
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: never;
+      };
+      /** @description Not Found */
+      404: {
+        content: never;
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /** List watcher user IDs */
+  listWatchers: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": string[];
+        };
+      };
+    };
+  };
+  /** Add watcher */
+  addWatcher: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WatcherRequest"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        content: never;
+      };
+      /** @description Bad Request */
+      400: {
+        content: never;
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /** Remove watcher */
+  removeWatcher: {
+    parameters: {
+      path: {
+        id: string;
+        userID: string;
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: never;
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /**
+   * CSAT form
+   * @description Public endpoint embedded in emails.
+   */
+  getCsatForm: {
+    parameters: {
+      path: {
+        token: string;
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "text/html": string;
+        };
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /**
+   * Submit CSAT score
+   * @description Public endpoint embedded in emails.
+   */
+  submitCsatScore: {
+    parameters: {
+      path: {
+        token: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/x-www-form-urlencoded": {
+          /** @enum {string} */
+          score: "good" | "bad";
+        };
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: never;
+      };
+      /** @description Invalid score */
+      400: {
+        content: never;
+      };
+      /** @description Invalid token */
+      404: {
+        content: never;
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /**
+   * SLA attainment
+   * @description Requires `agent` role.
+   */
+  getSlaMetrics: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": {
+            total?: number;
+            met?: number;
+            sla_attainment?: number;
+          };
+        };
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /**
+   * Average resolution time
+   * @description Requires `agent` role.
+   */
+  getResolutionMetrics: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": {
+            avg_resolution_ms?: number;
+          };
+        };
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /**
+   * Ticket volume per day (30)
+   * @description Requires `agent` role.
+   */
+  getTicketVolumeMetrics: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": {
+            daily?: {
+                /** Format: date */
+                day?: string;
+                count?: number;
+              }[];
+          };
+        };
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /**
+   * Export tickets to CSV
+   * @description Requires object store configuration. Requires `agent` role.
+   */
+  exportTickets: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ExportTicketsRequest"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": {
+            /** Format: uri */
+            url?: string;
+          };
+        };
+      };
+      /** @description Accepted */
+      202: {
+        content: {
+          "application/json": components["schemas"]["ExportJobAccepted"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        content: never;
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+  /** Check export job status */
+  getExportJobStatus: {
+    parameters: {
+      path: {
+        job_id: string;
+      };
+    };
+    responses: {
+      /** @description Status */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ExportJobStatus"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        content: never;
+      };
+      /** @description Server Error */
+      500: {
+        content: never;
+      };
+    };
+  };
+}

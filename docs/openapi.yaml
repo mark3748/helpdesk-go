@@ -65,15 +65,28 @@ components:
         title: { type: string }
         description: { type: string }
         requester_id: { type: string, format: uuid }
-        assignee_id: { type: string, format: uuid, nullable: true }
-        team_id: { type: string, format: uuid, nullable: true }
+        assignee_id: 
+          type: [string, "null"]
+          format: uuid
+        team_id: 
+          type: [string, "null"]
+          format: uuid
         priority: { type: integer, minimum: 1, maximum: 4 }
-        urgency: { type: integer, minimum: 1, maximum: 4, nullable: true }
-        category: { type: string, nullable: true }
-        subcategory: { type: string, nullable: true }
+        urgency: 
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 4
+        category: 
+          type: [string, "null"]
+        subcategory: 
+          type: [string, "null"]
         status: { type: string }
-        scheduled_at: { type: string, format: date-time, nullable: true }
-        due_at: { type: string, format: date-time, nullable: true }
+        scheduled_at: 
+          type: [string, "null"]
+          format: date-time
+        due_at: 
+          type: [string, "null"]
+          format: date-time
         source: { type: string }
         custom_json: { type: object }
         created_at: { type: string, format: date-time }
@@ -89,7 +102,8 @@ components:
         response_target_mins: { type: integer }
         resolution_target_mins: { type: integer }
         paused: { type: boolean }
-        reason: { type: string, nullable: true }
+        reason: 
+          type: [string, "null"]
     Comment:
       type: object
       properties:
@@ -105,7 +119,8 @@ components:
         id: { type: string, format: uuid }
         filename: { type: string }
         bytes: { type: integer, format: int64 }
-        mime: { type: string, nullable: true }
+        mime: 
+          type: [string, "null"]
         created_at: { type: string, format: date-time }
     Requester:
       type: object
@@ -200,7 +215,9 @@ components:
         id: { type: string, format: uuid }
         name: { type: string }
         description: { type: string }
-        parent_id: { type: string, format: uuid, nullable: true }
+        parent_id: 
+          type: [string, "null"]
+          format: uuid
         custom_fields: { type: object }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -210,34 +227,65 @@ components:
         id: { type: string, format: uuid }
         asset_tag: { type: string }
         name: { type: string }
-        description: { type: string, nullable: true }
-        category_id: { type: string, format: uuid, nullable: true }
+        description: 
+          type: [string, "null"]
+        category_id: 
+          type: [string, "null"]
+          format: uuid
         status: { $ref: '#/components/schemas/AssetStatus' }
-        condition: { $ref: '#/components/schemas/AssetCondition', nullable: true }
-        purchase_price: { type: number, nullable: true }
-        purchase_date: { type: string, format: date-time, nullable: true }
-        warranty_expiry: { type: string, format: date-time, nullable: true }
-        depreciation_rate: { type: number, nullable: true }
-        current_value: { type: number, nullable: true }
-        serial_number: { type: string, nullable: true }
-        model: { type: string, nullable: true }
-        manufacturer: { type: string, nullable: true }
-        location: { type: string, nullable: true }
-        assigned_to_user_id: { type: string, format: uuid, nullable: true }
-        assigned_at: { type: string, format: date-time, nullable: true }
+        condition: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetCondition'
+            - type: "null"
+        purchase_price: 
+          type: [number, "null"]
+        purchase_date: 
+          type: [string, "null"]
+          format: date-time
+        warranty_expiry: 
+          type: [string, "null"]
+          format: date-time
+        depreciation_rate: 
+          type: [number, "null"]
+        current_value: 
+          type: [number, "null"]
+        serial_number: 
+          type: [string, "null"]
+        model: 
+          type: [string, "null"]
+        manufacturer: 
+          type: [string, "null"]
+        location: 
+          type: [string, "null"]
+        assigned_to_user_id: 
+          type: [string, "null"]
+          format: uuid
+        assigned_at: 
+          type: [string, "null"]
+          format: date-time
         custom_fields: { type: object }
         created_by: { type: string, format: uuid }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
-        category: { $ref: '#/components/schemas/AssetCategory', nullable: true }
-        assigned_user: { $ref: '#/components/schemas/AssetUser', nullable: true }
-        created_by_user: { $ref: '#/components/schemas/AssetUser', nullable: true }
+        category: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetCategory'
+            - type: "null"
+        assigned_user: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetUser'
+            - type: "null"
+        created_by_user: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetUser'
+            - type: "null"
     AssetUser:
       type: object
       properties:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
-        display_name: { type: string, nullable: true }
+        display_name: 
+          type: [string, "null"]
     AssetListResponse:
       type: object
       properties:
@@ -285,10 +333,13 @@ components:
         manufacturer: { type: string }
         location: { type: string }
         custom_fields: { type: object }
+    notes: { type: string }
     AssignAssetRequest:
       type: object
       properties:
-        assigned_to_user_id: { type: string, format: uuid, nullable: true }
+        assigned_to_user_id: 
+          type: [string, "null"]
+          format: uuid
         notes: { type: string }
     CreateCategoryRequest:
       type: object
@@ -306,16 +357,37 @@ components:
         checked_out_to_user_id: { type: string, format: uuid }
         checked_out_by_user_id: { type: string, format: uuid }
         checked_out_at: { type: string, format: date-time }
-        expected_return_date: { type: string, format: date-time, nullable: true }
-        actual_return_date: { type: string, format: date-time, nullable: true }
-        checkout_notes: { type: string, nullable: true }
-        return_notes: { type: string, nullable: true }
-        condition_at_checkout: { $ref: '#/components/schemas/AssetCondition', nullable: true }
-        condition_at_return: { $ref: '#/components/schemas/AssetCondition', nullable: true }
+        expected_return_date: 
+          type: [string, "null"]
+          format: date-time
+        actual_return_date: 
+          type: [string, "null"]
+          format: date-time
+        checkout_notes: 
+          type: [string, "null"]
+        return_notes: 
+          type: [string, "null"]
+        condition_at_checkout: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetCondition'
+            - type: "null"
+        condition_at_return: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetCondition'
+            - type: "null"
         status: { type: string }
-        asset: { $ref: '#/components/schemas/Asset', nullable: true }
-        checked_out_to_user: { $ref: '#/components/schemas/AssetUser', nullable: true }
-        checked_out_by_user: { $ref: '#/components/schemas/AssetUser', nullable: true }
+        asset: 
+          anyOf:
+            - $ref: '#/components/schemas/Asset'
+            - type: "null"
+        checked_out_to_user: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetUser'
+            - type: "null"
+        checked_out_by_user: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetUser'
+            - type: "null"
     CheckoutRequest:
       type: object
       required: [asset_id, checked_out_to_user_id]
@@ -340,27 +412,50 @@ components:
         id: { type: string, format: uuid }
         asset_id: { type: string, format: uuid }
         action: { type: string }
-        actor_id: { type: string, format: uuid, nullable: true }
+        actor_id: 
+          type: [string, "null"]
+          format: uuid
         old_values: { type: object }
         new_values: { type: object }
-        notes: { type: string, nullable: true }
+        notes: 
+          type: [string, "null"]
         created_at: { type: string, format: date-time }
-        asset: { $ref: '#/components/schemas/Asset', nullable: true }
-        actor: { $ref: '#/components/schemas/AssetUser', nullable: true }
+        asset: 
+          anyOf:
+            - $ref: '#/components/schemas/Asset'
+            - type: "null"
+        actor: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetUser'
+            - type: "null"
     AssetAssignment:
       type: object
       properties:
         id: { type: string, format: uuid }
         asset_id: { type: string, format: uuid }
-        assigned_to_user_id: { type: string, format: uuid, nullable: true }
+        assigned_to_user_id: 
+          type: [string, "null"]
+          format: uuid
         assigned_by_user_id: { type: string, format: uuid }
         assigned_at: { type: string, format: date-time }
-        unassigned_at: { type: string, format: date-time, nullable: true }
-        notes: { type: string, nullable: true }
+        unassigned_at: 
+          type: [string, "null"]
+          format: date-time
+        notes: 
+          type: [string, "null"]
         status: { type: string }
-        asset: { $ref: '#/components/schemas/Asset', nullable: true }
-        assigned_user: { $ref: '#/components/schemas/AssetUser', nullable: true }
-        assigned_by: { $ref: '#/components/schemas/AssetUser', nullable: true }
+        asset: 
+          anyOf:
+            - $ref: '#/components/schemas/Asset'
+            - type: "null"
+        assigned_user: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetUser'
+            - type: "null"
+        assigned_by: 
+          anyOf:
+            - $ref: '#/components/schemas/AssetUser'
+            - type: "null"
 paths:
   # Asset Management Endpoints
   /asset-categories:
@@ -723,6 +818,7 @@ paths:
   # Existing endpoints below
   /livez:
     get:
+      operationId: healthLiveness
       tags: [Health]
       summary: Liveness check
       security: []
@@ -730,6 +826,7 @@ paths:
         '200': { description: OK }
   /readyz:
     get:
+      operationId: healthReadiness
       tags: [Health]
       summary: Readiness check
       security: []
@@ -738,6 +835,7 @@ paths:
         '500': { description: Dependency failure }
   /healthz:
     get:
+      operationId: healthCheck
       tags: [Health]
       summary: Health check
       security: []
@@ -752,6 +850,7 @@ paths:
                   ok: { type: boolean }
   /login:
     post:
+      operationId: authLogin
       tags: [Auth]
       summary: Login (local mode)
       description: Enabled only when `AUTH_MODE=local`.
@@ -773,6 +872,7 @@ paths:
         '500': { description: Server Error }
   /logout:
     post:
+      operationId: authLogout
       tags: [Auth]
       summary: Logout (local mode)
       security: []
@@ -780,6 +880,7 @@ paths:
         '200': { description: OK }
   /me:
     get:
+      operationId: getCurrentUser
       tags: [Users]
       summary: Current user
       responses:
@@ -1300,6 +1401,7 @@ paths:
         - cookieAuth: []
   /users/{id}:
     get:
+      operationId: getUserByIdAdmin
       tags: [Users]
       summary: Get user (admin)
       parameters:
@@ -1320,6 +1422,7 @@ paths:
   # (POST /users section merged under /users above)
   /roles:
     get:
+      operationId: listRoles
       tags: [Users]
       summary: List available roles (admin)
       responses:
@@ -1335,6 +1438,7 @@ paths:
         - cookieAuth: []
   /metrics/agent:
     get:
+      operationId: getAgentMetrics
       tags: [Metrics]
       summary: Agent metrics (per-status counts for current user)
       responses:
@@ -1350,6 +1454,7 @@ paths:
         - cookieAuth: []
   /metrics/manager:
     get:
+      operationId: getManagerMetrics
       tags: [Metrics]
       summary: Manager metrics (global per-status counts)
       responses:
@@ -1365,6 +1470,7 @@ paths:
         - cookieAuth: []
   /tickets/{id}/attachments/{attID}:
     get:
+      operationId: downloadAttachment
       tags: [Attachments]
       summary: Download attachment
       parameters:
@@ -1391,6 +1497,7 @@ paths:
         - bearerAuth: []
         - cookieAuth: []
     delete:
+      operationId: deleteAttachment
       tags: [Attachments]
       summary: Delete attachment
       parameters:
@@ -1411,6 +1518,7 @@ paths:
         - cookieAuth: []
   /tickets/{id}/watchers:
     get:
+      operationId: listWatchers
       tags: [Watchers]
       summary: List watcher user IDs
       parameters:
@@ -1430,6 +1538,7 @@ paths:
         - bearerAuth: []
         - cookieAuth: []
     post:
+      operationId: addWatcher
       tags: [Watchers]
       summary: Add watcher
       parameters:
@@ -1451,6 +1560,7 @@ paths:
         - cookieAuth: []
   /tickets/{id}/watchers/{userID}:
     delete:
+      operationId: removeWatcher
       tags: [Watchers]
       summary: Remove watcher
       parameters:
@@ -1470,6 +1580,7 @@ paths:
         - cookieAuth: []
   /csat/{token}:
     get:
+      operationId: getCsatForm
       tags: [CSAT]
       summary: CSAT form
       description: Public endpoint embedded in emails.
@@ -1487,6 +1598,7 @@ paths:
               schema: { type: string }
         '500': { description: Server Error }
     post:
+      operationId: submitCsatScore
       tags: [CSAT]
       summary: Submit CSAT score
       description: Public endpoint embedded in emails.
@@ -1514,6 +1626,7 @@ paths:
         '500': { description: Server Error }
   /metrics/sla:
     get:
+      operationId: getSlaMetrics
       tags: [Metrics]
       summary: SLA attainment
       description: Requires `agent` role.
@@ -1534,6 +1647,7 @@ paths:
         - cookieAuth: []
   /metrics/resolution:
     get:
+      operationId: getResolutionMetrics
       tags: [Metrics]
       summary: Average resolution time
       description: Requires `agent` role.
@@ -1552,6 +1666,7 @@ paths:
         - cookieAuth: []
   /metrics/tickets:
     get:
+      operationId: getTicketVolumeMetrics
       tags: [Metrics]
       summary: Ticket volume per day (30)
       description: Requires `agent` role.
@@ -1576,6 +1691,7 @@ paths:
         - cookieAuth: []
   /exports/tickets:
     post:
+      operationId: exportTickets
       tags: [Exports]
       summary: Export tickets to CSV
       description: Requires object store configuration. Requires `agent` role.
@@ -1605,6 +1721,7 @@ paths:
         - cookieAuth: []
   /exports/tickets/{job_id}:
     get:
+      operationId: getExportJobStatus
       tags: [Exports]
       summary: Check export job status
       parameters:

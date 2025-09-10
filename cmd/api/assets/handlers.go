@@ -379,7 +379,7 @@ func GetAssetHistory(a *app.App) gin.HandlerFunc {
 
 		// Get total count
 		var total int
-		err = a.DB.QueryRow(c.Request.Context(), 
+		err = a.DB.QueryRow(c.Request.Context(),
 			"SELECT COUNT(*) FROM asset_history WHERE asset_id = $1", id).Scan(&total)
 		if err != nil {
 			total = len(history)

@@ -46,7 +46,7 @@ func PublishEvent(ctx context.Context, rdb *redis.Client, ev Event) {
 
 // Events streams server-sent events to the client.
 func Events(rdb *redis.Client) gin.HandlerFunc {
-    return events(rdb, 30*time.Second, 10)
+	return events(rdb, 30*time.Second, 10)
 }
 
 func events(rdb *redis.Client, hbInterval time.Duration, chSize int) gin.HandlerFunc {
@@ -62,24 +62,24 @@ func events(rdb *redis.Client, hbInterval time.Duration, chSize int) gin.Handler
 			return
 		}
 
-        c.Writer.Header().Set("Content-Type", "text/event-stream")
-        c.Writer.Header().Set("Cache-Control", "no-cache")
-        c.Writer.Header().Set("Connection", "keep-alive")
-        // Help common proxies avoid buffering SSE
-        c.Writer.Header().Set("X-Accel-Buffering", "no")
-        flusher, ok := c.Writer.(http.Flusher)
-        if !ok {
-            // Some proxy chains/dev servers wrap the writer without Flusher.
-            // Send a single comment so clients don't see an empty reply,
-            // then return to let the UI fall back to polling.
-            fmt.Fprint(c.Writer, ":hb\n\n")
-            return
-        }
+		c.Writer.Header().Set("Content-Type", "text/event-stream")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		// Help common proxies avoid buffering SSE
+		c.Writer.Header().Set("X-Accel-Buffering", "no")
+		flusher, ok := c.Writer.(http.Flusher)
+		if !ok {
+			// Some proxy chains/dev servers wrap the writer without Flusher.
+			// Send a single comment so clients don't see an empty reply,
+			// then return to let the UI fall back to polling.
+			fmt.Fprint(c.Writer, ":hb\n\n")
+			return
+		}
 
-        // Send an initial heartbeat immediately so clients/proxies don't close
-        // the connection before the first ticker fires.
-        fmt.Fprint(c.Writer, ":hb\n\n")
-        flusher.Flush()
+		// Send an initial heartbeat immediately so clients/proxies don't close
+		// the connection before the first ticker fires.
+		fmt.Fprint(c.Writer, ":hb\n\n")
+		flusher.Flush()
 
 		ctx := c.Request.Context()
 		var ch <-chan *redis.Message

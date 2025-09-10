@@ -5,8 +5,9 @@ import autoprefixer from 'autoprefixer';
 // Avoid importing Node types to keep Dockerfile using npm ci.
 // Vite runs this file in Node, so process is available at runtime.
 // We declare it to satisfy TypeScript without @types/node.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-declare const process: any;
+declare const process: {
+  env?: Record<string, string | undefined>;
+};
 
 // https://vite.dev/config/
 // Dev server with API proxy. Target can be overridden via VITE_API_TARGET.

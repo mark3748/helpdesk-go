@@ -195,7 +195,7 @@ export async function downloadAttachment(
   if (!res.ok) throw new Error(await res.text());
   const blob = await res.blob();
   const cd = res.headers.get('Content-Disposition') || '';
-  const m = /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i.exec(cd);
+  const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
   const fname = m ? decodeURIComponent(m[1] || m[2] || 'attachment') : 'attachment';
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -206,3 +206,27 @@ export async function downloadAttachment(
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+// API object with common HTTP methods
+export const api = {
+  get: <T>(path: string, options?: RequestInit) => apiFetch<T>(path, options),
+  post: <T>(path: string, data?: any, options?: RequestInit) => apiFetch<T>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: data ? JSON.stringify(data) : undefined,
+    ...options,
+  }),
+  put: <T>(path: string, data?: any, options?: RequestInit) => apiFetch<T>(path, {
+    method: 'PUT', 
+    headers: { 'Content-Type': 'application/json' },
+    body: data ? JSON.stringify(data) : undefined,
+    ...options,
+  }),
+  patch: <T>(path: string, data?: any, options?: RequestInit) => apiFetch<T>(path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: data ? JSON.stringify(data) : undefined,
+    ...options,
+  }),
+  delete: <T>(path: string, options?: RequestInit) => apiFetch<T>(path, { method: 'DELETE', ...options }),
+};

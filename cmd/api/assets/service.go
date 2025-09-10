@@ -526,9 +526,9 @@ func (s *Service) AssignAsset(ctx context.Context, assetID uuid.UUID, req Assign
 		action = ActionUnassigned
 	}
 
-	_ = s.recordHistory(ctx, assetID, action, &assignedBy, 
+	_ = s.recordHistory(ctx, assetID, action, &assignedBy,
 		map[string]interface{}{"assigned_to": currentUserID},
-		map[string]interface{}{"assigned_to": req.AssignedToUserID}, 
+		map[string]interface{}{"assigned_to": req.AssignedToUserID},
 		req.Notes)
 
 	return nil
@@ -541,12 +541,12 @@ func (s *Service) DeleteAsset(ctx context.Context, id uuid.UUID, deletedBy uuid.
 		UPDATE assets 
 		SET status = 'disposed', updated_at = NOW() 
 		WHERE id = $1`, id)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to delete asset: %w", err)
 	}
 
-	_ = s.recordHistory(ctx, id, ActionDisposed, &deletedBy, nil, 
+	_ = s.recordHistory(ctx, id, ActionDisposed, &deletedBy, nil,
 		map[string]interface{}{"status": "disposed"}, nil)
 
 	return nil

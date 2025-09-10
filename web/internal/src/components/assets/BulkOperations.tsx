@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Card, Button, Upload, Select, Form, Input, Modal, Table, Progress, message, Space, Alert, Divider } from 'antd';
-import { UploadOutlined, DownloadOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { Card, Button, Upload, Select, Form, Input, Modal, Table, Progress, message, Space, Alert } from 'antd';
+import { UploadOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../shared/api';
-import type { UploadFile } from 'antd';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -29,7 +28,6 @@ interface ImportProgress {
 export default function BulkOperations() {
   const [selectedAssets, setSelectedAssets] = useState<string[]>([]);
   const [bulkUpdateModalVisible, setBulkUpdateModalVisible] = useState(false);
-  const [importModalVisible, setImportModalVisible] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [uploading, setUploading] = useState(false);
   const [bulkForm] = Form.useForm();
@@ -39,8 +37,8 @@ export default function BulkOperations() {
   const { data: assets, isLoading } = useQuery({
     queryKey: ['assets-bulk'],
     queryFn: async () => {
-      const response = await api.get('/assets?limit=1000');
-      return response.data.items;
+      const response = await api.get<{ items: any[] }>('/assets?limit=1000');
+      return response.items;
     },
   });
 
@@ -49,14 +47,14 @@ export default function BulkOperations() {
     queryKey: ['asset-categories'],
     queryFn: async () => {
       const response = await api.get('/asset-categories');
-      return response.data;
+      return (response as { data: any }).data;
     },
   });
 
   // Bulk update mutation
   const bulkUpdateMutation = useMutation({
     mutationFn: async (data: BulkUpdateData) => {
-      const response = await api.patch('/assets/bulk-update', data);
+      const response = await api.patch<{ data: any }>('/assets/bulk-update', data);
       return response.data;
     },
     onSuccess: (data) => {
@@ -74,13 +72,10 @@ export default function BulkOperations() {
   // Import assets mutation
   const importAssetsMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await api.post('/assets/import', formData, {
+      const response = await api.post<ImportProgress>('/assets/import', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (progressEvent) => {
-          // You can add upload progress tracking here if needed
-        },
       });
-      return response.data;
+      return response;
     },
     onSuccess: (data: ImportProgress) => {
       setImportProgress(data);
@@ -121,12 +116,17 @@ export default function BulkOperations() {
 
   const handleExport = async () => {
     try {
-      const response = await api.get('/assets/export', {
-        responseType: 'blob',
-        params: { format: 'csv' },
+      // Manually fetch as blob since fetch does not support responseType
+      const params = new URLSearchParams({ format: 'csv' });
+      const res = await fetch(`/assets/export?${params.toString()}`, {
+        method: 'GET',
+        // Add authentication headers here if needed, e.g.:
+        // headers: { Authorization: `Bearer ${yourToken}` },
       });
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      if (!res.ok) throw new Error('Failed to export assets');
+      const blob = await res.blob();
+
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `assets-export-${new Date().toISOString().split('T')[0]}.csv`);
@@ -137,20 +137,6 @@ export default function BulkOperations() {
       message.success('Assets exported successfully');
     } catch (error: any) {
       message.error(`Export failed: ${error.response?.data?.error || error.message}`);
-    }
-  };
-
-  const handleImport = (info: any) => {
-    const { file } = info;
-    if (file.status === 'uploading') {
-      setUploading(true);
-      return;
-    }
-    
-    if (file.status === 'done') {
-      const formData = new FormData();
-      formData.append('file', file.originFileObj);
-      importAssetsMutation.mutate(formData);
     }
   };
 

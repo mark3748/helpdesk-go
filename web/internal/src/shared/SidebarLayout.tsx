@@ -75,7 +75,9 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
   async function doLogout() {
     try {
       await fetch('/api/logout', { method: 'POST', credentials: 'include' });
-    } catch {}
+    } catch {
+      // Logout request failed, continue anyway
+    }
     await qc.invalidateQueries({ queryKey: ['me'] });
     nav('/login', { replace: true });
   }
