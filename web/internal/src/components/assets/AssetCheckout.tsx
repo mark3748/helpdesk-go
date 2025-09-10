@@ -51,7 +51,7 @@ export default function AssetCheckout() {
     queryKey: ['asset-checkouts'],
     queryFn: async () => {
       const response = await api.get('/asset-checkouts');
-      return response.data;
+      return (response as any).data;
     },
   });
 
@@ -60,7 +60,7 @@ export default function AssetCheckout() {
     queryKey: ['assets-available'],
     queryFn: async () => {
       const response = await api.get('/assets?status=active');
-      return response.data.items;
+      return (response as any).data.items;
     },
   });
 
@@ -68,7 +68,7 @@ export default function AssetCheckout() {
   const checkoutMutation = useMutation({
     mutationFn: async (data: CheckoutFormData) => {
       const response = await api.post('/asset-checkouts', data);
-      return response.data;
+      return (response as any).data;
     },
     onSuccess: () => {
       message.success('Asset checked out successfully');
@@ -86,7 +86,7 @@ export default function AssetCheckout() {
   const checkinMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: CheckinFormData }) => {
       const response = await api.patch(`/asset-checkouts/${id}/checkin`, data);
-      return response.data;
+      return (response as any).data;
     },
     onSuccess: () => {
       message.success('Asset checked in successfully');

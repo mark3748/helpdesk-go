@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Form, Input, Select, DatePicker, InputNumber, Card, Button, Row, Col, message, Spin } from 'antd';
 import { SaveOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -46,7 +46,7 @@ export default function AssetForm() {
     queryKey: ['asset-categories'],
     queryFn: async () => {
       const response = await api.get('/asset-categories');
-      return response.data;
+      return (response as any).data;
     },
   });
 
@@ -55,7 +55,7 @@ export default function AssetForm() {
     queryKey: ['asset', id],
     queryFn: async () => {
       const response = await api.get(`/assets/${id}`);
-      return response.data;
+      return (response as any).data;
     },
     enabled: isEditing,
   });
@@ -65,10 +65,10 @@ export default function AssetForm() {
     mutationFn: async (values: Asset) => {
       if (isEditing) {
         const response = await api.patch(`/assets/${id}`, values);
-        return response.data;
+        return (response as any).data;
       } else {
         const response = await api.post('/assets', values);
-        return response.data;
+        return (response as any).data;
       }
     },
     onSuccess: (data) => {
@@ -214,8 +214,7 @@ export default function AssetForm() {
                   <Form.Item name="purchase_price" label="Purchase Price">
                     <InputNumber
                       style={{ width: '100%' }}
-                      formatter={value => `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                      parser={value => value!.replace(/\$\s?|(,*)/g, '')}
+                      addonBefore="$"
                       placeholder="0.00"
                       precision={2}
                     />
@@ -227,8 +226,7 @@ export default function AssetForm() {
                       style={{ width: '100%' }}
                       min={0}
                       max={100}
-                      formatter={value => `${value}%`}
-                      parser={value => value!.replace('%', '')}
+                      addonAfter="%"
                       placeholder="0"
                       precision={2}
                     />

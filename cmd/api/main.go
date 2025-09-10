@@ -52,7 +52,6 @@ import (
 	appevents "github.com/mark3748/helpdesk-go/cmd/api/events"
 	exportspkg "github.com/mark3748/helpdesk-go/cmd/api/exports"
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
-	metrics "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 	metricspkg "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 	roles "github.com/mark3748/helpdesk-go/cmd/api/roles"
 	ticketspkg "github.com/mark3748/helpdesk-go/cmd/api/tickets"
@@ -467,7 +466,7 @@ func (a *App) rlMiddleware(l *rateln.Limiter, keyFunc func(*gin.Context) string,
 		key := keyFunc(c)
 		ok, err := l.Allow(c.Request.Context(), key)
 		if err != nil || !ok {
-			metrics.RateLimitRejectionsTotal.WithLabelValues(route).Inc()
+			metricspkg.RateLimitRejectionsTotal.WithLabelValues(route).Inc()
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limited"})
 			return
 		}
@@ -477,7 +476,7 @@ func (a *App) rlMiddleware(l *rateln.Limiter, keyFunc func(*gin.Context) string,
 
 func main() {
 	cfg := getConfig()
-	metrics.RegisterCounters()
+	metricspkg.RegisterCounters()
 	writer := io.Writer(os.Stdout)
 	if cfg.Env == "dev" {
 		writer = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}

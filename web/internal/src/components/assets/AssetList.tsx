@@ -75,7 +75,7 @@ export default function AssetList() {
       params.set('limit', pageSize.toString());
 
       const response = await api.get(`/assets?${params.toString()}`) as { data: AssetListResponse };
-      return response.data;
+      return (response as any).data;
     },
   });
 

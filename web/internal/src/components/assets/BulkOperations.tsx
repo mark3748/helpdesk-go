@@ -55,7 +55,7 @@ export default function BulkOperations() {
   const bulkUpdateMutation = useMutation({
     mutationFn: async (data: BulkUpdateData) => {
       const response = await api.patch<{ data: any }>('/assets/bulk-update', data);
-      return response.data;
+      return (response as any).data;
     },
     onSuccess: (data) => {
       message.success(`Successfully updated ${data.updated_count} assets`);

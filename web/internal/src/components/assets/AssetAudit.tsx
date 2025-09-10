@@ -56,7 +56,7 @@ export default function AssetAudit() {
       if (filters.search) params.append('search', filters.search);
       
       const response = await api.get(`/assets/audit?${params.toString()}`);
-      return response.data;
+      return (response as any).data;
     },
   });
 
@@ -65,7 +65,7 @@ export default function AssetAudit() {
     queryKey: ['asset-audit-summary'],
     queryFn: async () => {
       const response = await api.get('/assets/audit/summary');
-      return response.data;
+      return (response as any).data;
     },
   });
 
@@ -74,7 +74,7 @@ export default function AssetAudit() {
     queryKey: ['assets-for-audit'],
     queryFn: async () => {
       const response = await api.get('/assets?limit=1000');
-      return response.data.items;
+      return (response as any).data.items;
     },
   });
 
