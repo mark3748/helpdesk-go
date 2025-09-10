@@ -48,6 +48,10 @@ func (db *qdb) Exec(ctx context.Context, sql string, args ...interface{}) (pgcon
 	return pgconn.CommandTag{}, nil
 }
 
+func (db *qdb) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestQueueList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := &qdb{rows: []qrow{{Queue{ID: "1", Name: "Alpha"}}, {Queue{ID: "2", Name: "Beta"}}}}

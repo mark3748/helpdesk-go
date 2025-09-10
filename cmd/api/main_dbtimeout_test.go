@@ -62,6 +62,10 @@ func (s slowDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgco
 	return pgconn.CommandTag{}, context.DeadlineExceeded
 }
 
+func (s slowDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestDBTimeout_Readyz(t *testing.T) {
 	t.Setenv("ENV", "test")
 	// Tight DB timeout to force cancellation

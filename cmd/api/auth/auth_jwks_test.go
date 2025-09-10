@@ -78,6 +78,10 @@ func (db *fakeDB) Exec(ctx context.Context, sql string, args ...interface{}) (pg
 	return pgconn.CommandTag{}, nil
 }
 
+func (db *fakeDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestAuth_WithJWKS_ValidToken(t *testing.T) {
 	// generate RSA keypair
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)

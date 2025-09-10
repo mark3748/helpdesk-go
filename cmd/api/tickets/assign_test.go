@@ -47,6 +47,10 @@ func (db *assignDB) QueryRow(ctx context.Context, sql string, args ...interface{
 	return &assignRow{t}
 }
 
+func (db *assignDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestAssign(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := &assignDB{}

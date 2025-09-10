@@ -115,6 +115,10 @@ func (db *exportDB) Exec(ctx context.Context, sql string, args ...interface{}) (
 	return pgconn.CommandTag{}, nil
 }
 
+func (db *exportDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestExportTickets(t *testing.T) {
 	store := newFakeObjectStore()
 
