@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/mark3748/helpdesk-go/cmd/api/app"
 	"github.com/mark3748/helpdesk-go/cmd/api/auth"
 )
@@ -26,7 +26,7 @@ func ListAssets(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		service := NewService(a.DB.(*pgxpool.Pool))
+		service := NewService(a.DB)
 		result, err := service.ListAssets(c.Request.Context(), filters)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -62,7 +62,7 @@ func CreateAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		service := NewService(a.DB.(*pgxpool.Pool))
+		service := NewService(a.DB)
 		asset, err := service.CreateAsset(c.Request.Context(), req, uuid.MustParse(authUser.ID))
 		if err != nil {
 			if err.Error() == "asset tag already exists" {
@@ -92,7 +92,7 @@ func GetAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		service := NewService(a.DB.(*pgxpool.Pool))
+		service := NewService(a.DB)
 		asset, err := service.GetAsset(c.Request.Context(), id)
 		if err != nil {
 			if err.Error() == "asset not found" {
@@ -139,7 +139,7 @@ func UpdateAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		service := NewService(a.DB.(*pgxpool.Pool))
+		service := NewService(a.DB)
 		asset, err := service.UpdateAsset(c.Request.Context(), id, req, uuid.MustParse(authUser.ID))
 		if err != nil {
 			if err.Error() == "asset not found" {
@@ -180,7 +180,7 @@ func DeleteAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		service := NewService(a.DB.(*pgxpool.Pool))
+		service := NewService(a.DB)
 		err = service.DeleteAsset(c.Request.Context(), id, uuid.MustParse(authUser.ID))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -223,7 +223,7 @@ func AssignAsset(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		service := NewService(a.DB.(*pgxpool.Pool))
+		service := NewService(a.DB)
 		err = service.AssignAsset(c.Request.Context(), id, req, uuid.MustParse(authUser.ID))
 		if err != nil {
 			if err.Error() == "asset not found" {
@@ -246,7 +246,7 @@ func ListCategories(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		service := NewService(a.DB.(*pgxpool.Pool))
+		service := NewService(a.DB)
 		categories, err := service.ListCategories(c.Request.Context())
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -271,7 +271,7 @@ func CreateCategory(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		service := NewService(a.DB.(*pgxpool.Pool))
+		service := NewService(a.DB)
 		category, err := service.CreateCategory(c.Request.Context(), req)
 		if err != nil {
 			if err.Error() == "category already exists" {
@@ -301,7 +301,7 @@ func GetCategory(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		service := NewService(a.DB.(*pgxpool.Pool))
+		service := NewService(a.DB)
 		category, err := service.GetCategory(c.Request.Context(), id)
 		if err != nil {
 			if err.Error() == "category not found" {

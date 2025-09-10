@@ -139,6 +139,7 @@ create index if not exists idx_asset_tags_name on asset_tags(tag_name);
 create index if not exists idx_asset_tags_type on asset_tags(tag_type);
 
 -- Functions for automated depreciation calculation
+-- +goose StatementBegin
 create or replace function calculate_straight_line_depreciation(
     purchase_price decimal,
     salvage_value decimal,
@@ -152,8 +153,10 @@ begin
     return ((purchase_price - salvage_value) / useful_life_years) * (months_elapsed / 12.0);
 end;
 $$ language plpgsql;
+-- +goose StatementEnd
 
 -- Trigger to automatically record location changes
+-- +goose StatementBegin
 create or replace function record_location_change() returns trigger as $$
 begin
     if old.location is distinct from new.location then
@@ -163,6 +166,7 @@ begin
     return new;
 end;
 $$ language plpgsql;
+-- +goose StatementEnd
 
 create trigger asset_location_change_trigger
     after update on assets
@@ -170,12 +174,14 @@ create trigger asset_location_change_trigger
     execute function record_location_change();
 
 -- Trigger to update asset updated_at timestamp
+-- +goose StatementBegin
 create or replace function update_asset_timestamp() returns trigger as $$
 begin
     new.updated_at = now();
     return new;
 end;
 $$ language plpgsql;
+-- +goose StatementEnd
 
 create trigger asset_update_timestamp_trigger
     before update on assets

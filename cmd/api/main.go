@@ -235,6 +235,7 @@ type DB interface {
 	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
 	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
 // ObjectStore wraps the subset of MinIO we need for tests.
@@ -455,6 +456,12 @@ func (w *dbWithTimeout) Exec(ctx context.Context, sql string, args ...interface{
 	c, cancel := w.with(ctx)
 	defer cancel()
 	return w.inner.Exec(c, sql, args...)
+}
+
+func (w *dbWithTimeout) Begin(ctx context.Context) (pgx.Tx, error) {
+	c, cancel := w.with(ctx)
+	defer cancel()
+	return w.inner.Begin(c)
 }
 
 // rlMiddleware wraps a ratelimit.Limiter to record Prometheus counters on rejection.

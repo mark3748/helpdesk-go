@@ -11,16 +11,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mark3748/helpdesk-go/cmd/api/app"
 )
 
 // Service provides asset management operations
 type Service struct {
-	db *pgxpool.Pool
+	db app.DB
 }
 
 // NewService creates a new asset service
-func NewService(db *pgxpool.Pool) *Service {
+func NewService(db app.DB) *Service {
 	return &Service{db: db}
 }
 
