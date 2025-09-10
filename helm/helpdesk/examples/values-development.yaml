@@ -1,0 +1,64 @@
+# Development values with minimal resources
+# Usage: helm upgrade --install helpdesk ./helm/helpdesk -f examples/values-development.yaml
+
+# Minimal resources for development
+resources:
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+
+workerResources:
+  limits:
+    memory: "128Mi"
+    cpu: "100m"
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+
+frontendInternal:
+  enabled: true
+  resources:
+    limits:
+      memory: "64Mi"
+      cpu: "50m"
+    requests:
+      memory: "32Mi"
+      cpu: "25m"
+
+frontendRequester:
+  enabled: false  # Disable for simpler dev setup
+
+# Development ingress (no TLS)
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: helpdesk.local
+  tls: []
+
+# Development environment with local auth
+env:
+  ENV: "dev"
+  AUTH_MODE: "local"
+  ALLOWED_ORIGINS: "http://helpdesk.local"
+  # Local services
+  DATABASE_URL: "postgres://helpdesk:dev@postgres:5432/helpdesk?sslmode=disable"
+  REDIS_ADDR: "redis:6379"
+  # Filesystem storage for simplicity
+  FILESTORE_PATH: "/data"
+
+# Simple secrets for dev
+secrets:
+  enabled: true
+  data:
+    AUTH_LOCAL_SECRET: "dev-secret-change-me"
+    ADMIN_PASSWORD: "admin"
+
+# Enable local file storage
+persistence:
+  enabled: true
+  mountPath: "/data"
+  size: 1Gi

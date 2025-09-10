@@ -20,15 +20,15 @@ Additional completions
 
 ## Medium Priority
 
-- [ ] Standardize rate limiting: prefer Redis-backed limiter (`internal/ratelimit`) for login, ticket create, and attachments; remove ad‑hoc in‑memory limiter to ensure consistency across replicas.
-- [ ] Add context timeouts to DB, Redis, MinIO, and JWKS operations; propagate request contexts to DB calls in handlers.
-- [ ] Improve JWKS handling: periodic refresh with backoff/metrics; validate KID/alg robustly; fail closed with clear errors when JWKS unavailable.
+- [x] Standardize rate limiting: prefer Redis-backed limiter (`internal/ratelimit`) for login, ticket create, and attachments; remove ad‑hoc in‑memory limiter to ensure consistency across replicas.
+- [x] Add context timeouts to DB, Redis, MinIO, and JWKS operations; propagate request contexts to DB calls in handlers.
+- [x] Improve JWKS handling: periodic refresh with backoff/metrics; validate KID/alg robustly; fail closed with clear errors when JWKS unavailable.
 - [x] Helm: move sensitive config to Kubernetes Secrets (DB URL, `AUTH_LOCAL_SECRET`, `SMTP_*`, `MINIO_*`); wire via `envFrom` in templates. Add `imagePullSecrets` and scheduling knobs. Add optional PVC for `FILESTORE_PATH`.
-- [ ] Make Docker builds reproducible: vendor/pin Swagger UI assets instead of fetching at build time, or checksum‑verify downloads.
-- [ ] Multi-arch builds: parameterize `GOARCH` and use Buildx matrix in CI for `linux/amd64,linux/arm64` images.
+- [x] Make Docker builds reproducible: vendor/pin Swagger UI assets instead of fetching at build time, or checksum‑verify downloads.
+- [x] Multi-arch builds: parameterize `GOARCH` and use Buildx matrix in CI for `linux/amd64,linux/arm64` images.
 - [ ] Expand tests: path traversal attempts for object store; JWT claim validation; `s3` presign error paths; `/attachments/upload/:objectKey` validates keys; add SLA calendar loader tests (holidays/hours).
-- [ ] Observability: unify structured request logging (use `cmd/api/app/middleware.go` logger everywhere), add Prometheus counters for ticket create/update, auth failures, and rate-limit rejections.
-- [ ] Tighten CORS headers: minimize `Access-Control-Allow-Headers` to required set; keep `Vary: Origin`; document `ALLOWED_ORIGINS` usage and risks.
+- [x] Observability: unify structured request logging (use `cmd/api/app/middleware.go` logger everywhere), add Prometheus counters for ticket create/update, auth failures, and rate-limit rejections.
+- [x] Tighten CORS headers: minimize `Access-Control-Allow-Headers` to required set; keep `Vary: Origin`; document `ALLOWED_ORIGINS` usage and risks.
 
 ### Medium Implementation Plan (PR Checklist)
 

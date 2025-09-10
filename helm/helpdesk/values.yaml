@@ -13,6 +13,14 @@ frontendInternal:
   service:
     type: ClusterIP
     port: 80
+  resources:
+    # Default resource requests and limits for internal frontend
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
 
 # Requester frontend (optional, separate ingress)
 frontendRequester:
@@ -24,11 +32,28 @@ frontendRequester:
   service:
     type: ClusterIP
     port: 80
+  resources:
+    # Default resource requests and limits for requester frontend
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
 
 workerImage:
   repository: ghcr.io/mark3748/helpdesk-go-worker
   tag: latest
   pullPolicy: IfNotPresent
+
+workerResources:
+  # Default resource requests and limits for worker container
+  limits:
+    memory: "256Mi"
+    cpu: "250m"
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
 
 service:
   type: ClusterIP
@@ -85,7 +110,14 @@ env:
   IMAP_PASS: ""
   IMAP_FOLDER: "INBOX"
 
-resources: {}
+resources:
+  # Default resource requests and limits for API container
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
 
 nodeSelector: {}
 tolerations: []

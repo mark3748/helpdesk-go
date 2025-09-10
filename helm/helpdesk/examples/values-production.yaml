@@ -1,0 +1,119 @@
+# Production-ready values with resource limits and security settings
+# Usage: helm upgrade --install helpdesk ./helm/helpdesk -f examples/values-production.yaml
+
+# Production resource settings
+resources:
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+
+workerResources:
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
+
+frontendInternal:
+  enabled: true
+  resources:
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+
+frontendRequester:
+  enabled: true
+  resources:
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+
+# Production ingress with TLS
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: helpdesk.example.com
+  tls:
+    - secretName: helpdesk-tls
+      hosts:
+        - helpdesk.example.com
+
+ingressRequester:
+  enabled: true
+  className: nginx
+  apiProxy: true
+  hosts:
+    - host: portal.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: portal-tls
+      hosts:
+        - portal.example.com
+
+# Production environment
+env:
+  ENV: "prod"
+  AUTH_MODE: "oidc"
+  OIDC_ISSUER: "https://auth.example.com/realms/helpdesk"
+  OIDC_JWKS_URL: "https://auth.example.com/realms/helpdesk/protocol/openid-connect/certs"
+  ALLOWED_ORIGINS: "https://helpdesk.example.com,https://portal.example.com"
+  # External database and Redis
+  DATABASE_URL: "postgres://helpdesk:password@postgres.db.svc:5432/helpdesk?sslmode=require"
+  REDIS_ADDR: "redis.cache.svc:6379"
+  # MinIO/S3 storage
+  MINIO_ENDPOINT: "s3.amazonaws.com"
+  MINIO_BUCKET: "helpdesk-attachments"
+  MINIO_USE_SSL: "true"
+
+# Use Kubernetes Secrets for sensitive data
+secrets:
+  enabled: true
+  data:
+    AUTH_LOCAL_SECRET: ""  # Not used in OIDC mode
+    MINIO_ACCESS_KEY: "your-access-key"
+    MINIO_SECRET_KEY: "your-secret-key"
+    SMTP_HOST: "smtp.example.com"
+    SMTP_PORT: "587"
+    SMTP_USER: "helpdesk@example.com"
+    SMTP_PASS: "your-smtp-password"
+    SMTP_FROM: "helpdesk@example.com"
+
+# Pod scheduling and security
+nodeSelector:
+  kubernetes.io/arch: amd64
+
+tolerations:
+  - key: "workload"
+    operator: "Equal"
+    value: "backend"
+    effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - helpdesk
+          topologyKey: kubernetes.io/hostname
+
+# Private registry access
+imagePullSecrets:
+  - ghcr-pull
