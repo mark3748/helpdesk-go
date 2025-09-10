@@ -5,6 +5,444 @@
 
 
 export interface paths {
+  "/asset-categories": {
+    /** List asset categories */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AssetCategory"][];
+          };
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+    /**
+     * Create asset category
+     * @description Requires `admin` or `manager` role.
+     */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateCategoryRequest"];
+        };
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          content: {
+            "application/json": components["schemas"]["AssetCategory"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/asset-categories/{id}": {
+    /** Get asset category */
+    get: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AssetCategory"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/assets": {
+    /** List assets */
+    get: {
+      parameters: {
+        query?: {
+          /** @description Search query */
+          q?: string;
+          category_id?: string;
+          status?: components["schemas"]["AssetStatus"][];
+          condition?: components["schemas"]["AssetCondition"];
+          assigned_to?: string;
+          manufacturer?: string;
+          location?: string;
+          page?: number;
+          limit?: number;
+          sort_by?: string;
+          sort_order?: "asc" | "desc";
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AssetListResponse"];
+          };
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+    /**
+     * Create asset
+     * @description Requires `admin` or `manager` role.
+     */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateAssetRequest"];
+        };
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          content: {
+            "application/json": components["schemas"]["Asset"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Asset tag already exists */
+        409: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/assets/{id}": {
+    /** Get asset */
+    get: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Asset"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+    /**
+     * Delete asset
+     * @description Requires `admin` role.
+     */
+    delete: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
+        };
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+    /**
+     * Update asset
+     * @description Requires `admin` or `manager` role.
+     */
+    patch: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["UpdateAssetRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Asset"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/assets/{id}/assign": {
+    /**
+     * Assign asset to user
+     * @description Requires `admin` or `manager` role.
+     */
+    post: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["AssignAssetRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              message?: string;
+            };
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Not Found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/assets/{id}/checkout": {
+    /**
+     * Checkout asset
+     * @description Requires `admin` or `manager` role.
+     */
+    post: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CheckoutRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AssetCheckout"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Asset not found */
+        404: {
+          content: never;
+        };
+        /** @description Asset already checked out */
+        409: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/assets/checkin": {
+    /**
+     * Checkin asset
+     * @description Requires `admin` or `manager` role.
+     */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CheckinRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: never;
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Checkout not found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/assets/checkouts/active": {
+    /** List active checkouts */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AssetCheckout"][];
+          };
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/assets/checkouts/overdue": {
+    /** List overdue checkouts */
+    get: {
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AssetCheckout"][];
+          };
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/assets/{id}/history": {
+    /** Get asset history */
+    get: {
+      parameters: {
+        query?: {
+          page?: number;
+          limit?: number;
+        };
+        path: {
+          id: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": {
+              history?: components["schemas"]["AssetHistory"][];
+              total?: number;
+              page?: number;
+              limit?: number;
+              pages?: number;
+            };
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Asset not found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/assets/{id}/assignments": {
+    /** Get asset assignments */
+    get: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AssetAssignment"][];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          content: never;
+        };
+        /** @description Asset not found */
+        404: {
+          content: never;
+        };
+        /** @description Server Error */
+        500: {
+          content: never;
+        };
+      };
+    };
+  };
   "/livez": {
     /** Liveness check */
     get: {
@@ -656,28 +1094,6 @@ export interface paths {
         };
       };
     };
-  };
-  "/users/{id}": {
-    /** Get user (admin) */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["UserSummary"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-      };
-    };
     /** Create local user (admin) */
     post: {
       requestBody: {
@@ -702,6 +1118,28 @@ export interface paths {
         };
         /** @description Server Error */
         500: {
+          content: never;
+        };
+      };
+    };
+  };
+  "/users/{id}": {
+    /** Get user (admin) */
+    get: {
+      parameters: {
+        path: {
+          id: string;
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          content: {
+            "application/json": components["schemas"]["UserSummary"];
+          };
+        };
+        /** @description Not Found */
+        404: {
           content: never;
         };
       };
@@ -1223,6 +1661,202 @@ export interface components {
       errors?: {
         [key: string]: string;
       };
+    };
+    /** @enum {string} */
+    AssetCondition: "excellent" | "good" | "fair" | "poor" | "broken";
+    /** @enum {string} */
+    AssetStatus: "active" | "inactive" | "maintenance" | "retired" | "disposed";
+    AssetCategory: {
+      /** Format: uuid */
+      id?: string;
+      name?: string;
+      description?: string;
+      /** Format: uuid */
+      parent_id?: string | null;
+      custom_fields?: Record<string, never>;
+      /** Format: date-time */
+      created_at?: string;
+      /** Format: date-time */
+      updated_at?: string;
+    };
+    Asset: {
+      /** Format: uuid */
+      id?: string;
+      asset_tag?: string;
+      name?: string;
+      description?: string | null;
+      /** Format: uuid */
+      category_id?: string | null;
+      status?: components["schemas"]["AssetStatus"];
+      condition?: components["schemas"]["AssetCondition"];
+      purchase_price?: number | null;
+      /** Format: date-time */
+      purchase_date?: string | null;
+      /** Format: date-time */
+      warranty_expiry?: string | null;
+      depreciation_rate?: number | null;
+      current_value?: number | null;
+      serial_number?: string | null;
+      model?: string | null;
+      manufacturer?: string | null;
+      location?: string | null;
+      /** Format: uuid */
+      assigned_to_user_id?: string | null;
+      /** Format: date-time */
+      assigned_at?: string | null;
+      custom_fields?: Record<string, never>;
+      /** Format: uuid */
+      created_by?: string;
+      /** Format: date-time */
+      created_at?: string;
+      /** Format: date-time */
+      updated_at?: string;
+      category?: components["schemas"]["AssetCategory"];
+      assigned_user?: components["schemas"]["AssetUser"];
+      created_by_user?: components["schemas"]["AssetUser"];
+    };
+    AssetUser: {
+      /** Format: uuid */
+      id?: string;
+      /** Format: email */
+      email?: string;
+      display_name?: string | null;
+    };
+    AssetListResponse: {
+      assets?: components["schemas"]["Asset"][];
+      total?: number;
+      page?: number;
+      limit?: number;
+      pages?: number;
+    };
+    CreateAssetRequest: {
+      asset_tag: string;
+      name: string;
+      description?: string;
+      /** Format: uuid */
+      category_id?: string;
+      status?: components["schemas"]["AssetStatus"];
+      condition?: components["schemas"]["AssetCondition"];
+      purchase_price?: number;
+      /** Format: date-time */
+      purchase_date?: string;
+      /** Format: date-time */
+      warranty_expiry?: string;
+      depreciation_rate?: number;
+      serial_number?: string;
+      model?: string;
+      manufacturer?: string;
+      location?: string;
+      custom_fields?: Record<string, never>;
+    };
+    UpdateAssetRequest: {
+      name?: string;
+      description?: string;
+      /** Format: uuid */
+      category_id?: string;
+      status?: components["schemas"]["AssetStatus"];
+      condition?: components["schemas"]["AssetCondition"];
+      purchase_price?: number;
+      /** Format: date-time */
+      purchase_date?: string;
+      /** Format: date-time */
+      warranty_expiry?: string;
+      depreciation_rate?: number;
+      current_value?: number;
+      serial_number?: string;
+      model?: string;
+      manufacturer?: string;
+      location?: string;
+      custom_fields?: Record<string, never>;
+    };
+    AssignAssetRequest: {
+      /** Format: uuid */
+      assigned_to_user_id?: string | null;
+      notes?: string;
+    };
+    CreateCategoryRequest: {
+      name: string;
+      description?: string;
+      /** Format: uuid */
+      parent_id?: string;
+      custom_fields?: Record<string, never>;
+    };
+    AssetCheckout: {
+      /** Format: uuid */
+      id?: string;
+      /** Format: uuid */
+      asset_id?: string;
+      /** Format: uuid */
+      checked_out_to_user_id?: string;
+      /** Format: uuid */
+      checked_out_by_user_id?: string;
+      /** Format: date-time */
+      checked_out_at?: string;
+      /** Format: date-time */
+      expected_return_date?: string | null;
+      /** Format: date-time */
+      actual_return_date?: string | null;
+      checkout_notes?: string | null;
+      return_notes?: string | null;
+      condition_at_checkout?: components["schemas"]["AssetCondition"];
+      condition_at_return?: components["schemas"]["AssetCondition"];
+      status?: string;
+      asset?: components["schemas"]["Asset"];
+      checked_out_to_user?: components["schemas"]["AssetUser"];
+      checked_out_by_user?: components["schemas"]["AssetUser"];
+    };
+    CheckoutRequest: {
+      /** Format: uuid */
+      asset_id: string;
+      /** Format: uuid */
+      checked_out_to_user_id: string;
+      /** Format: date-time */
+      expected_return_date?: string;
+      checkout_notes?: string;
+      condition_at_checkout?: components["schemas"]["AssetCondition"];
+      requires_approval?: boolean;
+    };
+    CheckinRequest: {
+      /** Format: uuid */
+      checkout_id: string;
+      return_notes?: string;
+      condition_at_return?: components["schemas"]["AssetCondition"];
+      maintenance_needed?: boolean;
+    };
+    AssetHistory: {
+      /** Format: uuid */
+      id?: string;
+      /** Format: uuid */
+      asset_id?: string;
+      action?: string;
+      /** Format: uuid */
+      actor_id?: string | null;
+      old_values?: Record<string, never>;
+      new_values?: Record<string, never>;
+      notes?: string | null;
+      /** Format: date-time */
+      created_at?: string;
+      asset?: components["schemas"]["Asset"];
+      actor?: components["schemas"]["AssetUser"];
+    };
+    AssetAssignment: {
+      /** Format: uuid */
+      id?: string;
+      /** Format: uuid */
+      asset_id?: string;
+      /** Format: uuid */
+      assigned_to_user_id?: string | null;
+      /** Format: uuid */
+      assigned_by_user_id?: string;
+      /** Format: date-time */
+      assigned_at?: string;
+      /** Format: date-time */
+      unassigned_at?: string | null;
+      notes?: string | null;
+      status?: string;
+      asset?: components["schemas"]["Asset"];
+      assigned_user?: components["schemas"]["AssetUser"];
+      assigned_by?: components["schemas"]["AssetUser"];
     };
   };
   responses: never;

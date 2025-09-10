@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Helpdesk API
   version: 0.1.0
@@ -20,6 +20,7 @@ tags:
   - name: Metrics
   - name: Exports
   - name: Events
+  - name: Assets
 security:
   - bearerAuth: []
   - cookieAuth: []
@@ -186,7 +187,540 @@ components:
           type: object
           additionalProperties:
             type: string
+    # Asset Management Schemas
+    AssetCondition:
+      type: string
+      enum: [excellent, good, fair, poor, broken]
+    AssetStatus:
+      type: string
+      enum: [active, inactive, maintenance, retired, disposed]
+    AssetCategory:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        parent_id: { type: string, format: uuid, nullable: true }
+        custom_fields: { type: object }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Asset:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        asset_tag: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        category_id: { type: string, format: uuid, nullable: true }
+        status: { $ref: '#/components/schemas/AssetStatus' }
+        condition: { $ref: '#/components/schemas/AssetCondition', nullable: true }
+        purchase_price: { type: number, nullable: true }
+        purchase_date: { type: string, format: date-time, nullable: true }
+        warranty_expiry: { type: string, format: date-time, nullable: true }
+        depreciation_rate: { type: number, nullable: true }
+        current_value: { type: number, nullable: true }
+        serial_number: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+        assigned_to_user_id: { type: string, format: uuid, nullable: true }
+        assigned_at: { type: string, format: date-time, nullable: true }
+        custom_fields: { type: object }
+        created_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        category: { $ref: '#/components/schemas/AssetCategory', nullable: true }
+        assigned_user: { $ref: '#/components/schemas/AssetUser', nullable: true }
+        created_by_user: { $ref: '#/components/schemas/AssetUser', nullable: true }
+    AssetUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        display_name: { type: string, nullable: true }
+    AssetListResponse:
+      type: object
+      properties:
+        assets:
+          type: array
+          items: { $ref: '#/components/schemas/Asset' }
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+        pages: { type: integer }
+    CreateAssetRequest:
+      type: object
+      required: [asset_tag, name]
+      properties:
+        asset_tag: { type: string }
+        name: { type: string }
+        description: { type: string }
+        category_id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/AssetStatus' }
+        condition: { $ref: '#/components/schemas/AssetCondition' }
+        purchase_price: { type: number }
+        purchase_date: { type: string, format: date-time }
+        warranty_expiry: { type: string, format: date-time }
+        depreciation_rate: { type: number }
+        serial_number: { type: string }
+        model: { type: string }
+        manufacturer: { type: string }
+        location: { type: string }
+        custom_fields: { type: object }
+    UpdateAssetRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        category_id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/AssetStatus' }
+        condition: { $ref: '#/components/schemas/AssetCondition' }
+        purchase_price: { type: number }
+        purchase_date: { type: string, format: date-time }
+        warranty_expiry: { type: string, format: date-time }
+        depreciation_rate: { type: number }
+        current_value: { type: number }
+        serial_number: { type: string }
+        model: { type: string }
+        manufacturer: { type: string }
+        location: { type: string }
+        custom_fields: { type: object }
+    AssignAssetRequest:
+      type: object
+      properties:
+        assigned_to_user_id: { type: string, format: uuid, nullable: true }
+        notes: { type: string }
+    CreateCategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        parent_id: { type: string, format: uuid }
+        custom_fields: { type: object }
+    AssetCheckout:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        asset_id: { type: string, format: uuid }
+        checked_out_to_user_id: { type: string, format: uuid }
+        checked_out_by_user_id: { type: string, format: uuid }
+        checked_out_at: { type: string, format: date-time }
+        expected_return_date: { type: string, format: date-time, nullable: true }
+        actual_return_date: { type: string, format: date-time, nullable: true }
+        checkout_notes: { type: string, nullable: true }
+        return_notes: { type: string, nullable: true }
+        condition_at_checkout: { $ref: '#/components/schemas/AssetCondition', nullable: true }
+        condition_at_return: { $ref: '#/components/schemas/AssetCondition', nullable: true }
+        status: { type: string }
+        asset: { $ref: '#/components/schemas/Asset', nullable: true }
+        checked_out_to_user: { $ref: '#/components/schemas/AssetUser', nullable: true }
+        checked_out_by_user: { $ref: '#/components/schemas/AssetUser', nullable: true }
+    CheckoutRequest:
+      type: object
+      required: [asset_id, checked_out_to_user_id]
+      properties:
+        asset_id: { type: string, format: uuid }
+        checked_out_to_user_id: { type: string, format: uuid }
+        expected_return_date: { type: string, format: date-time }
+        checkout_notes: { type: string }
+        condition_at_checkout: { $ref: '#/components/schemas/AssetCondition' }
+        requires_approval: { type: boolean }
+    CheckinRequest:
+      type: object
+      required: [checkout_id]
+      properties:
+        checkout_id: { type: string, format: uuid }
+        return_notes: { type: string }
+        condition_at_return: { $ref: '#/components/schemas/AssetCondition' }
+        maintenance_needed: { type: boolean }
+    AssetHistory:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        asset_id: { type: string, format: uuid }
+        action: { type: string }
+        actor_id: { type: string, format: uuid, nullable: true }
+        old_values: { type: object }
+        new_values: { type: object }
+        notes: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        asset: { $ref: '#/components/schemas/Asset', nullable: true }
+        actor: { $ref: '#/components/schemas/AssetUser', nullable: true }
+    AssetAssignment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        asset_id: { type: string, format: uuid }
+        assigned_to_user_id: { type: string, format: uuid, nullable: true }
+        assigned_by_user_id: { type: string, format: uuid }
+        assigned_at: { type: string, format: date-time }
+        unassigned_at: { type: string, format: date-time, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { type: string }
+        asset: { $ref: '#/components/schemas/Asset', nullable: true }
+        assigned_user: { $ref: '#/components/schemas/AssetUser', nullable: true }
+        assigned_by: { $ref: '#/components/schemas/AssetUser', nullable: true }
 paths:
+  # Asset Management Endpoints
+  /asset-categories:
+    get:
+      tags: [Assets]
+      summary: List asset categories
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AssetCategory' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    post:
+      tags: [Assets]
+      summary: Create asset category
+      description: Requires `admin` or `manager` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCategoryRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetCategory' }
+        '400': { description: Bad Request }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /asset-categories/{id}:
+    get:
+      tags: [Assets]
+      summary: Get asset category
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetCategory' }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /assets:
+    get:
+      tags: [Assets]
+      summary: List assets
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Search query
+        - in: query
+          name: category_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: 
+            type: array
+            items: { $ref: '#/components/schemas/AssetStatus' }
+        - in: query
+          name: condition
+          schema: { $ref: '#/components/schemas/AssetCondition' }
+        - in: query
+          name: assigned_to
+          schema: { type: string, format: uuid }
+        - in: query
+          name: manufacturer
+          schema: { type: string }
+        - in: query
+          name: location
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - in: query
+          name: sort_by
+          schema: { type: string }
+        - in: query
+          name: sort_order
+          schema: { type: string, enum: [asc, desc] }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetListResponse' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    post:
+      tags: [Assets]
+      summary: Create asset
+      description: Requires `admin` or `manager` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAssetRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+        '400': { description: Bad Request }
+        '409': { description: Asset tag already exists }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /assets/{id}:
+    get:
+      tags: [Assets]
+      summary: Get asset
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    patch:
+      tags: [Assets]
+      summary: Update asset
+      description: Requires `admin` or `manager` role.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAssetRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+        '400': { description: Bad Request }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    delete:
+      tags: [Assets]
+      summary: Delete asset
+      description: Requires `admin` role.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /assets/{id}/assign:
+    post:
+      tags: [Assets]
+      summary: Assign asset to user
+      description: Requires `admin` or `manager` role.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignAssetRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '400': { description: Bad Request }
+        '404': { description: Not Found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /assets/{id}/checkout:
+    post:
+      tags: [Assets]
+      summary: Checkout asset
+      description: Requires `admin` or `manager` role.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckoutRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetCheckout' }
+        '400': { description: Bad Request }
+        '404': { description: Asset not found }
+        '409': { description: Asset already checked out }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /assets/checkin:
+    post:
+      tags: [Assets]
+      summary: Checkin asset
+      description: Requires `admin` or `manager` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckinRequest' }
+      responses:
+        '200': { description: OK }
+        '400': { description: Bad Request }
+        '404': { description: Checkout not found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /assets/checkouts/active:
+    get:
+      tags: [Assets]
+      summary: List active checkouts
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AssetCheckout' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /assets/checkouts/overdue:
+    get:
+      tags: [Assets]
+      summary: List overdue checkouts
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AssetCheckout' }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /assets/{id}/history:
+    get:
+      tags: [Assets]
+      summary: Get asset history
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  history:
+                    type: array
+                    items: { $ref: '#/components/schemas/AssetHistory' }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+                  pages: { type: integer }
+        '400': { description: Bad Request }
+        '404': { description: Asset not found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  /assets/{id}/assignments:
+    get:
+      tags: [Assets]
+      summary: Get asset assignments
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AssetAssignment' }
+        '400': { description: Bad Request }
+        '404': { description: Asset not found }
+        '500': { description: Server Error }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+  # Existing endpoints below
   /livez:
     get:
       tags: [Health]
