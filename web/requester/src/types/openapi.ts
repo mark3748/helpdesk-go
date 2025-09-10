@@ -1386,7 +1386,6 @@ export interface components {
       location?: string;
       custom_fields?: Record<string, never>;
     };
-    notes: string;
     AssignAssetRequest: {
       /** Format: uuid */
       assigned_to_user_id?: string | null;
