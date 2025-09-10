@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, Table, Select, DatePicker, Input, Button, Space, Timeline, Tag, Statistic, Row, Col } from 'antd';
 import { SearchOutlined, HistoryOutlined, UserOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../shared/api';
 import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+dayjs.extend(relativeTime);
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
