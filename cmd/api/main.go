@@ -1357,7 +1357,7 @@ func (a *App) exportTicketsBridge(c *gin.Context) {
 type jsonRaw []byte
 
 func (j jsonRaw) MarshalJSON() ([]byte, error) {
-	if len(j) == 0 {
+	if j == nil || len(j) == 0 {
 		return []byte("null"), nil
 	}
 	return j, nil
