@@ -25,6 +25,12 @@ interface AssetCheckout {
   status: 'checked_out' | 'overdue' | 'returned';
 }
 
+interface Asset {
+  id: string;
+  name: string;
+  asset_tag: string;
+}
+
 interface CheckoutFormData {
   asset_id: string;
   checked_out_to: string;
@@ -49,27 +55,20 @@ export default function AssetCheckout() {
   // Fetch checkouts
   const { data: checkouts, isLoading } = useQuery<AssetCheckout[]>({
     queryKey: ['asset-checkouts'],
-    queryFn: async () => {
-      const response = await api.get('/asset-checkouts');
-      return (response as any).data;
-    },
+    queryFn: () => api.get<AssetCheckout[]>('/asset-checkouts'),
   });
 
   // Fetch available assets for checkout
-  const { data: availableAssets } = useQuery({
+  const { data: availableAssets } = useQuery<Asset[]>({
     queryKey: ['assets-available'],
-    queryFn: async () => {
-      const response = await api.get('/assets?status=active');
-      return (response as any).data.items;
-    },
+    queryFn: () =>
+      api.get<{ items: Asset[] }>('/assets?status=active').then((res) => res.items),
   });
 
   // Checkout asset mutation
   const checkoutMutation = useMutation({
-    mutationFn: async (data: CheckoutFormData) => {
-      const response = await api.post('/asset-checkouts', data);
-      return (response as any).data;
-    },
+    mutationFn: (data: CheckoutFormData) =>
+      api.post<AssetCheckout>('/asset-checkouts', data),
     onSuccess: () => {
       message.success('Asset checked out successfully');
       queryClient.invalidateQueries({ queryKey: ['asset-checkouts'] });
@@ -77,17 +76,16 @@ export default function AssetCheckout() {
       setCheckoutModalVisible(false);
       checkoutForm.resetFields();
     },
-    onError: (error: any) => {
-      message.error(`Failed to checkout asset: ${error.response?.data?.error || error.message}`);
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } }; message: string };
+      message.error(`Failed to checkout asset: ${err.response?.data?.error || err.message}`);
     },
   });
 
   // Checkin asset mutation
   const checkinMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: CheckinFormData }) => {
-      const response = await api.patch(`/asset-checkouts/${id}/checkin`, data);
-      return (response as any).data;
-    },
+    mutationFn: ({ id, data }: { id: string; data: CheckinFormData }) =>
+      api.patch<AssetCheckout>(`/asset-checkouts/${id}/checkin`, data),
     onSuccess: () => {
       message.success('Asset checked in successfully');
       queryClient.invalidateQueries({ queryKey: ['asset-checkouts'] });
@@ -96,8 +94,9 @@ export default function AssetCheckout() {
       setSelectedCheckout(null);
       checkinForm.resetFields();
     },
-    onError: (error: any) => {
-      message.error(`Failed to checkin asset: ${error.response?.data?.error || error.message}`);
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } }; message: string };
+      message.error(`Failed to checkin asset: ${err.response?.data?.error || err.message}`);
     },
   });
 
@@ -257,7 +256,7 @@ export default function AssetCheckout() {
             rules={[{ required: true, message: 'Please select an asset' }]}
           >
             <Select placeholder="Select an asset to checkout">
-              {availableAssets?.map((asset: any) => (
+              {availableAssets?.map((asset) => (
                 <Option key={asset.id} value={asset.id}>
                   {asset.name} ({asset.asset_tag})
                 </Option>

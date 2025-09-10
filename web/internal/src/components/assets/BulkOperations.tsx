@@ -144,16 +144,11 @@ export default function BulkOperations() {
 
   const handleExport = async () => {
     try {
-      // Manually fetch as blob since fetch does not support responseType
+      // Use centralized api utility for consistency
       const params = new URLSearchParams({ format: "csv" });
-      const res = await fetch(`/assets/export?${params.toString()}`, {
-        method: "GET",
-        credentials: "include",
-        // Add authentication headers here if needed, e.g.:
-        // headers: { Authorization: `Bearer ${yourToken}` },
+      const blob = await api.get<Blob>(`/assets/export?${params.toString()}`, {
+        responseType: "blob",
       });
-      if (!res.ok) throw new Error("Failed to export assets");
-      const blob = await res.blob();
 
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -167,10 +162,9 @@ export default function BulkOperations() {
       link.remove();
       window.URL.revokeObjectURL(url);
       message.success("Assets exported successfully");
-    } catch (error: any) {
-      message.error(
-        `Export failed: ${error.response?.data?.error || error.message}`,
-      );
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } }; message: string };
+      message.error(`Export failed: ${err.response?.data?.error || err.message}`);
     }
   };
 
