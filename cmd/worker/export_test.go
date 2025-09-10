@@ -96,6 +96,10 @@ func (db *exportDB) Query(ctx context.Context, sql string, args ...interface{}) 
 	return &ticketRows{data: db.tickets}, nil
 }
 
+func (db *exportDB) Ping(ctx context.Context) error {
+	return nil
+}
+
 func TestHandleExportTicketsJob(t *testing.T) {
 	store := newFakeObjectStore()
 	defer store.Close()

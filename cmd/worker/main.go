@@ -119,6 +119,7 @@ type ExportStatus struct {
 
 type DB interface {
 	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	Ping(ctx context.Context) error
 }
 
 type ObjectStore interface {
@@ -298,24 +299,24 @@ func handleExportTicketsJob(ctx context.Context, c Config, db DB, store ObjectSt
 // Health check server for liveness/readiness probes
 func startHealthServer(ctx context.Context, addr string, db DB, rdb *redis.Client) {
 	mux := http.NewServeMux()
-	
+
 	// Liveness probe - basic health check
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "healthy",
+			"status":  "healthy",
 			"service": "worker",
 		})
 	})
-	
+
 	// Readiness probe - check dependencies
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		
+
 		status := "ready"
 		checks := make(map[string]string)
-		
+
 		// Check database
 		if err := db.Ping(ctx); err != nil {
 			status = "not ready"
@@ -323,7 +324,7 @@ func startHealthServer(ctx context.Context, addr string, db DB, rdb *redis.Clien
 		} else {
 			checks["database"] = "ok"
 		}
-		
+
 		// Check Redis
 		if err := rdb.Ping(ctx).Err(); err != nil {
 			status = "not ready"
@@ -331,12 +332,12 @@ func startHealthServer(ctx context.Context, addr string, db DB, rdb *redis.Clien
 		} else {
 			checks["redis"] = "ok"
 		}
-		
+
 		response := map[string]interface{}{
 			"status": status,
 			"checks": checks,
 		}
-		
+
 		if status == "ready" {
 			w.WriteHeader(http.StatusOK)
 		} else {
@@ -344,12 +345,12 @@ func startHealthServer(ctx context.Context, addr string, db DB, rdb *redis.Clien
 		}
 		json.NewEncoder(w).Encode(response)
 	})
-	
+
 	server := &http.Server{
 		Addr:    addr,
 		Handler: mux,
 	}
-	
+
 	log.Info().Str("addr", addr).Msg("starting health server")
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Error().Err(err).Msg("health server failed")
@@ -379,12 +380,17 @@ func main() {
 		}
 	}
 	log.Logger = zerolog.New(writer).With().Timestamp().Logger()
+
 	ctx := context.Background()
+
 	db, err := pgxpool.New(ctx, c.DatabaseURL)
 	if err != nil {
 		log.Fatal().Err(err).Msg("db connect")
 	}
 	defer db.Close()
+
+	// Ensure *pgxpool.Pool implements DB interface
+	var _ DB = db
 
 	rdb := redis.NewClient(&redis.Options{Addr: c.RedisAddr})
 	if err := rdb.Ping(ctx).Err(); err != nil {

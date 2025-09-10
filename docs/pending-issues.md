@@ -88,10 +88,10 @@ Tracking for the current branch `medium-priority-fixes`. See detailed stubs in `
 ## Low Priority
 
 - [ ] Worker SMTP: add STARTTLS/TLS support and dial/write timeouts; configurable `smtpSendMail` transport.
-- [ ] Add a basic readiness/liveness indicator for the worker (e.g., Redis ping or lightweight HTTP endpoint) and wire probes if desired.
-- [ ] Set default resource requests/limits in Helm for API, worker, and frontends; add examples in `helm/helpdesk/examples`.
-- [ ] Provide Makefile targets for common workflows (`build`, `test`, `docker`, `lint-helm`).
-- [ ] Documentation: expand auth modes section (cookie name/flags, OIDC claims), rate limiting behavior/dependencies, and deployment hardening tips.
+- [x] Add a basic readiness/liveness indicator for the worker (e.g., Redis ping or lightweight HTTP endpoint) and wire probes if desired.
+- [x] Set default resource requests/limits in Helm for API, worker, and frontends; add examples in `helm/helpdesk/examples`.
+- [x] Provide Makefile targets for common workflows (`build`, `test`, `docker`, `lint-helm`).
+- [x] Documentation: expand auth modes section (cookie name/flags, OIDC claims), rate limiting behavior/dependencies, and deployment hardening tips.
 
 ## Notes
 
