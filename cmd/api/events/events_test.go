@@ -124,6 +124,10 @@ func (db *fakeEventDB) Exec(ctx context.Context, sql string, args ...interface{}
 	return pgconn.CommandTag{}, nil
 }
 
+func (db *fakeEventDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestStreamResume(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := &fakeEventDB{}

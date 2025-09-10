@@ -185,6 +185,10 @@ func (db readyzDB) Exec(ctx context.Context, sql string, args ...interface{}) (p
 	return pgconn.CommandTag{}, nil
 }
 
+func (db readyzDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func setMail(ms map[string]string) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -421,6 +425,10 @@ func (db *csatTestDB) Exec(ctx context.Context, sql string, args ...interface{})
 	return pgconn.NewCommandTag(fmt.Sprintf("UPDATE %d", db.rows)), nil
 }
 
+func (db *csatTestDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestSubmitCSAT(t *testing.T) {
 	db := &csatTestDB{rows: 1}
 	cfg := Config{Env: "test"}
@@ -468,6 +476,10 @@ func (db *recordDB) QueryRow(ctx context.Context, sql string, args ...interface{
 
 func (db *recordDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
+}
+
+func (db *recordDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
 }
 
 func TestListTickets(t *testing.T) {
@@ -570,6 +582,10 @@ func (db *attachmentDB) Exec(ctx context.Context, sql string, args ...interface{
 	return pgconn.CommandTag{}, nil
 }
 
+func (db *attachmentDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestGetAttachment_MinIOPresign(t *testing.T) {
 	db := &attachmentDB{}
 	mc, err := minio.New("localhost:9000", &minio.Options{
@@ -639,6 +655,10 @@ func (db *traversalAttachmentDB) Exec(ctx context.Context, sql string, args ...i
 	return pgconn.CommandTag{}, nil
 }
 
+func (db *traversalAttachmentDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestGetAttachment_FileStoreTraversalBlocked(t *testing.T) {
 	dir := t.TempDir()
 	// Configure file store path (no MinIO), and DB returns a traversal key
@@ -667,6 +687,10 @@ func (db *statusDB) QueryRow(ctx context.Context, sql string, args ...interface{
 func (db *statusDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	db.called = true
 	return pgconn.CommandTag{}, nil
+}
+
+func (db *statusDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
 }
 
 func TestAddStatusHistory_Invalid(t *testing.T) {
@@ -768,6 +792,10 @@ func (db *updateCaptureDB) Exec(ctx context.Context, sql string, args ...interfa
 	return pgconn.CommandTag{}, nil
 }
 
+func (db *updateCaptureDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestUpdateTicket_LowercaseStatus_Normalized(t *testing.T) {
 	db := &updateCaptureDB{}
 	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
@@ -837,6 +865,10 @@ func (db *eventCaptureDB) QueryRow(ctx context.Context, sql string, args ...inte
 func (db *eventCaptureDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	db.execs = append(db.execs, sql)
 	return pgconn.CommandTag{}, nil
+}
+
+func (db *eventCaptureDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
 }
 
 func TestCreateTicket_EventRecorded(t *testing.T) {
@@ -943,6 +975,10 @@ func (db *requesterDB) Exec(ctx context.Context, sql string, args ...interface{}
 	return pgconn.CommandTag{}, nil
 }
 
+func (db *requesterDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestCreateRequester(t *testing.T) {
 	db := &requesterDB{}
 	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
@@ -1012,6 +1048,10 @@ func (db *nonRequesterDB) QueryRow(ctx context.Context, s string, args ...interf
 
 func (db *nonRequesterDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
+}
+
+func (db *nonRequesterDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
 }
 
 func TestUpdateRequester_OnlyRequesterRole(t *testing.T) {

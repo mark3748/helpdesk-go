@@ -53,6 +53,10 @@ func (db *fakeDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.Com
 	return pgconn.CommandTag{}, nil
 }
 
+func (db *fakeDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 type fakeRows struct {
 	list []string
 	i    int

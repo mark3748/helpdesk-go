@@ -151,6 +151,10 @@ func (db *listDB) Exec(ctx context.Context, sql string, args ...interface{}) (pg
 	return pgconn.CommandTag{}, nil
 }
 
+func (db *listDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 func TestTicketListPagination(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	now := time.Now().UTC()
