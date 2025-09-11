@@ -4,6 +4,7 @@ export type Ticket = components['schemas']['Ticket'];
 export type Comment = components['schemas']['Comment'];
 export type Attachment = components['schemas']['Attachment'];
 export type Requester = components['schemas']['Requester'];
+export type KBArticle = components['schemas']['KBArticle'];
 
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
@@ -87,6 +88,26 @@ export async function updateRequester(
     `/requesters/${id}`,
     {
       method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+    token,
+  );
+}
+
+export async function listKBArticles(q?: string, token?: string): Promise<KBArticle[]> {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+  return apiFetch<KBArticle[]>(`/kb${qs}`, {}, token);
+}
+
+export async function createKBArticle(
+  data: { slug: string; title: string; body_md: string },
+  token?: string,
+): Promise<KBArticle> {
+  return apiFetch<KBArticle>(
+    '/kb',
+    {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     },

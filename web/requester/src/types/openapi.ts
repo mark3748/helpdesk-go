@@ -1134,6 +1134,16 @@ export interface paths {
   "/kb": {
     /** Search knowledge base articles */
     get: operations["searchKB"];
+    /** Create knowledge base article */
+    post: operations["createKB"];
+  };
+  "/kb/{slug}": {
+    /** Get knowledge base article */
+    get: operations["getKB"];
+    /** Update knowledge base article */
+    put: operations["updateKB"];
+    /** Delete knowledge base article */
+    delete: operations["deleteKB"];
   };
   "/webhooks/email-inbound": {
     /** Accept inbound email webhook */
@@ -2015,6 +2025,85 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["KBArticle"][];
         };
+      };
+    };
+  };
+  /** Create knowledge base article */
+  createKB: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["KBArticle"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        content: {
+          "application/json": components["schemas"]["KBArticle"];
+        };
+      };
+    };
+  };
+  /** Get knowledge base article */
+  getKB: {
+    parameters: {
+      path: {
+        slug: string;
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": components["schemas"]["KBArticle"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        content: never;
+      };
+    };
+  };
+  /** Update knowledge base article */
+  updateKB: {
+    parameters: {
+      path: {
+        slug: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["KBArticle"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": components["schemas"]["KBArticle"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        content: never;
+      };
+    };
+  };
+  /** Delete knowledge base article */
+  deleteKB: {
+    parameters: {
+      path: {
+        slug: string;
+      };
+    };
+    responses: {
+      /** @description No Content */
+      204: {
+        content: never;
+      };
+      /** @description Not Found */
+      404: {
+        content: never;
       };
     };
   };

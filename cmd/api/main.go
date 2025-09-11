@@ -786,6 +786,10 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/teams", teamspkg.List(a.core()))
 	auth.GET("/slas", slaspkg.List(a.core()))
 	auth.GET("/kb", kbpkg.Search(a.core()))
+	auth.GET("/kb/:slug", kbpkg.Get(a.core()))
+	auth.POST("/kb", authpkg.RequireRole("agent", "manager"), kbpkg.Create(a.core()))
+	auth.PUT("/kb/:slug", authpkg.RequireRole("agent", "manager"), kbpkg.Update(a.core()))
+	auth.DELETE("/kb/:slug", authpkg.RequireRole("agent", "manager"), kbpkg.Delete(a.core()))
 
 	// Tickets
 	auth.GET("/tickets", ticketspkg.List(a.core()))

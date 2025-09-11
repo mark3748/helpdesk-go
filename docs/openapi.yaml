@@ -1831,6 +1831,84 @@ paths:
       security:
         - bearerAuth: []
         - cookieAuth: []
+    post:
+      operationId: createKB
+      tags: [KnowledgeBase]
+      summary: Create knowledge base article
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KBArticle' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KBArticle' }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /kb/{slug}:
+    get:
+      operationId: getKB
+      tags: [KnowledgeBase]
+      summary: Get knowledge base article
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KBArticle' }
+        '404': { description: Not Found }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    put:
+      operationId: updateKB
+      tags: [KnowledgeBase]
+      summary: Update knowledge base article
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KBArticle' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KBArticle' }
+        '404': { description: Not Found }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+    delete:
+      operationId: deleteKB
+      tags: [KnowledgeBase]
+      summary: Delete knowledge base article
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+        '404': { description: Not Found }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
 
   /webhooks/email-inbound:
     post:
