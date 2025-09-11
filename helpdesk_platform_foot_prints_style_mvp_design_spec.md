@@ -322,10 +322,3 @@ cron (1m):
 - **Audit immutability:** hash chain + offsite snapshots; consider WORM-capable bucket later.
 - **Scope creep:** keep KB/catalog minimal; no approvals in MVP.
 
----
-
-## 19) Next Steps
-
-- Pick **Go** or **Node** track.
-- I can generate: initial repo scaffolding, Helm chart skeleton, and SQL migrations for the core tables.
-
