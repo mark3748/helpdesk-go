@@ -168,6 +168,9 @@ func TestUpdateSLAPauseResume(t *testing.T) {
 			if !strings.Contains(sql, "ticket_sla_clocks") {
 				t.Fatalf("expected sla update, got %s", sql)
 			}
+			if !strings.Contains(sql, "last_started_at=case when paused and not $1 then now() else last_started_at end") {
+				t.Fatalf("missing last_started_at guard in %s", sql)
+			}
 			args := db.execArgs[1]
 			if args[0] != tt.pause {
 				t.Fatalf("pause arg = %v, want %v", args[0], tt.pause)
