@@ -19,16 +19,14 @@
   - SLA Management ✔︎
   - Email-to-ticket ✔︎
   - Dashboards (good-to-have) ✔︎
-  - **No** Asset/CMDB, Discovery, Licenses in MVP.
+  - **No** Discovery, Licenses in MVP.
 - **Compliance/security:** None initially; **US data residency**. **Immutable audit logs**.
 
 ---
 
 ## 2) Opinionated Default Stack
 
-> Alternate (Node) is provided in §2.2; pick one to start.
-
-### 2.1 Go‑forward (recommended)
+### Go‑forward
 
 - **Frontend:** React (Vite) SPA + PWA; Tailwind; React Router; React Query; Keyboard-first UX; Theming via CSS variables.
 - **Backend:** Go (Gin/Fiber) REST + WebSockets; Modular monolith. Validation via go-playground/validator.
@@ -39,11 +37,6 @@
 - **Email:** SMTP send; IMAP/POP3 poller (or direct Postfix/LSMTP webhook) for inbound → ticket.
 - **Observability:** Prometheus (metrics), Grafana (dashboards), Loki (logs) optional.
 - **Packaging/Deploy:** Docker images; Helm chart; K8s (ingress-nginx/Traefik); secrets via Sealed Secrets/External Secrets.
-
-### 2.2 Node alternate
-
-- **Backend:** Node **NestJS** (REST + WS Gateway), TypeORM (Postgres), BullMQ (Redis), Zod validation.
-- Everything else same (React SPA, Postgres FTS, Valkey/Redis, MinIO, Helm, Prom/Grafana).
 
 ---
 
