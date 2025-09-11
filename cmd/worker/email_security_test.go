@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 )
 
@@ -255,21 +256,21 @@ func TestSendEmailSecurityValidation(t *testing.T) {
 	}
 
 	// This should fail due to invalid From address
-	err := sendEmail(config, job)
+	err := sendEmail(context.Background(), nil, config, job)
 	if err == nil {
 		t.Error("Expected sendEmail to fail with invalid From address, but it succeeded")
 	}
 
 	// Test with invalid To address
 	config.SMTPFrom = "valid@example.com"
-	err = sendEmail(config, job)
+	err = sendEmail(context.Background(), nil, config, job)
 	if err == nil {
 		t.Error("Expected sendEmail to fail with header injection in To address, but it succeeded")
 	}
 
 	// Test with valid addresses (this will fail due to missing template, but validation should pass)
 	job.To = "user@example.com"
-	err = sendEmail(config, job)
+	err = sendEmail(context.Background(), nil, config, job)
 	// We expect an error due to missing template, but not due to email validation
 	if err != nil && err.Error() == "invalid To address: invalid email address format: user@example.comBcc: attacker@evil.com" {
 		t.Error("Email validation should have passed for clean email address")

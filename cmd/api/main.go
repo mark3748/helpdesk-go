@@ -60,6 +60,7 @@ import (
 	ticketspkg "github.com/mark3748/helpdesk-go/cmd/api/tickets"
 	userspkg "github.com/mark3748/helpdesk-go/cmd/api/users"
 	watcherspkg "github.com/mark3748/helpdesk-go/cmd/api/watchers"
+	webhookspkg "github.com/mark3748/helpdesk-go/cmd/api/webhooks"
 	rateln "github.com/mark3748/helpdesk-go/internal/ratelimit"
 )
 
@@ -805,6 +806,10 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/metrics/manager", authpkg.RequireRole("manager", "admin"), metricspkg.Manager(a.core()))
 	auth.POST("/exports/tickets", authpkg.RequireRole("agent"), a.exportTicketsBridge)
 	auth.GET("/exports/tickets/:job_id", authpkg.RequireRole("agent"), a.exportTicketsStatus)
+
+	auth.GET("/webhooks", authpkg.RequireRole("admin"), webhookspkg.List(a.core()))
+	auth.POST("/webhooks", authpkg.RequireRole("admin"), webhookspkg.Create(a.core()))
+	auth.DELETE("/webhooks/:id", authpkg.RequireRole("admin"), webhookspkg.Delete(a.core()))
 
 	// Asset Management
 	auth.GET("/asset-categories", assetspkg.ListCategories(a.core()))

@@ -29,6 +29,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 	"github.com/mark3748/helpdesk-go/internal/sla"
 )
@@ -184,7 +185,7 @@ func sanitizeAttachmentName(name string) string {
 	return base
 }
 
-func sendEmail(c Config, j EmailJob) error {
+func sendEmail(ctx context.Context, db app.DB, c Config, j EmailJob) error {
 	// Sanitize and validate email addresses
 	sanitizedTo, err := sanitizeAndValidateEmail(j.To)
 	if err != nil {
@@ -217,11 +218,22 @@ func sendEmail(c Config, j EmailJob) error {
 	if c.SMTPUser != "" {
 		auth = smtp.PlainAuth("", c.SMTPUser, c.SMTPPass, c.SMTPHost)
 	}
-	return smtpSendMail(addr, auth, sanitizedFrom, []string{sanitizedTo}, msg.Bytes())
+	status := "sent"
+	if err := smtpSendMail(addr, auth, sanitizedFrom, []string{sanitizedTo}, msg.Bytes()); err != nil {
+		status = "failed"
+		if db != nil {
+			_, _ = db.Exec(ctx, `insert into email_outbound (to_addr, subject, body_html, status) values ($1,$2,$3,$4)`, sanitizedTo, sanitizedSubject, bodyBuf.String(), status)
+		}
+		return err
+	}
+	if db != nil {
+		_, _ = db.Exec(ctx, `insert into email_outbound (to_addr, subject, body_html, status) values ($1,$2,$3,$4)`, sanitizedTo, sanitizedSubject, bodyBuf.String(), status)
+	}
+	return nil
 }
 
 // processQueueJob pops one job and processes it (test helper)
-func processQueueJob(ctx context.Context, c Config, rdb *redis.Client, send func(Config, EmailJob) error) error {
+func processQueueJob(ctx context.Context, db app.DB, c Config, rdb *redis.Client, send func(context.Context, app.DB, Config, EmailJob) error) error {
 	res, err := rdb.LPop(ctx, "jobs").Result()
 	if err != nil {
 		return err
@@ -236,7 +248,7 @@ func processQueueJob(ctx context.Context, c Config, rdb *redis.Client, send func
 		if err := json.Unmarshal(job.Data, &ej); err != nil {
 			return err
 		}
-		return send(c, ej)
+		return send(ctx, db, c, ej)
 	default:
 		return fmt.Errorf("unknown job type: %s", job.Type)
 	}
@@ -460,7 +472,7 @@ func main() {
 				log.Error().Err(err).Msg("unmarshal email job")
 				continue
 			}
-			if err := sendEmail(c, ej); err != nil {
+			if err := sendEmail(ctx, db, c, ej); err != nil {
 				log.Error().Err(err).Msg("send email")
 			}
 		case "export_tickets":
