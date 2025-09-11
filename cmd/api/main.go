@@ -54,10 +54,13 @@ import (
 	appevents "github.com/mark3748/helpdesk-go/cmd/api/events"
 	exportspkg "github.com/mark3748/helpdesk-go/cmd/api/exports"
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	kbpkg "github.com/mark3748/helpdesk-go/cmd/api/kb"
 	metricspkg "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 	problemspkg "github.com/mark3748/helpdesk-go/cmd/api/problems"
 	releasespkg "github.com/mark3748/helpdesk-go/cmd/api/releases"
 	roles "github.com/mark3748/helpdesk-go/cmd/api/roles"
+	slaspkg "github.com/mark3748/helpdesk-go/cmd/api/slas"
+	teamspkg "github.com/mark3748/helpdesk-go/cmd/api/teams"
 	ticketspkg "github.com/mark3748/helpdesk-go/cmd/api/tickets"
 	userspkg "github.com/mark3748/helpdesk-go/cmd/api/users"
 	watcherspkg "github.com/mark3748/helpdesk-go/cmd/api/watchers"
@@ -746,6 +749,8 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 		}
 	}
 
+	rg.POST("/webhooks/email-inbound", webhookspkg.EmailInbound(a.core()))
+
 	// Use an empty subpath to avoid introducing a double slash (e.g.,
 	// "/api//me"). The UI expects endpoints like "/api/me".
 	auth := rg.Group("")
@@ -777,6 +782,10 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/requesters/:id", a.getRequester)
 	auth.POST("/requesters", authpkg.RequireRole("agent", "manager"), a.createRequester)
 	auth.PATCH("/requesters/:id", authpkg.RequireRole("agent", "manager"), a.updateRequester)
+
+	auth.GET("/teams", teamspkg.List(a.core()))
+	auth.GET("/slas", slaspkg.List(a.core()))
+	auth.GET("/kb", kbpkg.Search(a.core()))
 
 	// Tickets
 	auth.GET("/tickets", ticketspkg.List(a.core()))

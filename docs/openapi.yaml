@@ -21,6 +21,10 @@ tags:
   - name: Exports
   - name: Events
   - name: Assets
+  - name: Teams
+  - name: SLAs
+  - name: KnowledgeBase
+  - name: Webhooks
 security:
   - bearerAuth: []
   - cookieAuth: []
@@ -448,14 +452,46 @@ components:
           anyOf:
             - $ref: '#/components/schemas/Asset'
             - type: "null"
-        assigned_user: 
+        assigned_user:
           anyOf:
             - $ref: '#/components/schemas/AssetUser'
             - type: "null"
-        assigned_by: 
+        assigned_by:
           anyOf:
             - $ref: '#/components/schemas/AssetUser'
             - type: "null"
+    Team:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+      required: [id, name]
+    SLA:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        priority: { type: integer }
+        response_target_mins: { type: integer }
+        resolution_target_mins: { type: integer }
+        update_cadence_mins:
+          type: [integer, "null"]
+      required: [id, name, priority, response_target_mins, resolution_target_mins]
+    KBArticle:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        title: { type: string }
+        body_md: { type: string }
+      required: [id, slug, title, body_md]
+    EmailInboundPayload:
+      type: object
+      properties:
+        raw_store_key: { type: string }
+        parsed_json: { type: object }
+        message_id: { type: string }
+      required: [raw_store_key, parsed_json]
 paths:
   # Asset Management Endpoints
   /asset-categories:
@@ -1740,4 +1776,73 @@ paths:
       security:
         - bearerAuth: []
         - cookieAuth: []
+
+  /teams:
+    get:
+      operationId: listTeams
+      tags: [Teams]
+      summary: List teams
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Team' }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /slas:
+    get:
+      operationId: listSLAs
+      tags: [SLAs]
+      summary: List SLA policies
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SLA' }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /kb:
+    get:
+      operationId: searchKB
+      tags: [KnowledgeBase]
+      summary: Search knowledge base articles
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/KBArticle' }
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+
+  /webhooks/email-inbound:
+    post:
+      operationId: emailInbound
+      tags: [Webhooks]
+      summary: Accept inbound email webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailInboundPayload' }
+      responses:
+        '202': { description: Accepted }
+      security: []
 
