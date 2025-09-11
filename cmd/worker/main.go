@@ -485,6 +485,14 @@ func main() {
 			}
 			if err := sendEmail(ctx, db, c, ej); err != nil {
 				log.Error().Err(err).Msg("send email")
+				if ej.Retries < 3 {
+					ej.Retries++
+					b, _ := json.Marshal(ej)
+					nb, _ := json.Marshal(Job{Type: "send_email", Data: b})
+					if err := rdb.RPush(ctx, "jobs", nb).Err(); err != nil {
+						log.Error().Err(err).Msg("requeue email job")
+					}
+				}
 			}
 		case "export_tickets":
 			var ej ExportTicketsJob
