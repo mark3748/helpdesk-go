@@ -694,7 +694,7 @@ func Update(a *app.App) gin.HandlerFunc {
 			if pause {
 				reason = normStatus
 			}
-			_, _ = a.DB.Exec(c.Request.Context(), `update ticket_sla_clocks set paused=$1, reason=$2, last_started_at=case when $1 then last_started_at else now() end where ticket_id=$3`, pause, reason, c.Param("id"))
+			_, _ = a.DB.Exec(c.Request.Context(), `update ticket_sla_clocks set paused=$1, reason=$2, last_started_at=case when paused and not $1 then now() else last_started_at end where ticket_id=$3`, pause, reason, c.Param("id"))
 		}
 		var t Ticket
 		var assignee *string
