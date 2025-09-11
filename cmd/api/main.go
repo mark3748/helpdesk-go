@@ -51,6 +51,7 @@ import (
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
 	changespkg "github.com/mark3748/helpdesk-go/cmd/api/changes"
 	commentspkg "github.com/mark3748/helpdesk-go/cmd/api/comments"
+	emailspkg "github.com/mark3748/helpdesk-go/cmd/api/emails"
 	appevents "github.com/mark3748/helpdesk-go/cmd/api/events"
 	exportspkg "github.com/mark3748/helpdesk-go/cmd/api/exports"
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
@@ -830,6 +831,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/tickets/:id/watchers", watcherspkg.List(a.core()))
 	auth.POST("/tickets/:id/watchers", watcherspkg.Add(a.core()))
 	auth.DELETE("/tickets/:id/watchers/:uid", watcherspkg.Remove(a.core()))
+	auth.GET("/emails/outbound", authpkg.RequireRole("admin"), emailspkg.ListOutbound(a.core()))
 	auth.GET("/metrics/sla", authpkg.RequireRole("agent"), metricspkg.SLA(a.core()))
 	auth.GET("/metrics/resolution", authpkg.RequireRole("agent"), metricspkg.Resolution(a.core()))
 	auth.GET("/metrics/tickets", authpkg.RequireRole("agent"), metricspkg.TicketVolume(a.core()))

@@ -179,6 +179,12 @@ func processIMAPMessage(ctx context.Context, c Config, db app.DB, store app.Obje
 		}
 	}
 	if created {
+		if rdb != nil {
+			ej := EmailJob{To: from, Template: "ticket_created", Data: map[string]any{"Number": ticketID}}
+			b, _ := json.Marshal(ej)
+			nb, _ := json.Marshal(Job{Type: "send_email", Data: b})
+			_ = rdb.RPush(ctx, "jobs", nb).Err()
+		}
 		ws.PublishEvent(ctx, rdb, ws.Event{Type: "ticket_created", Data: map[string]interface{}{"id": ticketID}})
 	} else {
 		ws.PublishEvent(ctx, rdb, ws.Event{Type: "ticket_updated", Data: map[string]interface{}{"id": ticketID}})

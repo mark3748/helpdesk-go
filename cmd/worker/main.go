@@ -103,6 +103,8 @@ type EmailJob struct {
 	To       string      `json:"to"`
 	Template string      `json:"template"`
 	Data     interface{} `json:"data"`
+	TicketID *string     `json:"ticket_id,omitempty"`
+	Retries  int         `json:"retries,omitempty"`
 }
 
 type ExportTicketsJob struct {
@@ -222,12 +224,12 @@ func sendEmail(ctx context.Context, db app.DB, c Config, j EmailJob) error {
 	if err := smtpSendMail(addr, auth, sanitizedFrom, []string{sanitizedTo}, msg.Bytes()); err != nil {
 		status = "failed"
 		if db != nil {
-			_, _ = db.Exec(ctx, `insert into email_outbound (to_addr, subject, body_html, status) values ($1,$2,$3,$4)`, sanitizedTo, sanitizedSubject, bodyBuf.String(), status)
+			_, _ = db.Exec(ctx, `insert into email_outbound (to_addr, subject, body_html, status, retries, ticket_id) values ($1,$2,$3,$4,$5,$6)`, sanitizedTo, sanitizedSubject, bodyBuf.String(), status, j.Retries, j.TicketID)
 		}
 		return err
 	}
 	if db != nil {
-		_, _ = db.Exec(ctx, `insert into email_outbound (to_addr, subject, body_html, status) values ($1,$2,$3,$4)`, sanitizedTo, sanitizedSubject, bodyBuf.String(), status)
+		_, _ = db.Exec(ctx, `insert into email_outbound (to_addr, subject, body_html, status, retries, ticket_id) values ($1,$2,$3,$4,$5,$6)`, sanitizedTo, sanitizedSubject, bodyBuf.String(), status, j.Retries, j.TicketID)
 	}
 	return nil
 }
@@ -248,7 +250,16 @@ func processQueueJob(ctx context.Context, db app.DB, c Config, rdb *redis.Client
 		if err := json.Unmarshal(job.Data, &ej); err != nil {
 			return err
 		}
-		return send(ctx, db, c, ej)
+		if err := send(ctx, db, c, ej); err != nil {
+			if rdb != nil && ej.Retries < 3 {
+				ej.Retries++
+				b, _ := json.Marshal(ej)
+				nb, _ := json.Marshal(Job{Type: "send_email", Data: b})
+				_ = rdb.RPush(ctx, "jobs", nb).Err()
+			}
+			return err
+		}
+		return nil
 	default:
 		return fmt.Errorf("unknown job type: %s", job.Type)
 	}
