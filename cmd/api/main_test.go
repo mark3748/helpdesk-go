@@ -19,13 +19,21 @@ import (
 	appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	ws "github.com/mark3748/helpdesk-go/cmd/api/ws"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/redis/go-redis/v9"
 )
+
+func newTestApp(cfg Config, db DB, store ObjectStore, rdb *redis.Client) *App {
+	hub := ws.NewHub(rdb)
+	go hub.Run(context.Background())
+	return NewApp(cfg, db, nil, store, rdb, hub)
+}
 
 func TestHealthz(t *testing.T) {
 	cfg := Config{Env: "test"}
-	app := NewApp(cfg, nil, nil, nil, nil)
+	app := newTestApp(cfg, nil, nil, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -45,7 +53,7 @@ func TestHealthz(t *testing.T) {
 
 func TestLivez(t *testing.T) {
 	cfg := Config{Env: "test"}
-	app := NewApp(cfg, nil, nil, nil, nil)
+	app := newTestApp(cfg, nil, nil, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/livez", nil)
@@ -58,7 +66,7 @@ func TestLivez(t *testing.T) {
 
 func TestSecurityHeaders(t *testing.T) {
 	cfg := Config{Env: "test", AllowedOrigins: []string{"http://allowed"}}
-	app := NewApp(cfg, nil, nil, nil, nil)
+	app := newTestApp(cfg, nil, nil, nil)
 
 	t.Run("allowed origin", func(t *testing.T) {
 		rr := httptest.NewRecorder()
@@ -110,7 +118,7 @@ func TestSecurityHeaders(t *testing.T) {
 
 func TestCORSPreflight(t *testing.T) {
 	cfg := Config{Env: "test", AllowedOrigins: []string{"http://allowed"}}
-	app := NewApp(cfg, nil, nil, nil, nil)
+	app := newTestApp(cfg, nil, nil, nil)
 
 	t.Run("preflight allowed", func(t *testing.T) {
 		rr := httptest.NewRecorder()
@@ -201,7 +209,7 @@ func setMail(ms map[string]string) {
 func TestReadyzFailures(t *testing.T) {
 	t.Run("db", func(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
-		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{err: errors.New("db")}, nil, nil, nil)
+		app := newTestApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{err: errors.New("db")}, nil, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
@@ -212,7 +220,7 @@ func TestReadyzFailures(t *testing.T) {
 
 	t.Run("object store", func(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
-		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, &appcore.FsObjectStore{Base: "/dev/null"}, nil)
+		app := newTestApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, &appcore.FsObjectStore{Base: "/dev/null"}, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
@@ -223,7 +231,7 @@ func TestReadyzFailures(t *testing.T) {
 
 	t.Run("smtp", func(t *testing.T) {
 		setMail(map[string]string{"host": "127.0.0.1", "port": "1"})
-		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil, nil)
+		app := newTestApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
@@ -234,7 +242,7 @@ func TestReadyzFailures(t *testing.T) {
 
 	t.Run("redis", func(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
-		app := NewApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil, nil)
+		app := newTestApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, nil, nil)
 		// Override pingRedis to simulate a failing Redis
 		app.pingRedis = func(ctx context.Context) error { return errors.New("redis down") }
 		rr := httptest.NewRecorder()
@@ -252,7 +260,7 @@ func TestReadyzFailures(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
 		dir := t.TempDir()
 		// Do not create bucket subdir; readyz should mkdir it and succeed
-		app := NewApp(Config{Env: "test", MinIOBucket: "attachments"}, readyzDB{}, nil, &appcore.FsObjectStore{Base: dir}, nil)
+		app := newTestApp(Config{Env: "test", MinIOBucket: "attachments"}, readyzDB{}, &appcore.FsObjectStore{Base: dir}, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
@@ -264,7 +272,7 @@ func TestReadyzFailures(t *testing.T) {
 
 func TestMe_BypassAuth(t *testing.T) {
 	cfg := Config{Env: "test", TestBypassAuth: true}
-	app := NewApp(cfg, nil, nil, nil, nil)
+	app := newTestApp(cfg, nil, nil, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
@@ -295,7 +303,7 @@ func TestMe_BypassAuth(t *testing.T) {
 
 func TestMe_NoBypass_NoJWKS(t *testing.T) {
 	cfg := Config{Env: "test", TestBypassAuth: false}
-	app := NewApp(cfg, nil, nil, nil, nil)
+	app := newTestApp(cfg, nil, nil, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
@@ -360,7 +368,7 @@ func TestEnqueueEmail_InfinityError(t *testing.T) {
 
 func TestCreateTicketValidationErrors(t *testing.T) {
 	cfg := Config{Env: "test", TestBypassAuth: true}
-	app := NewApp(cfg, nil, nil, nil, nil)
+	app := newTestApp(cfg, nil, nil, nil)
 
 	t.Run("invalid urgency", func(t *testing.T) {
 		rr := httptest.NewRecorder()
@@ -432,7 +440,7 @@ func (db *csatTestDB) Begin(ctx context.Context) (pgx.Tx, error) {
 func TestSubmitCSAT(t *testing.T) {
 	db := &csatTestDB{rows: 1}
 	cfg := Config{Env: "test"}
-	app := NewApp(cfg, db, nil, nil, nil)
+	app := newTestApp(cfg, db, nil, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/csat/token123", nil)
@@ -531,7 +539,7 @@ func TestListTickets(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			db := &recordDB{}
 			cfg := Config{Env: "test", TestBypassAuth: true}
-			app := NewApp(cfg, db, nil, nil, nil)
+			app := newTestApp(cfg, db, nil, nil)
 
 			rr := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
@@ -597,7 +605,7 @@ func TestGetAttachment_MinIOPresign(t *testing.T) {
 		t.Fatalf("minio new: %v", err)
 	}
 	cfg := Config{Env: "test", MinIOEndpoint: "localhost:9000", MinIOBucket: "bucket", TestBypassAuth: true}
-	app := NewApp(cfg, db, nil, mc, nil)
+	app := newTestApp(cfg, db, mc, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/1", nil)
@@ -617,7 +625,7 @@ func TestFinalizeAttachment_RejectsInvalidID(t *testing.T) {
 	store := newFakeObjectStore()
 	defer store.Close()
 	cfg := Config{Env: "test", TestBypassAuth: true, MinIOBucket: "bucket"}
-	app := NewApp(cfg, readyzDB{}, nil, store, nil)
+	app := newTestApp(cfg, readyzDB{}, store, nil)
 
 	// Finalize with a path-traversal style ID should be rejected before StatObject/DB
 	body := `{"attachment_id":"../../etc/passwd","filename":"x","bytes":5}`
@@ -663,7 +671,7 @@ func TestGetAttachment_FileStoreTraversalBlocked(t *testing.T) {
 	dir := t.TempDir()
 	// Configure file store path (no MinIO), and DB returns a traversal key
 	cfg := Config{Env: "test", TestBypassAuth: true, FileStorePath: dir, MinIOBucket: "attachments"}
-	app := NewApp(cfg, &traversalAttachmentDB{}, nil, &appcore.FsObjectStore{Base: dir}, nil)
+	app := newTestApp(cfg, &traversalAttachmentDB{}, &appcore.FsObjectStore{Base: dir}, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/att", nil)
@@ -695,14 +703,14 @@ func (db *statusDB) Begin(ctx context.Context) (pgx.Tx, error) {
 
 func TestAddStatusHistory_Invalid(t *testing.T) {
 	db := &statusDB{}
-	app := NewApp(Config{Env: "test"}, db, nil, nil, nil)
+	app := newTestApp(Config{Env: "test"}, db, nil, nil)
 	ctx := context.Background()
 	app.addStatusHistory(ctx, "1", "Open", "Bogus", "u1")
 	if db.called {
 		t.Fatalf("expected no insert for invalid status")
 	}
 	db2 := &statusDB{}
-	app2 := NewApp(Config{Env: "test"}, db2, nil, nil, nil)
+	app2 := newTestApp(Config{Env: "test"}, db2, nil, nil)
 	app2.addStatusHistory(ctx, "1", "Open", "Resolved", "u1")
 	if !db2.called {
 		t.Fatalf("expected insert for valid status")
@@ -711,7 +719,7 @@ func TestAddStatusHistory_Invalid(t *testing.T) {
 
 func TestCreateTicketInvalidEnums(t *testing.T) {
 	cfg := Config{Env: "test", TestBypassAuth: true}
-	app := NewApp(cfg, nil, nil, nil, nil)
+	app := newTestApp(cfg, nil, nil, nil)
 
 	t.Run("priority", func(t *testing.T) {
 		rr := httptest.NewRecorder()
@@ -738,7 +746,7 @@ func TestCreateTicketInvalidEnums(t *testing.T) {
 
 func TestUpdateTicketInvalidEnums(t *testing.T) {
 	cfg := Config{Env: "test", TestBypassAuth: true}
-	app := NewApp(cfg, nil, nil, nil, nil)
+	app := newTestApp(cfg, nil, nil, nil)
 
 	t.Run("priority", func(t *testing.T) {
 		rr := httptest.NewRecorder()
@@ -798,7 +806,7 @@ func (db *updateCaptureDB) Begin(ctx context.Context) (pgx.Tx, error) {
 
 func TestUpdateTicket_LowercaseStatus_Normalized(t *testing.T) {
 	db := &updateCaptureDB{}
-	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	app := newTestApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPatch, "/tickets/1", strings.NewReader(`{"status":"open"}`))
@@ -873,7 +881,7 @@ func (db *eventCaptureDB) Begin(ctx context.Context) (pgx.Tx, error) {
 
 func TestCreateTicket_EventRecorded(t *testing.T) {
 	db := &eventCaptureDB{}
-	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	app := newTestApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil)
 
 	body := `{"title":"foo","requester_id":"u1","priority":1}`
 	rr := httptest.NewRecorder()
@@ -898,7 +906,7 @@ func TestCreateTicket_EventRecorded(t *testing.T) {
 
 func TestAddWatcher_EventRecorded(t *testing.T) {
 	db := &eventCaptureDB{}
-	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	app := newTestApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil)
 
 	rr := httptest.NewRecorder()
 	body := `{"user_id":"u2"}`
@@ -981,7 +989,7 @@ func (db *requesterDB) Begin(ctx context.Context) (pgx.Tx, error) {
 
 func TestCreateRequester(t *testing.T) {
 	db := &requesterDB{}
-	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	app := newTestApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil)
 
 	rr := httptest.NewRecorder()
 	body := `{"email":"u@example.com","display_name":"User"}`
@@ -1006,7 +1014,7 @@ func TestCreateRequester(t *testing.T) {
 
 func TestGetRequester(t *testing.T) {
 	db := &requesterDB{}
-	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	app := newTestApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/requesters/req-1", nil)
@@ -1019,7 +1027,7 @@ func TestGetRequester(t *testing.T) {
 
 func TestUpdateRequester(t *testing.T) {
 	db := &requesterDB{}
-	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	app := newTestApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil)
 
 	rr := httptest.NewRecorder()
 	body := `{"email":"new@example.com","display_name":"New Name"}`
@@ -1056,7 +1064,7 @@ func (db *nonRequesterDB) Begin(ctx context.Context) (pgx.Tx, error) {
 
 func TestUpdateRequester_OnlyRequesterRole(t *testing.T) {
 	db := &nonRequesterDB{}
-	app := NewApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil, nil)
+	app := newTestApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil)
 
 	rr := httptest.NewRecorder()
 	body := `{"email":"new@example.com","display_name":"New Name"}`

@@ -15,6 +15,7 @@ import (
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	ws "github.com/mark3748/helpdesk-go/cmd/api/ws"
 	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 )
@@ -124,7 +125,8 @@ func TestExportTickets(t *testing.T) {
 
 	db := &exportDB{tickets: []ticket{{ID: "1", Number: "TKT-1", Title: "First", Status: "Open", Priority: 1}}, count: 1}
 	cfg := Config{Env: "test", TestBypassAuth: true, MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
-	app := NewApp(cfg, db, nil, store, nil)
+	hub := ws.NewHub(nil)
+	app := NewApp(cfg, db, nil, store, nil, hub)
 
 	body := strings.NewReader(`{"ids":["1"]}`)
 	rr := httptest.NewRecorder()
@@ -164,7 +166,9 @@ func TestExportTicketsAsync(t *testing.T) {
 
 	db := &exportDB{count: exportSyncLimit + 1}
 	cfg := Config{Env: "test", TestBypassAuth: true, MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
-	app := NewApp(cfg, db, nil, store, rdb)
+	hub2 := ws.NewHub(rdb)
+	go hub2.Run(context.Background())
+	app := NewApp(cfg, db, nil, store, rdb, hub2)
 
 	body := strings.NewReader(`{"ids":["1","2"]}`)
 	rr := httptest.NewRecorder()
