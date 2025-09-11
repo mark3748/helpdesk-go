@@ -98,7 +98,21 @@ var swaggerHTML = `<!DOCTYPE html>
 </html>`
 
 var (
-	statusEnum   = []string{"New", "Open", "Pending", "Resolved", "Closed"}
+	statusEnum = []string{
+		"New",
+		"Open",
+		"Assigned",
+		"Accepted",
+		"In Progress",
+		"Scheduled",
+		"Pending",
+		"Pending - Awaiting Info",
+		"Pending - Awaiting Callback",
+		"Pending - Awaiting Parts",
+		"Pending - Awaiting Approval",
+		"Resolved",
+		"Closed",
+	}
 	sourceEnum   = []string{"web", "email"}
 	priorityEnum = []int16{1, 2, 3, 4}
 )
