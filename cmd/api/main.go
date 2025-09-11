@@ -48,11 +48,14 @@ import (
 	assetspkg "github.com/mark3748/helpdesk-go/cmd/api/assets"
 	attachmentspkg "github.com/mark3748/helpdesk-go/cmd/api/attachments"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	changespkg "github.com/mark3748/helpdesk-go/cmd/api/changes"
 	commentspkg "github.com/mark3748/helpdesk-go/cmd/api/comments"
 	appevents "github.com/mark3748/helpdesk-go/cmd/api/events"
 	exportspkg "github.com/mark3748/helpdesk-go/cmd/api/exports"
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 	metricspkg "github.com/mark3748/helpdesk-go/cmd/api/metrics"
+	problemspkg "github.com/mark3748/helpdesk-go/cmd/api/problems"
+	releasespkg "github.com/mark3748/helpdesk-go/cmd/api/releases"
 	roles "github.com/mark3748/helpdesk-go/cmd/api/roles"
 	ticketspkg "github.com/mark3748/helpdesk-go/cmd/api/tickets"
 	userspkg "github.com/mark3748/helpdesk-go/cmd/api/users"
@@ -854,6 +857,27 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	// Audit & History
 	auth.GET("/assets/:id/audit", assetspkg.GetAuditHistory(a.core()))
 	auth.GET("/assets/audit/summary", authpkg.RequireRole("admin", "manager"), assetspkg.GetAuditSummary(a.core()))
+
+	// Problems
+	auth.GET("/problems", problemspkg.List(a.core()))
+	auth.POST("/problems", problemspkg.Create(a.core()))
+	auth.GET("/problems/:id", problemspkg.Get(a.core()))
+	auth.PUT("/problems/:id", problemspkg.Update(a.core()))
+	auth.DELETE("/problems/:id", problemspkg.Delete(a.core()))
+
+	// Change Requests
+	auth.GET("/changes", changespkg.List(a.core()))
+	auth.POST("/changes", changespkg.Create(a.core()))
+	auth.GET("/changes/:id", changespkg.Get(a.core()))
+	auth.PUT("/changes/:id", changespkg.Update(a.core()))
+	auth.DELETE("/changes/:id", changespkg.Delete(a.core()))
+
+	// Releases
+	auth.GET("/releases", releasespkg.List(a.core()))
+	auth.POST("/releases", releasespkg.Create(a.core()))
+	auth.GET("/releases/:id", releasespkg.Get(a.core()))
+	auth.PUT("/releases/:id", releasespkg.Update(a.core()))
+	auth.DELETE("/releases/:id", releasespkg.Delete(a.core()))
 }
 
 func (a *App) docsUI(c *gin.Context) {
