@@ -30,7 +30,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
-	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	ws "github.com/mark3748/helpdesk-go/cmd/api/ws"
 	"github.com/mark3748/helpdesk-go/internal/sla"
 )
 
@@ -459,7 +459,7 @@ func main() {
 			continue
 		}
 		size, _ := rdb.LLen(ctx, "jobs").Result()
-		handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
+		ws.PublishEvent(ctx, rdb, ws.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
 		var job Job
 		if err := json.Unmarshal([]byte(res[1]), &job); err != nil {
 			log.Error().Err(err).Msg("unmarshal job")

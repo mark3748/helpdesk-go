@@ -19,7 +19,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
-	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
+	ws "github.com/mark3748/helpdesk-go/cmd/api/ws"
 )
 
 type imapClient interface {
@@ -179,9 +179,9 @@ func processIMAPMessage(ctx context.Context, c Config, db app.DB, store app.Obje
 		}
 	}
 	if created {
-		handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "ticket_created", Data: map[string]interface{}{"id": ticketID}})
+		ws.PublishEvent(ctx, rdb, ws.Event{Type: "ticket_created", Data: map[string]interface{}{"id": ticketID}})
 	} else {
-		handlers.PublishEvent(ctx, rdb, handlers.Event{Type: "ticket_updated", Data: map[string]interface{}{"id": ticketID}})
+		ws.PublishEvent(ctx, rdb, ws.Event{Type: "ticket_updated", Data: map[string]interface{}{"id": ticketID}})
 	}
 
 	var attMeta []map[string]interface{}

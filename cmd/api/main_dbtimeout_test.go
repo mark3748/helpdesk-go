@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	ws "github.com/mark3748/helpdesk-go/cmd/api/ws"
 )
 
 // slowDB simulates a DB that blocks longer than the configured timeout.
@@ -70,7 +71,8 @@ func TestDBTimeout_Readyz(t *testing.T) {
 	t.Setenv("ENV", "test")
 	// Tight DB timeout to force cancellation
 	t.Setenv("DB_TIMEOUT_MS", "5")
-	app := NewApp(getConfig(), slowDB{d: 50 * time.Millisecond}, nil, nil, nil)
+	hub := ws.NewHub(nil)
+	app := NewApp(getConfig(), slowDB{d: 50 * time.Millisecond}, nil, nil, nil, hub)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
@@ -92,7 +94,8 @@ func TestDBTimeout_Readyz_Disabled(t *testing.T) {
 	t.Setenv("DB_TIMEOUT_MS", "0")
 	// Ensure mail checks do not trigger external dials in tests
 	setMail(map[string]string{"host": "", "port": ""})
-	app := NewApp(getConfig(), readyzDB{}, nil, nil, nil)
+	hub2 := ws.NewHub(nil)
+	app := NewApp(getConfig(), readyzDB{}, nil, nil, nil, hub2)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)

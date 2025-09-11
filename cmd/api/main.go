@@ -32,6 +32,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	ws "github.com/mark3748/helpdesk-go/cmd/api/ws"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/pressly/goose/v3"
@@ -259,6 +260,7 @@ type App struct {
 	keyf jwt.Keyfunc
 	m    ObjectStore
 	q    *redis.Client
+	ws   *ws.Hub
 	// pingRedis allows overriding Redis health check in tests
 	pingRedis func(ctx context.Context) error
 	loginRL   *rateln.Limiter
@@ -366,11 +368,11 @@ func (s settingsDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.C
 }
 
 // NewApp constructs an App with injected dependencies and registers routes.
-func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client) *App {
+func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Client, hub *ws.Hub) *App {
 	if db != nil && cfg.DBTimeoutMS > 0 {
 		db = &dbWithTimeout{inner: db, timeout: time.Duration(cfg.DBTimeoutMS) * time.Millisecond}
 	}
-	a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q}
+	a := &App{cfg: cfg, db: db, r: gin.New(), keyf: keyf, m: store, q: q, ws: hub}
 	if q != nil {
 		a.pingRedis = func(ctx context.Context) error { return q.Ping(ctx).Err() }
 		if cfg.LoginRateLimit > 0 {
@@ -633,6 +635,9 @@ func main() {
 		defer rdb.Close()
 	}
 
+	hub := ws.NewHub(rdb)
+	go hub.Run(ctx)
+
 	var store ObjectStore
 	if mc != nil {
 		store = mc
@@ -667,7 +672,7 @@ func main() {
 		}
 	}
 
-	a := NewApp(cfg, pool, keyf, store, rdb)
+	a := NewApp(cfg, pool, keyf, store, rdb, hub)
 	// Wire JWKS health flags if JWKS was configured above
 	if cfg.JWKSURL != "" {
 		a.jwksConfigured = true
@@ -736,7 +741,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/me/profile", a.getMyProfile)
 	auth.PATCH("/me/profile", a.updateMyProfile)
 	auth.POST("/me/password", a.changeMyPassword)
-	auth.GET("/events", handlers.Events(a.q))
+	auth.GET("/events", handlers.Events(a.ws))
 
 	auth.GET("/settings", authpkg.RequireRole("admin"), handlers.GetSettings)
 	auth.GET("/features", handlers.Features(a.core()))
@@ -1379,7 +1384,7 @@ func (a *App) exportTicketsBridge(c *gin.Context) {
 		jb, _ := json.Marshal(job)
 		_ = a.q.RPush(c.Request.Context(), "jobs", jb).Err()
 		size, _ := a.q.LLen(c.Request.Context(), "jobs").Result()
-		handlers.PublishEvent(c.Request.Context(), a.q, handlers.Event{Type: "queue_changed", Data: map[string]any{"size": size}})
+		ws.PublishEvent(c.Request.Context(), a.q, ws.Event{Type: "queue_changed", Data: map[string]any{"size": size}})
 		c.JSON(202, gin.H{"job_id": jobID})
 		return
 	}
@@ -1497,7 +1502,7 @@ type createTicketReq struct {
 	if requesterEmail != "" {
 		a.enqueueEmail(ctx, requesterEmail, "ticket_created", gin.H{"Number": number})
 	}
-	handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "ticket_created", Data: map[string]interface{}{"id": id}})
+   ws.PublishEvent(ctx, a.q, ws.Event{Type: "ticket_created", Data: map[string]interface{}{"id": id}})
 	c.JSON(201, gin.H{"id": id, "number": number, "status": status})
 } */
 
@@ -1576,7 +1581,7 @@ func (a *App) enqueueEmail(ctx context.Context, to, template string, data interf
 		log.Error().Err(err).Msg("enqueue job")
 	}
 	size, _ := a.q.LLen(rc, "jobs").Result()
-	handlers.PublishEvent(rc, a.q, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
+	ws.PublishEvent(rc, a.q, ws.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
 }
 
 func (a *App) addStatusHistory(ctx context.Context, ticketID, from, to, actorID string) {
@@ -1835,7 +1840,7 @@ type patchTicketReq struct {
 			a.enqueueEmail(ctx, requesterEmail, "ticket_updated", gin.H{"Number": number})
 		}
 	}
-	handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "ticket_updated", Data: map[string]interface{}{"id": id}})
+   ws.PublishEvent(ctx, a.q, ws.Event{Type: "ticket_updated", Data: map[string]interface{}{"id": id}})
 	c.JSON(200, gin.H{"ok": true})
 } */
 
@@ -2437,7 +2442,7 @@ type exportTicketsReq struct {
 			return
 		}
 		size, _ := a.q.LLen(ctx, "jobs").Result()
-		handlers.PublishEvent(ctx, a.q, handlers.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
+           ws.PublishEvent(ctx, a.q, ws.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
 		c.JSON(202, gin.H{"job_id": jobID})
 		return
 	}

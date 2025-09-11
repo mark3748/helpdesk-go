@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	ws "github.com/mark3748/helpdesk-go/cmd/api/ws"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,7 +14,8 @@ func TestReadyz_RedisTimeoutSoftFail(t *testing.T) {
 	t.Setenv("ENV", "test")
 	t.Setenv("DB_TIMEOUT_MS", "0")
 	t.Setenv("REDIS_TIMEOUT_MS", "20")
-	app := NewApp(getConfig(), readyzDB{}, nil, nil, nil)
+	hub := ws.NewHub(nil)
+	app := NewApp(getConfig(), readyzDB{}, nil, nil, nil, hub)
 	// Override pingRedis to simulate a slow Redis.
 	app.pingRedis = func(ctx context.Context) error {
 		// Sleep longer than REDIS_TIMEOUT_MS so the derived context cancels first.
