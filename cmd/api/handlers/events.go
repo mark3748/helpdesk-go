@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -29,10 +30,14 @@ func Events(h *ws.Hub) gin.HandlerFunc {
 		if err != nil {
 			return
 		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+
 		client := ws.NewClient(h, conn, hasRole(user.GetRoles(), "admin"))
 		h.Register(client)
-		go client.WritePump(c.Request.Context())
-		go client.ReadPump()
+		go client.WritePump(ctx)
+		client.ReadPump()
+		cancel()
 	}
 }
 
