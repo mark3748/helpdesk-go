@@ -488,17 +488,17 @@ func main() {
 	}
 }
 
-func updateSLAClocks(ctx context.Context, db *pgxpool.Pool) error {
+func updateSLAClocks(ctx context.Context, db app.DB) error {
 	rows, err := db.Query(ctx, `
-       select t.id, coalesce(tm.calendar_id, r.calendar_id), sc.response_elapsed_ms,
-              sc.resolution_elapsed_ms, sc.last_started_at,
-              sp.response_target_mins, sp.resolution_target_mins
-       from ticket_sla_clocks sc
-       join tickets t on t.id = sc.ticket_id
-       left join teams tm on t.team_id = tm.id
-       left join regions r on tm.region_id = r.id
-       join sla_policies sp on sp.id = sc.policy_id
-       where not sc.paused and sc.last_started_at is not null`)
+      select t.id, coalesce(tm.calendar_id, r.calendar_id), sc.response_elapsed_ms,
+             sc.resolution_elapsed_ms, sc.last_started_at, sc.paused,
+             sp.response_target_mins, sp.resolution_target_mins
+      from ticket_sla_clocks sc
+      join tickets t on t.id = sc.ticket_id
+      left join teams tm on t.team_id = tm.id
+      left join regions r on tm.region_id = r.id
+      join sla_policies sp on sp.id = sc.policy_id
+      where sc.last_started_at is not null`)
 	if err != nil {
 		return err
 	}
@@ -509,9 +509,13 @@ func updateSLAClocks(ctx context.Context, db *pgxpool.Pool) error {
 		var ticketID, calID string
 		var respMS, resMS int64
 		var lastStarted time.Time
+		var paused bool
 		var respTarget, resTarget int
-		if err := rows.Scan(&ticketID, &calID, &respMS, &resMS, &lastStarted, &respTarget, &resTarget); err != nil {
+		if err := rows.Scan(&ticketID, &calID, &respMS, &resMS, &lastStarted, &paused, &respTarget, &resTarget); err != nil {
 			log.Error().Err(err).Msg("failed to scan row in updateSLAClocks")
+			continue
+		}
+		if paused {
 			continue
 		}
 		if calID == "" {

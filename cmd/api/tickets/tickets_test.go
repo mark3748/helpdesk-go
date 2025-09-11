@@ -102,6 +102,83 @@ func TestTicketCounters(t *testing.T) {
 	}
 }
 
+type updateRow struct{ Ticket }
+
+func (r *updateRow) Scan(dest ...any) error {
+	*(dest[0].(*string)) = r.ID
+	*(dest[1].(*any)) = r.Number
+	*(dest[2].(*string)) = r.Title
+	*(dest[3].(*string)) = r.Status
+	*(dest[4].(**string)) = r.AssigneeID
+	*(dest[5].(*int16)) = r.Priority
+	return nil
+}
+
+type updateDB struct {
+	execSQL  []string
+	execArgs [][]any
+}
+
+func (db *updateDB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return nil, nil
+}
+func (db *updateDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	db.execSQL = append(db.execSQL, sql)
+	db.execArgs = append(db.execArgs, args)
+	return pgconn.CommandTag{}, nil
+}
+func (db *updateDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	assignee := "a1"
+	t := Ticket{ID: "1", Title: "t", Status: "Open", Priority: 1, AssigneeID: &assignee}
+	return &updateRow{t}
+}
+func (db *updateDB) Begin(ctx context.Context) (pgx.Tx, error) { return nil, nil }
+
+func TestUpdateSLAPauseResume(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := apppkg.Config{Env: "test", TestBypassAuth: true}
+
+	cases := []struct {
+		name   string
+		status string
+		pause  bool
+		reason interface{}
+	}{
+		{"pause", "Scheduled", true, "Scheduled"},
+		{"resume", "Assigned", false, nil},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			db := &updateDB{}
+			a := apppkg.NewApp(cfg, db, nil, nil, nil)
+			a.R.PUT("/tickets/:id", authpkg.Middleware(a), Update(a))
+			rr := httptest.NewRecorder()
+			body := fmt.Sprintf(`{"status":"%s"}`, tt.status)
+			req := httptest.NewRequest(http.MethodPut, "/tickets/1", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			a.R.ServeHTTP(rr, req)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", rr.Code)
+			}
+			if len(db.execSQL) < 2 {
+				t.Fatalf("expected sla update exec")
+			}
+			sql := db.execSQL[1]
+			if !strings.Contains(sql, "ticket_sla_clocks") {
+				t.Fatalf("expected sla update, got %s", sql)
+			}
+			args := db.execArgs[1]
+			if args[0] != tt.pause {
+				t.Fatalf("pause arg = %v, want %v", args[0], tt.pause)
+			}
+			if args[1] != tt.reason {
+				t.Fatalf("reason arg = %v, want %v", args[1], tt.reason)
+			}
+		})
+	}
+}
+
 type listRow struct {
 	Ticket
 	Updated time.Time

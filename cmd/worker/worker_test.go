@@ -6,6 +6,7 @@ import (
 	"net/smtp"
 	"strings"
 	"testing"
+	"time"
 
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5"
@@ -95,3 +96,129 @@ func (f *execDB) Begin(ctx context.Context) (pgx.Tx, error) { return nil, nil }
 type execRow struct{}
 
 func (execRow) Scan(dest ...any) error { return pgx.ErrNoRows }
+
+// ==== SLA clock tests ====
+
+type slaRow struct {
+	ticketID   string
+	calID      string
+	respMS     int64
+	resMS      int64
+	lastStart  time.Time
+	paused     bool
+	respTarget int
+	resTarget  int
+}
+
+type slaRows struct {
+	data []slaRow
+	i    int
+}
+
+func (r *slaRows) Close()                                       {}
+func (r *slaRows) Err() error                                   { return nil }
+func (r *slaRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
+func (r *slaRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
+func (r *slaRows) Next() bool                                   { return r.i < len(r.data) }
+func (r *slaRows) Values() ([]any, error)                       { return nil, nil }
+func (r *slaRows) RawValues() [][]byte                          { return nil }
+func (r *slaRows) Conn() *pgx.Conn                              { return nil }
+func (r *slaRows) Scan(dest ...any) error {
+	row := r.data[r.i]
+	r.i++
+	*(dest[0].(*string)) = row.ticketID
+	*(dest[1].(*string)) = row.calID
+	*(dest[2].(*int64)) = row.respMS
+	*(dest[3].(*int64)) = row.resMS
+	*(dest[4].(*time.Time)) = row.lastStart
+	*(dest[5].(*bool)) = row.paused
+	*(dest[6].(*int)) = row.respTarget
+	*(dest[7].(*int)) = row.resTarget
+	return nil
+}
+
+type rowFunc func(dest ...any) error
+
+type slaFakeRow struct{ f rowFunc }
+
+func (r slaFakeRow) Scan(dest ...any) error { return r.f(dest...) }
+
+type slaFakeRows struct {
+	data [][]any
+	i    int
+}
+
+func (r *slaFakeRows) Close()                                       {}
+func (r *slaFakeRows) Err() error                                   { return nil }
+func (r *slaFakeRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
+func (r *slaFakeRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
+func (r *slaFakeRows) Next() bool                                   { return r.i < len(r.data) }
+func (r *slaFakeRows) Values() ([]any, error)                       { return nil, nil }
+func (r *slaFakeRows) RawValues() [][]byte                          { return nil }
+func (r *slaFakeRows) Conn() *pgx.Conn                              { return nil }
+func (r *slaFakeRows) Scan(dest ...any) error {
+	row := r.data[r.i]
+	r.i++
+	for i := range dest {
+		switch d := dest[i].(type) {
+		case *int:
+			*d = row[i].(int)
+		case *time.Time:
+			*d = row[i].(time.Time)
+		}
+	}
+	return nil
+}
+
+type slaDB struct {
+	rows      []slaRow
+	execCount int
+}
+
+func (db *slaDB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	switch {
+	case strings.Contains(sql, "ticket_sla_clocks"):
+		return &slaRows{data: db.rows}, nil
+	case strings.Contains(sql, "business_hours"):
+		bh := [][]any{}
+		for d := 0; d < 7; d++ {
+			bh = append(bh, []any{d, 0, 86400})
+		}
+		return &slaFakeRows{data: bh}, nil
+	case strings.Contains(sql, "holidays"):
+		return &slaFakeRows{}, nil
+	default:
+		return &slaFakeRows{}, nil
+	}
+}
+
+func (db *slaDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	if strings.Contains(sql, "select tz from calendars") {
+		return slaFakeRow{f: func(dest ...any) error {
+			*(dest[0].(*string)) = "UTC"
+			return nil
+		}}
+	}
+	return slaFakeRow{f: func(dest ...any) error { return nil }}
+}
+
+func (db *slaDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	db.execCount++
+	return pgconn.CommandTag{}, nil
+}
+
+func (db *slaDB) Begin(ctx context.Context) (pgx.Tx, error) { return nil, nil }
+
+func TestUpdateSLAClocksPaused(t *testing.T) {
+	now := time.Now().Add(-time.Minute)
+	db := &slaDB{rows: []slaRow{
+		{ticketID: "t1", calID: "cal1", lastStart: now, paused: true},
+		{ticketID: "t2", calID: "cal1", lastStart: now, paused: false},
+	}}
+	if err := updateSLAClocks(context.Background(), db); err != nil {
+		t.Fatalf("updateSLAClocks: %v", err)
+	}
+	if db.execCount != 1 {
+		t.Fatalf("expected 1 exec, got %d", db.execCount)
+	}
+}

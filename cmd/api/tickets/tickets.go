@@ -626,27 +626,41 @@ func Update(a *app.App) gin.HandlerFunc {
 			args = append(args, *in.Priority)
 			idx++
 		}
+		var normStatus string
 		if in.Status != nil {
 			// Normalize and validate status
-			raw := strings.TrimSpace(*in.Status)
-			norm := raw
-			switch strings.ToLower(raw) {
-			case "new":
-				norm = "New"
-			case "open":
-				norm = "Open"
-			case "pending":
-				norm = "Pending"
-			case "resolved":
-				norm = "Resolved"
-			case "closed":
-				norm = "Closed"
-			default:
+			raw := strings.TrimSpace(strings.ToLower(*in.Status))
+			statusMap := map[string]string{
+				"new":                         "New",
+				"open":                        "Open",
+				"assigned":                    "Assigned",
+				"accepted":                    "Accepted",
+				"in progress":                 "In Progress",
+				"in_progress":                 "In Progress",
+				"scheduled":                   "Scheduled",
+				"pending":                     "Pending",
+				"pending - awaiting info":     "Pending - Awaiting Info",
+				"pending awaiting info":       "Pending - Awaiting Info",
+				"pending_awaiting_info":       "Pending - Awaiting Info",
+				"pending - awaiting callback": "Pending - Awaiting Callback",
+				"pending awaiting callback":   "Pending - Awaiting Callback",
+				"pending_awaiting_callback":   "Pending - Awaiting Callback",
+				"pending - awaiting parts":    "Pending - Awaiting Parts",
+				"pending awaiting parts":      "Pending - Awaiting Parts",
+				"pending_awaiting_parts":      "Pending - Awaiting Parts",
+				"pending - awaiting approval": "Pending - Awaiting Approval",
+				"pending awaiting approval":   "Pending - Awaiting Approval",
+				"pending_awaiting_approval":   "Pending - Awaiting Approval",
+				"resolved":                    "Resolved",
+				"closed":                      "Closed",
+			}
+			var ok bool
+			if normStatus, ok = statusMap[raw]; !ok {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
 				return
 			}
 			set = append(set, fmt.Sprintf("status=$%d", idx))
-			args = append(args, norm)
+			args = append(args, normStatus)
 			idx++
 		}
 		if len(set) == 0 {
@@ -666,6 +680,22 @@ func Update(a *app.App) gin.HandlerFunc {
 		sql := fmt.Sprintf("update tickets set %s, updated_at=now() where id=$%d returning id::text, number, title, status, assignee_id::text, priority", strings.Join(set, ","), idx)
 		// For test expectations, issue an Exec before QueryRow so tests can capture args
 		_, _ = a.DB.Exec(c.Request.Context(), "update tickets set "+strings.Join(set, ", ")+" where id=$"+strconv.Itoa(idx), args...)
+		if normStatus != "" {
+			pausedStates := map[string]bool{
+				"Scheduled":                   true,
+				"Pending":                     true,
+				"Pending - Awaiting Info":     true,
+				"Pending - Awaiting Callback": true,
+				"Pending - Awaiting Parts":    true,
+				"Pending - Awaiting Approval": true,
+			}
+			pause := pausedStates[normStatus]
+			var reason interface{}
+			if pause {
+				reason = normStatus
+			}
+			_, _ = a.DB.Exec(c.Request.Context(), `update ticket_sla_clocks set paused=$1, reason=$2, last_started_at=case when $1 then last_started_at else now() end where ticket_id=$3`, pause, reason, c.Param("id"))
+		}
 		var t Ticket
 		var assignee *string
 		var number any
