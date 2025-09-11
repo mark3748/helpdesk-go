@@ -49,6 +49,9 @@ func TestSendEmail(t *testing.T) {
 	if db.lastSQL == "" || !strings.Contains(strings.ToLower(db.lastSQL), "email_outbound") {
 		t.Fatalf("expected insert into email_outbound, got %q", db.lastSQL)
 	}
+	if len(db.lastArgs) != 6 || db.lastArgs[4].(int) != 0 {
+		t.Fatalf("expected retries recorded, got %v", db.lastArgs)
+	}
 }
 
 func TestProcessQueueJob(t *testing.T) {

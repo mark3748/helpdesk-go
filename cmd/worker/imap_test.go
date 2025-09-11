@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/emersion/go-imap"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -128,6 +129,22 @@ func TestProcessIMAPMessage_Duplicate(t *testing.T) {
 	}
 	if len(store.objects) != 0 {
 		t.Fatalf("expected no stored objects, got %d", len(store.objects))
+	}
+}
+
+func TestProcessIMAPMessage_EnqueueAck(t *testing.T) {
+	db := newFakeDB()
+	store := newFakeStore()
+	mr, _ := miniredis.Run()
+	defer mr.Close()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	c := Config{MinIOBucket: "bkt"}
+	if err := processIMAPMessage(context.Background(), c, db, store, rdb, []byte(sampleEmail)); err != nil {
+		t.Fatalf("processIMAPMessage: %v", err)
+	}
+	res, err := rdb.LLen(context.Background(), "jobs").Result()
+	if err != nil || res != 1 {
+		t.Fatalf("expected 1 job enqueued, got %d err %v", res, err)
 	}
 }
 
