@@ -1123,6 +1123,22 @@ export interface paths {
     /** Check export job status */
     get: operations["getExportJobStatus"];
   };
+  "/teams": {
+    /** List teams */
+    get: operations["listTeams"];
+  };
+  "/slas": {
+    /** List SLA policies */
+    get: operations["listSLAs"];
+  };
+  "/kb": {
+    /** Search knowledge base articles */
+    get: operations["searchKB"];
+  };
+  "/webhooks/email-inbound": {
+    /** Accept inbound email webhook */
+    post: operations["emailInbound"];
+  };
 }
 
 export type webhooks = Record<string, never>;
@@ -1386,6 +1402,7 @@ export interface components {
       location?: string;
       custom_fields?: Record<string, never>;
     };
+    notes: string;
     AssignAssetRequest: {
       /** Format: uuid */
       assigned_to_user_id?: string | null;
@@ -1474,6 +1491,32 @@ export interface components {
       asset?: components["schemas"]["Asset"] | null;
       assigned_user?: components["schemas"]["AssetUser"] | null;
       assigned_by?: components["schemas"]["AssetUser"] | null;
+    };
+    Team: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    SLA: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      priority: number;
+      response_target_mins: number;
+      resolution_target_mins: number;
+      update_cadence_mins?: number | null;
+    };
+    KBArticle: {
+      /** Format: uuid */
+      id: string;
+      slug: string;
+      title: string;
+      body_md: string;
+    };
+    EmailInboundPayload: {
+      raw_store_key: string;
+      parsed_json: Record<string, never>;
+      message_id?: string;
     };
   };
   responses: never;
@@ -1933,6 +1976,58 @@ export interface operations {
       };
       /** @description Server Error */
       500: {
+        content: never;
+      };
+    };
+  };
+  /** List teams */
+  listTeams: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": components["schemas"]["Team"][];
+        };
+      };
+    };
+  };
+  /** List SLA policies */
+  listSLAs: {
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": components["schemas"]["SLA"][];
+        };
+      };
+    };
+  };
+  /** Search knowledge base articles */
+  searchKB: {
+    parameters: {
+      query?: {
+        q?: string;
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        content: {
+          "application/json": components["schemas"]["KBArticle"][];
+        };
+      };
+    };
+  };
+  /** Accept inbound email webhook */
+  emailInbound: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["EmailInboundPayload"];
+      };
+    };
+    responses: {
+      /** @description Accepted */
+      202: {
         content: never;
       };
     };
