@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/smtp"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -35,25 +36,28 @@ import (
 )
 
 type Config struct {
-	DatabaseURL   string
-	RedisAddr     string
-	Env           string
-	HealthAddr    string
-	SMTPHost      string
-	SMTPPort      string
-	SMTPUser      string
-	SMTPPass      string
-	SMTPFrom      string
-	IMAPHost      string
-	IMAPUser      string
-	IMAPPass      string
-	IMAPFolder    string
-	MinIOEndpoint string
-	MinIOAccess   string
-	MinIOSecret   string
-	MinIOBucket   string
-	MinIOUseSSL   bool
-	LogPath       string
+	DatabaseURL              string
+	RedisAddr                string
+	Env                      string
+	HealthAddr               string
+	SMTPHost                 string
+	SMTPPort                 string
+	SMTPUser                 string
+	SMTPPass                 string
+	SMTPFrom                 string
+	IMAPHost                 string
+	IMAPUser                 string
+	IMAPPass                 string
+	IMAPFolder               string
+	MinIOEndpoint            string
+	MinIOAccess              string
+	MinIOSecret              string
+	MinIOBucket              string
+	MinIOUseSSL              bool
+	LogPath                  string
+	AuditExportBucket        string
+	AuditExportPrefix        string
+	AuditExportRetentionDays int
 }
 
 func getEnv(key, def string) string {
@@ -66,25 +70,32 @@ func getEnv(key, def string) string {
 func cfg() Config {
 	_ = godotenv.Load()
 	return Config{
-		DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
-		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
-		Env:           getEnv("ENV", "dev"),
-		HealthAddr:    getEnv("HEALTH_ADDR", ":8081"),
-		SMTPHost:      getEnv("SMTP_HOST", ""),
-		SMTPPort:      getEnv("SMTP_PORT", "25"),
-		SMTPUser:      getEnv("SMTP_USER", ""),
-		SMTPPass:      getEnv("SMTP_PASS", ""),
-		SMTPFrom:      getEnv("SMTP_FROM", ""),
-		IMAPHost:      getEnv("IMAP_HOST", ""),
-		IMAPUser:      getEnv("IMAP_USER", ""),
-		IMAPPass:      getEnv("IMAP_PASS", ""),
-		IMAPFolder:    getEnv("IMAP_FOLDER", "INBOX"),
-		MinIOEndpoint: getEnv("MINIO_ENDPOINT", ""),
-		MinIOAccess:   getEnv("MINIO_ACCESS_KEY", ""),
-		MinIOSecret:   getEnv("MINIO_SECRET_KEY", ""),
-		MinIOBucket:   getEnv("MINIO_BUCKET", ""),
-		MinIOUseSSL:   getEnv("MINIO_USE_SSL", "false") == "true",
-		LogPath:       getEnv("LOG_PATH", os.TempDir()),
+		DatabaseURL:       getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/helpdesk?sslmode=disable"),
+		RedisAddr:         getEnv("REDIS_ADDR", "localhost:6379"),
+		Env:               getEnv("ENV", "dev"),
+		HealthAddr:        getEnv("HEALTH_ADDR", ":8081"),
+		SMTPHost:          getEnv("SMTP_HOST", ""),
+		SMTPPort:          getEnv("SMTP_PORT", "25"),
+		SMTPUser:          getEnv("SMTP_USER", ""),
+		SMTPPass:          getEnv("SMTP_PASS", ""),
+		SMTPFrom:          getEnv("SMTP_FROM", ""),
+		IMAPHost:          getEnv("IMAP_HOST", ""),
+		IMAPUser:          getEnv("IMAP_USER", ""),
+		IMAPPass:          getEnv("IMAP_PASS", ""),
+		IMAPFolder:        getEnv("IMAP_FOLDER", "INBOX"),
+		MinIOEndpoint:     getEnv("MINIO_ENDPOINT", ""),
+		MinIOAccess:       getEnv("MINIO_ACCESS_KEY", ""),
+		MinIOSecret:       getEnv("MINIO_SECRET_KEY", ""),
+		MinIOBucket:       getEnv("MINIO_BUCKET", ""),
+		MinIOUseSSL:       getEnv("MINIO_USE_SSL", "false") == "true",
+		LogPath:           getEnv("LOG_PATH", os.TempDir()),
+		AuditExportBucket: getEnv("AUDIT_EXPORT_BUCKET", ""),
+		AuditExportPrefix: getEnv("AUDIT_EXPORT_PREFIX", ""),
+		AuditExportRetentionDays: func() int {
+			v := getEnv("AUDIT_EXPORT_RETENTION_DAYS", "30")
+			n, _ := strconv.Atoi(v)
+			return n
+		}(),
 	}
 }
 
@@ -303,6 +314,118 @@ func exportTickets(ctx context.Context, c Config, db DB, store ObjectStore, ids 
 	return objectKey, nil
 }
 
+// exportAuditEvents exports new audit events since the last run to CSV and JSON.
+// It returns the last processed ID and object keys for CSV and JSON files.
+func exportAuditEvents(ctx context.Context, c Config, db DB, store ObjectStore, rdb *redis.Client) (string, string, string, error) {
+	if store == nil || c.AuditExportBucket == "" {
+		return "", "", "", fmt.Errorf("object store not configured")
+	}
+	var lastAt time.Time
+	if v, err := rdb.Get(ctx, "audit_export:last_at").Result(); err == nil && v != "" {
+		lastAt, _ = time.Parse(time.RFC3339Nano, v)
+	}
+	var cursorID string
+	if v, err := rdb.Get(ctx, "audit_export:last_id").Result(); err == nil && v != "" {
+		cursorID = v
+	}
+	if cursorID == "" {
+		cursorID = "00000000-0000-0000-0000-000000000000"
+	}
+	rows, err := db.Query(ctx, `
+                select id, actor_type, actor_id, entity_type, entity_id, action, at
+                from audit_events
+                where (at > $1) or (at = $1 and id > $2)
+                order by at, id`, lastAt, cursorID)
+	if err != nil {
+		return "", "", "", err
+	}
+	defer rows.Close()
+	bufCSV := &bytes.Buffer{}
+	w := csv.NewWriter(bufCSV)
+	_ = w.Write([]string{"id", "actor_type", "actor_id", "entity_type", "entity_id", "action", "at"})
+	bufJSON := &bytes.Buffer{}
+	bufJSON.WriteByte('[')
+	first := true
+	var lastID string
+	for rows.Next() {
+		var id, actorType, actorID, entityType, entityID, action string
+		var at time.Time
+		if err := rows.Scan(&id, &actorType, &actorID, &entityType, &entityID, &action, &at); err != nil {
+			return "", "", "", err
+		}
+		_ = w.Write([]string{id, actorType, actorID, entityType, entityID, action, at.Format(time.RFC3339Nano)})
+		if !first {
+			bufJSON.WriteByte(',')
+		}
+		first = false
+		b, _ := json.Marshal(map[string]any{
+			"id":          id,
+			"actor_type":  actorType,
+			"actor_id":    actorID,
+			"entity_type": entityType,
+			"entity_id":   entityID,
+			"action":      action,
+			"at":          at.Format(time.RFC3339Nano),
+		})
+		bufJSON.Write(b)
+		lastID = id
+		lastAt = at
+	}
+	w.Flush()
+	bufJSON.WriteByte(']')
+	if lastID == "" {
+		return "", "", "", nil
+	}
+	ts := time.Now().UTC().Format("20060102T150405")
+	csvKey := path.Join(c.AuditExportPrefix, fmt.Sprintf("audit_%s.csv", ts))
+	jsonKey := path.Join(c.AuditExportPrefix, fmt.Sprintf("audit_%s.json", ts))
+	if _, err := store.PutObject(ctx, c.AuditExportBucket, csvKey, bytes.NewReader(bufCSV.Bytes()), int64(bufCSV.Len()), minio.PutObjectOptions{ContentType: "text/csv"}); err != nil {
+		return "", "", "", err
+	}
+	if _, err := store.PutObject(ctx, c.AuditExportBucket, jsonKey, bytes.NewReader(bufJSON.Bytes()), int64(bufJSON.Len()), minio.PutObjectOptions{ContentType: "application/json"}); err != nil {
+		return "", "", "", err
+	}
+	_ = rdb.Set(ctx, "audit_export:last_id", lastID, 0).Err()
+	_ = rdb.Set(ctx, "audit_export:last_at", lastAt.Format(time.RFC3339Nano), 0).Err()
+	// Track objects for retention
+	now := float64(time.Now().Unix())
+	_ = rdb.ZAdd(ctx, "audit_export:objects", redis.Z{Score: now, Member: csvKey}).Err()
+	_ = rdb.ZAdd(ctx, "audit_export:objects", redis.Z{Score: now, Member: jsonKey}).Err()
+	if c.AuditExportRetentionDays > 0 {
+		cutoff := float64(time.Now().Add(-time.Duration(c.AuditExportRetentionDays) * 24 * time.Hour).Unix())
+		keys, _ := rdb.ZRangeByScore(ctx, "audit_export:objects", &redis.ZRangeBy{Min: "0", Max: fmt.Sprintf("%f", cutoff)}).Result()
+		for _, k := range keys {
+			_ = store.RemoveObject(ctx, c.AuditExportBucket, k, minio.RemoveObjectOptions{})
+			_ = rdb.ZRem(ctx, "audit_export:objects", k).Err()
+		}
+	}
+	return lastID, csvKey, jsonKey, nil
+}
+
+func handleAuditExportJob(ctx context.Context, c Config, db DB, store ObjectStore, rdb *redis.Client, jobID string) {
+	_, csvKey, jsonKey, err := exportAuditEvents(ctx, c, db, store, rdb)
+	st := ExportStatus{}
+	if err != nil {
+		st.Status = "error"
+		st.Error = err.Error()
+	} else {
+		st.Status = "done"
+		st.ObjectKey = csvKey
+	}
+	b, _ := json.Marshal(struct {
+		ExportStatus
+		JSONKey string `json:"json_key,omitempty"`
+	}{st, jsonKey})
+	if err := rdb.Set(ctx, "audit_export:"+jobID, b, 0).Err(); err != nil {
+		log.Error().Err(err).Msg("store audit export result")
+	}
+}
+
+func runAuditExport(ctx context.Context, c Config, db DB, store ObjectStore, rdb *redis.Client) error {
+	_, _, _, err := exportAuditEvents(ctx, c, db, store, rdb)
+	return err
+}
+
 func handleExportTicketsJob(ctx context.Context, c Config, db DB, store ObjectStore, rdb *redis.Client, jobID string, ej ExportTicketsJob) {
 	objectKey, err := exportTickets(ctx, c, db, store, ej.IDs)
 	st := ExportStatus{Requester: ej.Requester}
@@ -459,6 +582,19 @@ func main() {
 		}
 	}()
 
+	if c.AuditExportBucket != "" {
+		go func() {
+			ticker := time.NewTicker(24 * time.Hour)
+			defer ticker.Stop()
+			for {
+				if err := runAuditExport(ctx, c, db, store, rdb); err != nil {
+					log.Error().Err(err).Msg("audit export")
+				}
+				<-ticker.C
+			}
+		}()
+	}
+
 	log.Info().Msg("worker started")
 	for {
 		res, err := rdb.BLPop(ctx, 0, "jobs").Result()
@@ -493,6 +629,8 @@ func main() {
 				continue
 			}
 			handleExportTicketsJob(ctx, c, db, store, rdb, job.ID, ej)
+		case "audit_export":
+			handleAuditExportJob(ctx, c, db, store, rdb, job.ID)
 		default:
 			log.Warn().Str("type", job.Type).Msg("unknown job type")
 		}
