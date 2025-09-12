@@ -324,7 +324,18 @@ func exportAuditEvents(ctx context.Context, c Config, db DB, store ObjectStore, 
 	if v, err := rdb.Get(ctx, "audit_export:last_at").Result(); err == nil && v != "" {
 		lastAt, _ = time.Parse(time.RFC3339Nano, v)
 	}
-	rows, err := db.Query(ctx, `select id, actor_type, actor_id, entity_type, entity_id, action, at from audit_events where at > $1 order by at`, lastAt)
+	var cursorID string
+	if v, err := rdb.Get(ctx, "audit_export:last_id").Result(); err == nil && v != "" {
+		cursorID = v
+	}
+	if cursorID == "" {
+		cursorID = "00000000-0000-0000-0000-000000000000"
+	}
+	rows, err := db.Query(ctx, `
+                select id, actor_type, actor_id, entity_type, entity_id, action, at
+                from audit_events
+                where (at > $1) or (at = $1 and id > $2)
+                order by at, id`, lastAt, cursorID)
 	if err != nil {
 		return "", "", "", err
 	}
