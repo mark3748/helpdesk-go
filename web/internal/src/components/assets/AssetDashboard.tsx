@@ -11,7 +11,7 @@ interface DashboardData {
 export default function AssetDashboard() {
   const { data, isLoading, error } = useQuery<DashboardData>({
     queryKey: ["metrics", "dashboard"],
-    queryFn: async () => (await api.get("/metrics/dashboard")).data,
+    queryFn: async () => await api.get<DashboardData>("/metrics/dashboard"),
   });
 
   if (error) {
