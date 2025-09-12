@@ -18,7 +18,8 @@ func TestMetricsHandlers(t *testing.T) {
 	a := apppkg.NewApp(cfg, nil, nil, nil, nil)
 	a.R.GET("/metrics/sla", authpkg.Middleware(a), metrics.SLA(a))
 	a.R.GET("/metrics/resolution", authpkg.Middleware(a), metrics.Resolution(a))
-	a.R.GET("/metrics/ticket_volume", authpkg.Middleware(a), metrics.TicketVolume(a))
+	a.R.GET("/metrics/tickets", authpkg.Middleware(a), metrics.TicketVolume(a))
+	a.R.GET("/metrics/dashboard", authpkg.Middleware(a), metrics.Dashboard(a))
 
 	tests := []struct {
 		name string
@@ -26,7 +27,8 @@ func TestMetricsHandlers(t *testing.T) {
 	}{
 		{"sla", "/metrics/sla"},
 		{"resolution", "/metrics/resolution"},
-		{"volume", "/metrics/ticket_volume"},
+		{"volume", "/metrics/tickets"},
+		{"dashboard", "/metrics/dashboard"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

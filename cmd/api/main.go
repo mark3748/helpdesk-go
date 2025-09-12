@@ -835,6 +835,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/metrics/sla", authpkg.RequireRole("agent"), metricspkg.SLA(a.core()))
 	auth.GET("/metrics/resolution", authpkg.RequireRole("agent"), metricspkg.Resolution(a.core()))
 	auth.GET("/metrics/tickets", authpkg.RequireRole("agent"), metricspkg.TicketVolume(a.core()))
+	auth.GET("/metrics/dashboard", authpkg.RequireRole("agent"), metricspkg.Dashboard(a.core()))
 	// Compatibility for UI expectations
 	auth.GET("/metrics/agent", authpkg.RequireRole("agent"), metricspkg.Agent(a.core()))
 	auth.GET("/metrics/manager", authpkg.RequireRole("manager", "admin"), metricspkg.Manager(a.core()))
