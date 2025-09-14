@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Card, Upload, Button, Table, Progress, Alert, Steps, Typography, Space, Divider } from 'antd';
+import { Card, Upload, Button, Table, Progress, Alert, Steps, Typography, Space } from 'antd';
 import { UploadOutlined, DownloadOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../shared/api';
+import { apiFetch } from '../../shared/api';
 
 const { Title, Paragraph, Text } = Typography;
 const { Step } = Steps;
@@ -54,8 +54,9 @@ export default function AssetImport() {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await api.post<ValidationResult>('/assets/import/validate', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      const response = await apiFetch<ValidationResult>('/assets/import/preview', {
+        method: 'POST',
+        body: formData,
       });
       return response;
     },
@@ -75,8 +76,9 @@ export default function AssetImport() {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await api.post<ImportResult>('/assets/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      const response = await apiFetch<ImportResult>('/assets/import', {
+        method: 'POST',
+        body: formData,
       });
       return response;
     },
@@ -153,7 +155,7 @@ export default function AssetImport() {
     },
   ];
 
-  const previewColumns = validationResult?.preview.length > 0 
+  const previewColumns = validationResult?.preview && validationResult.preview.length > 0
     ? Object.keys(validationResult.preview[0]).map(key => ({
         title: key,
         dataIndex: key,

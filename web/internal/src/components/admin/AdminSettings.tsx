@@ -2,7 +2,6 @@ import { Card, Row, Col, Statistic, List, Button, Space, Typography, Tag, Alert 
 import { SettingOutlined, DatabaseOutlined, MailOutlined, LockOutlined, CloudOutlined, UserOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { api } from '../../shared/api';
 
 const { Title, Text } = Typography;
 

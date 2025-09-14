@@ -13,3 +13,15 @@ export function RequireRole({ role }: { role: string }) {
   }
   return <Outlet />;
 }
+
+export function RequireAnyRole({ roles: allowedRoles }: { roles: string[] }) {
+  const { data, isLoading } = useMe();
+  if (isLoading) return null;
+  const userRoles = data?.roles || [];
+  const isSuper = userRoles.includes('admin');
+  const hasAnyRole = allowedRoles.some(role => userRoles.includes(role));
+  if (!data || !(isSuper || hasAnyRole)) {
+    return <Navigate to="/" replace />;
+  }
+  return <Outlet />;
+}

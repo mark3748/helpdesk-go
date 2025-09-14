@@ -125,7 +125,7 @@ export default function AssetAnalytics() {
           </Select>
           <RangePicker
             value={dateRange}
-            onChange={setDateRange}
+            onChange={(dates) => setDateRange(dates as [dayjs.Dayjs, dayjs.Dayjs] | null)}
             placeholder={['Start Date', 'End Date']}
           />
         </Space>
@@ -188,7 +188,7 @@ export default function AssetAnalytics() {
                       fill="#8884d8"
                       dataKey="count"
                     >
-                      {analytics.status_distribution.map((entry, index) => (
+                      {analytics.status_distribution.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>

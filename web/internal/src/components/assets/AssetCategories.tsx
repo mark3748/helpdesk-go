@@ -143,13 +143,13 @@ export default function AssetCategories() {
             onConfirm={() => handleDelete(record)}
             okText="Delete"
             okType="danger"
-            disabled={record.asset_count && record.asset_count > 0}
+            disabled={Boolean(record.asset_count && record.asset_count > 0)}
           >
             <Button
               type="text"
               danger
               icon={<DeleteOutlined />}
-              disabled={record.asset_count && record.asset_count > 0}
+              disabled={Boolean(record.asset_count && record.asset_count > 0)}
             />
           </Popconfirm>
         </Space>
