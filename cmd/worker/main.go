@@ -295,16 +295,23 @@ func exportTickets(ctx context.Context, c Config, db DB, store ObjectStore, ids 
 	defer rows.Close()
 	buf := &bytes.Buffer{}
 	w := csv.NewWriter(buf)
-	_ = w.Write([]string{"id", "number", "title", "status", "priority"})
+	if err := w.Write([]string{"id", "number", "title", "status", "priority"}); err != nil {
+		return "", err
+	}
 	for rows.Next() {
 		var id, number, title, status string
 		var priority int16
 		if err := rows.Scan(&id, &number, &title, &status, &priority); err != nil {
 			return "", err
 		}
-		_ = w.Write([]string{id, number, title, status, strconv.Itoa(int(priority))})
+		if err := w.Write([]string{id, number, title, status, strconv.Itoa(int(priority))}); err != nil {
+			return "", err
+		}
 	}
 	w.Flush()
+	if err := w.Error(); err != nil {
+		return "", err
+	}
 	objectKey := uuid.New().String() + ".csv"
 	_, err = store.PutObject(ctx, c.MinIOBucket, objectKey, bytes.NewReader(buf.Bytes()), int64(buf.Len()), minio.PutObjectOptions{ContentType: "text/csv"})
 	if err != nil {

@@ -1,24 +1,25 @@
 package assets
 
 import (
-    "context"
-    "fmt"
-    "time"
+	"context"
+	"fmt"
+	"strings"
+	"time"
 
-    "github.com/google/uuid"
+	"github.com/google/uuid"
 )
 
 // AssetAnalytics represents comprehensive asset analytics data
 type AssetAnalytics struct {
-	Summary              AssetSummary              `json:"summary"`
-	StatusDistribution   []StatusDistribution      `json:"status_distribution"`
-	ConditionDistribution []ConditionDistribution  `json:"condition_distribution"`
-	CategoryBreakdown    []CategoryBreakdown       `json:"category_breakdown"`
-	AgeAnalysis          []AgeAnalysis             `json:"age_analysis"`
-	MonthlyAcquisitions  []MonthlyAcquisition      `json:"monthly_acquisitions"`
-	TopManufacturers     []ManufacturerStats       `json:"top_manufacturers"`
-	LocationDistribution []LocationDistribution    `json:"location_distribution"`
-	DepreciationTrend    []DepreciationTrend       `json:"depreciation_trend"`
+	Summary               AssetSummary            `json:"summary"`
+	StatusDistribution    []StatusDistribution    `json:"status_distribution"`
+	ConditionDistribution []ConditionDistribution `json:"condition_distribution"`
+	CategoryBreakdown     []CategoryBreakdown     `json:"category_breakdown"`
+	AgeAnalysis           []AgeAnalysis           `json:"age_analysis"`
+	MonthlyAcquisitions   []MonthlyAcquisition    `json:"monthly_acquisitions"`
+	TopManufacturers      []ManufacturerStats     `json:"top_manufacturers"`
+	LocationDistribution  []LocationDistribution  `json:"location_distribution"`
+	DepreciationTrend     []DepreciationTrend     `json:"depreciation_trend"`
 }
 
 type AssetSummary struct {
@@ -43,10 +44,10 @@ type ConditionDistribution struct {
 }
 
 type CategoryBreakdown struct {
-	Category      string  `json:"category"`
-	Count         int     `json:"count"`
-	TotalValue    float64 `json:"total_value"`
-	AvgAgeMonths  float64 `json:"avg_age_months"`
+	Category     string  `json:"category"`
+	Count        int     `json:"count"`
+	TotalValue   float64 `json:"total_value"`
+	AvgAgeMonths float64 `json:"avg_age_months"`
 }
 
 type AgeAnalysis struct {
@@ -467,10 +468,10 @@ func (s *Service) getDepreciationTrend(ctx context.Context, whereClause string, 
 		) month_series
 		LEFT JOIN assets a ON a.created_at <= month_series %s
 		GROUP BY month_series
-		ORDER BY month_series`, 
+		ORDER BY month_series`,
 		func() string {
 			if whereClause != "WHERE 1=1" {
-				return "AND " + whereClause[10:] // Remove "WHERE 1=1 " prefix
+				return "AND " + strings.TrimPrefix(whereClause, "WHERE 1=1 ")
 			}
 			return ""
 		}())

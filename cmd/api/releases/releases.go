@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 )
 
@@ -75,8 +76,7 @@ func Create(a *app.App) gin.HandlerFunc {
 }
 
 func generateID() string {
-	// Simple ID generation - in production use UUID
-	return "123456"
+	return uuid.New().String()
 }
 
 func getStatusOrDefault(status, defaultStatus string) string {
@@ -94,7 +94,7 @@ func getCurrentTimestamp() string {
 func Get(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		
+
 		// Mock response - in production this would query the database
 		release := Release{
 			ID:          id,
@@ -106,7 +106,7 @@ func Get(a *app.App) gin.HandlerFunc {
 			CreatedAt:   "2024-01-15T09:00:00Z",
 			UpdatedAt:   "2024-01-15T09:00:00Z",
 		}
-		
+
 		c.JSON(http.StatusOK, release)
 	}
 }
@@ -115,7 +115,7 @@ func Get(a *app.App) gin.HandlerFunc {
 func Update(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		
+
 		var req CreateReleaseRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -133,7 +133,7 @@ func Update(a *app.App) gin.HandlerFunc {
 			CreatedAt:   "2024-01-15T09:00:00Z",
 			UpdatedAt:   getCurrentTimestamp(),
 		}
-		
+
 		c.JSON(http.StatusOK, release)
 	}
 }

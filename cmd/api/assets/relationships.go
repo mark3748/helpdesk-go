@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+const maxCriticalPathDepth = 10
+
 // RelationshipRequest represents a request to create or update an asset relationship
 type RelationshipRequest struct {
 	ParentAssetID    uuid.UUID        `json:"parent_asset_id" binding:"required"`
@@ -599,10 +601,10 @@ func (s *Service) getDownstreamAssetCount(ctx context.Context, assetID uuid.UUID
 
 func (s *Service) getCriticalPathAssets(ctx context.Context, rootAssetID uuid.UUID) ([]uuid.UUID, error) {
 	// Implement critical path analysis using recursive CTE to find dependency chains
-	query := `
-		WITH RECURSIVE dependency_path AS (
-			-- Base case: start with the root asset
-			SELECT 
+	query := fmt.Sprintf(`
+               WITH RECURSIVE dependency_path AS (
+                       -- Base case: start with the root asset
+                       SELECT
                                ar.parent_asset_id as asset_id,
                                ar.child_asset_id as dependent_id,
                                1 as depth,
@@ -610,11 +612,11 @@ func (s *Service) getCriticalPathAssets(ctx context.Context, rootAssetID uuid.UU
                                ar.relationship_type
                        FROM asset_relationships ar
                        WHERE ar.parent_asset_id = $1 AND ar.relationship_type IN ('depends_on', 'requires')
-			
-			UNION ALL
-			
-			-- Recursive case: find assets that depend on current assets
-			SELECT 
+
+                       UNION ALL
+
+                       -- Recursive case: find assets that depend on current assets
+                       SELECT
                                ar.parent_asset_id,
                                ar.child_asset_id,
                                dp.depth + 1,
@@ -622,11 +624,11 @@ func (s *Service) getCriticalPathAssets(ctx context.Context, rootAssetID uuid.UU
                                ar.relationship_type
                        FROM asset_relationships ar
                        JOIN dependency_path dp ON ar.parent_asset_id = dp.dependent_id
-                       WHERE dp.depth < 10 -- Prevent infinite loops
+                       WHERE dp.depth < %d -- Prevent infinite loops
                        AND NOT ar.parent_asset_id = ANY(dp.path) -- Prevent cycles
                        AND ar.relationship_type IN ('depends_on', 'requires')
-		),
-		critical_assets AS (
+               ),
+               critical_assets AS (
 			-- Find assets that are single points of failure
 			SELECT DISTINCT dp.asset_id
 			FROM dependency_path dp
@@ -649,7 +651,7 @@ func (s *Service) getCriticalPathAssets(ctx context.Context, rootAssetID uuid.UU
 		FROM critical_assets ca
 		JOIN assets a ON ca.asset_id = a.id
 		WHERE a.status = 'active' -- Only include active assets
-		ORDER BY ca.asset_id`
+               ORDER BY ca.asset_id`, maxCriticalPathDepth)
 
 	rows, err := s.db.Query(ctx, query, rootAssetID)
 	if err != nil {

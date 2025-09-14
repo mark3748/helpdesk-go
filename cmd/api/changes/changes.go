@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 )
 
@@ -78,7 +79,7 @@ func Create(a *app.App) gin.HandlerFunc {
 }
 
 func generateID() string {
-	return "123456"
+	return uuid.New().String()
 }
 
 func getStatusOrDefault(status, defaultStatus string) string {
@@ -96,7 +97,7 @@ func getCurrentTimestamp() string {
 func Get(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		
+
 		// Mock response
 		change := Change{
 			ID:          id,
@@ -109,7 +110,7 @@ func Get(a *app.App) gin.HandlerFunc {
 			CreatedAt:   "2024-01-20T10:00:00Z",
 			UpdatedAt:   "2024-01-22T15:30:00Z",
 		}
-		
+
 		c.JSON(http.StatusOK, change)
 	}
 }
@@ -118,7 +119,7 @@ func Get(a *app.App) gin.HandlerFunc {
 func Update(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		
+
 		var req CreateChangeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -137,7 +138,7 @@ func Update(a *app.App) gin.HandlerFunc {
 			CreatedAt:   "2024-01-20T10:00:00Z",
 			UpdatedAt:   getCurrentTimestamp(),
 		}
-		
+
 		c.JSON(http.StatusOK, change)
 	}
 }
