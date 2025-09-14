@@ -386,15 +386,91 @@ func (s *Service) getWorkflow(ctx context.Context, workflowID uuid.UUID) (*Asset
 	return workflow, nil
 }
 
-// Placeholder methods for other workflow types
-func (s *Service) executeAssignmentWorkflow(_ context.Context, _ *AssetWorkflow) error {
-	// Implementation for assignment workflow
-	return fmt.Errorf("assignment workflow not yet implemented")
+// executeAssignmentWorkflow handles asset assignment workflows
+func (s *Service) executeAssignmentWorkflow(ctx context.Context, workflow *AssetWorkflow) error {
+	// Extract assignment data from request
+	assignmentData, ok := workflow.RequestData.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid assignment data format")
+	}
+
+	assignedToID, ok := assignmentData["assigned_to"].(string)
+	if !ok || assignedToID == "" {
+		return fmt.Errorf("assigned_to user ID is required")
+	}
+
+	assignedToUUID, err := uuid.Parse(assignedToID)
+	if err != nil {
+		return fmt.Errorf("invalid assigned_to user ID: %w", err)
+	}
+
+	// Update asset assignment
+	_, err = s.db.Exec(ctx, `
+		UPDATE assets 
+		SET assigned_to = $1, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $2`,
+		assignedToUUID, workflow.AssetID)
+	if err != nil {
+		return fmt.Errorf("failed to update asset assignment: %w", err)
+	}
+
+	// Create audit entry
+	err = s.createAuditEntry(ctx, workflow.AssetID, workflow.RequestedBy, "assign", 
+		"assigned_to", "", assignedToID, "Asset assigned via workflow")
+	if err != nil {
+		return fmt.Errorf("failed to create audit entry: %w", err)
+	}
+
+	return nil
 }
 
-func (s *Service) executeCheckoutWorkflow(_ context.Context, _ *AssetWorkflow) error {
-	// Implementation for checkout workflow
-	return fmt.Errorf("checkout workflow not yet implemented")
+func (s *Service) executeCheckoutWorkflow(ctx context.Context, workflow *AssetWorkflow) error {
+	// Extract checkout data from request
+	checkoutData, ok := workflow.RequestData.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid checkout data format")
+	}
+
+	checkedOutTo, ok := checkoutData["checked_out_to"].(string)
+	if !ok || checkedOutTo == "" {
+		return fmt.Errorf("checked_out_to is required")
+	}
+
+	condition, ok := checkoutData["condition_out"].(string)
+	if !ok || condition == "" {
+		condition = "good" // default condition
+	}
+
+	notes, _ := checkoutData["notes"].(string)
+
+	// Create checkout record
+	checkoutID := uuid.New()
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO asset_checkouts (id, asset_id, checked_out_to, checked_out_by, checkout_date, condition_out, notes, status)
+		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, 'checked_out')`,
+		checkoutID, workflow.AssetID, checkedOutTo, workflow.RequestedBy, condition, notes)
+	if err != nil {
+		return fmt.Errorf("failed to create checkout record: %w", err)
+	}
+
+	// Update asset status
+	_, err = s.db.Exec(ctx, `
+		UPDATE assets 
+		SET status = 'checked_out', updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $1`,
+		workflow.AssetID)
+	if err != nil {
+		return fmt.Errorf("failed to update asset status: %w", err)
+	}
+
+	// Create audit entry
+	err = s.createAuditEntry(ctx, workflow.AssetID, workflow.RequestedBy, "checkout", 
+		"status", "active", "checked_out", fmt.Sprintf("Asset checked out to %s", checkedOutTo))
+	if err != nil {
+		return fmt.Errorf("failed to create audit entry: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) executeMaintenanceWorkflow(_ context.Context, _ *AssetWorkflow) error {

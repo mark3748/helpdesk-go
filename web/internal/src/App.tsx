@@ -21,6 +21,10 @@ import AssetForm from './components/assets/AssetForm';
 import AssetCheckout from './components/assets/AssetCheckout';
 import BulkOperations from './components/assets/BulkOperations';
 import AssetAudit from './components/assets/AssetAudit';
+import AssetCategories from './components/assets/AssetCategories';
+import AssetImport from './components/assets/AssetImport';
+import AssetAnalytics from './components/assets/AssetAnalytics';
+import AssetDetail from './components/assets/AssetDetail';
 
 const queryClient = new QueryClient();
 
@@ -40,8 +44,9 @@ export default function App() {
               <Route path="/tickets/:id" element={<TicketDetail />} />
               <Route path="/metrics" element={<AgentMetrics />} />
               <Route path="/assets" element={<AssetList />} />
+              <Route path="/assets/:id" element={<AssetDetail />} />
               <Route path="/assets/dashboard" element={<AssetDashboard />} />
-              <Route path="/assets/checkout" element={<AssetCheckout />} />
+              <Route path="/assets/checkouts" element={<AssetCheckout />} />
             </Route>
             <Route element={<RequireRole role="admin" />}>
               <Route path="/settings" element={<AdminSettings />} />
@@ -49,6 +54,9 @@ export default function App() {
               <Route path="/settings/oidc" element={<OIDCSettings />} />
               <Route path="/settings/storage" element={<StorageSettings />} />
               <Route path="/settings/users" element={<AdminUsers />} />
+              <Route path="/assets/categories" element={<AssetCategories />} />
+              <Route path="/assets/import" element={<AssetImport />} />
+              <Route path="/assets/analytics" element={<AssetAnalytics />} />
               <Route path="/settings/*" element={<ComingSoon title="Settings area" detail="Additional admin settings will appear here." />} />
             </Route>
             {/* User account settings (any authenticated user) */}
@@ -60,6 +68,7 @@ export default function App() {
               <Route path="/assets/:id/edit" element={<AssetForm />} />
               <Route path="/assets/bulk" element={<BulkOperations />} />
               <Route path="/assets/audit" element={<AssetAudit />} />
+              <Route path="/assets/checkouts" element={<AssetCheckout />} />
             </Route>
             {/* 404 catch-all inside the layout: redirect to a sensible default */}
             <Route path="*" element={<NotFoundRedirect />} />
