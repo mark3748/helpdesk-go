@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SidebarLayout } from './shared/SidebarLayout';
-import { RequireRole, useMe } from './shared/auth';
+import { RequireRole, RequireAnyRole, useMe } from './shared/auth';
 import QueueList from './components/agent/QueueList';
 import TicketDetail from './components/agent/TicketDetail';
 import AgentMetrics from './components/agent/AgentMetrics';
@@ -21,6 +21,10 @@ import AssetForm from './components/assets/AssetForm';
 import AssetCheckout from './components/assets/AssetCheckout';
 import BulkOperations from './components/assets/BulkOperations';
 import AssetAudit from './components/assets/AssetAudit';
+import AssetCategories from './components/assets/AssetCategories';
+import AssetImport from './components/assets/AssetImport';
+import AssetAnalytics from './components/assets/AssetAnalytics';
+import AssetDetail from './components/assets/AssetDetail';
 
 const queryClient = new QueryClient();
 
@@ -40,8 +44,8 @@ export default function App() {
               <Route path="/tickets/:id" element={<TicketDetail />} />
               <Route path="/metrics" element={<AgentMetrics />} />
               <Route path="/assets" element={<AssetList />} />
+              <Route path="/assets/:id" element={<AssetDetail />} />
               <Route path="/assets/dashboard" element={<AssetDashboard />} />
-              <Route path="/assets/checkout" element={<AssetCheckout />} />
             </Route>
             <Route element={<RequireRole role="admin" />}>
               <Route path="/settings" element={<AdminSettings />} />
@@ -49,10 +53,17 @@ export default function App() {
               <Route path="/settings/oidc" element={<OIDCSettings />} />
               <Route path="/settings/storage" element={<StorageSettings />} />
               <Route path="/settings/users" element={<AdminUsers />} />
+              <Route path="/assets/categories" element={<AssetCategories />} />
+              <Route path="/assets/import" element={<AssetImport />} />
+              <Route path="/assets/analytics" element={<AssetAnalytics />} />
               <Route path="/settings/*" element={<ComingSoon title="Settings area" detail="Additional admin settings will appear here." />} />
             </Route>
             {/* User account settings (any authenticated user) */}
             <Route path="/me/settings" element={<UserSettings />} />
+            {/* Asset checkouts accessible by both agents and managers */}
+            <Route element={<RequireAnyRole roles={['agent', 'manager']} />}>
+              <Route path="/assets/checkouts" element={<AssetCheckout />} />
+            </Route>
             <Route element={<RequireRole role="manager" />}>
               <Route path="/manager" element={<QueueManager />} />
               <Route path="/manager/analytics" element={<ManagerAnalytics />} />

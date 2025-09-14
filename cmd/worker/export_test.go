@@ -1,46 +1,23 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
+    "context"
+    "encoding/json"
+    "io"
+    "strings"
+    "testing"
 
-	miniredis "github.com/alicebob/miniredis/v2"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/minio/minio-go/v7"
-	"github.com/redis/go-redis/v9"
+    miniredis "github.com/alicebob/miniredis/v2"
+    "github.com/jackc/pgx/v5"
+    "github.com/jackc/pgx/v5/pgconn"
+    "github.com/minio/minio-go/v7"
+    "github.com/redis/go-redis/v9"
 )
 
 // fakeObjectStore stores objects in memory and serves them over HTTP.
-type fakeObjectStore struct {
-	objects map[string][]byte
-	srv     *httptest.Server
-}
+type fakeObjectStore struct{ objects map[string][]byte }
 
-func newFakeObjectStore() *fakeObjectStore {
-	fos := &fakeObjectStore{objects: map[string][]byte{}}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
-		if len(parts) != 2 {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		key := parts[1]
-		if b, ok := fos.objects[key]; ok {
-			_, _ = w.Write(b)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	})
-	fos.srv = httptest.NewServer(mux)
-	return fos
-}
+func newFakeObjectStore() *fakeObjectStore { return &fakeObjectStore{objects: map[string][]byte{}} }
 
 func (f *fakeObjectStore) PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
 	b, err := io.ReadAll(reader)
@@ -56,8 +33,8 @@ func (f *fakeObjectStore) RemoveObject(ctx context.Context, bucketName, objectNa
 	return nil
 }
 
-func (f *fakeObjectStore) URL() string { return f.srv.URL }
-func (f *fakeObjectStore) Close()      { f.srv.Close() }
+func (f *fakeObjectStore) URL() string { return "http://fake" }
+func (f *fakeObjectStore) Close()      {}
 
 type ticket struct {
 	ID, Number, Title, Status string
@@ -101,14 +78,14 @@ func (db *exportDB) Ping(ctx context.Context) error {
 }
 
 func TestHandleExportTicketsJob(t *testing.T) {
-	store := newFakeObjectStore()
-	defer store.Close()
+    store := newFakeObjectStore()
+    defer store.Close()
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 
-	db := &exportDB{tickets: []ticket{{ID: "1", Number: "TKT-1", Title: "First", Status: "Open", Priority: 1}}}
-	cfg := Config{MinIOEndpoint: strings.TrimPrefix(store.URL(), "http://"), MinIOBucket: "bucket"}
+    db := &exportDB{tickets: []ticket{{ID: "1", Number: "TKT-1", Title: "First", Status: "Open", Priority: 1}}}
+    cfg := Config{MinIOBucket: "bucket"}
 
 	ej := ExportTicketsJob{IDs: []string{"1"}, Requester: "req"}
 	handleExportTicketsJob(context.Background(), cfg, db, store, rdb, "job1", ej)
@@ -124,17 +101,11 @@ func TestHandleExportTicketsJob(t *testing.T) {
 	if st.Status != "done" || st.ObjectKey == "" {
 		t.Fatalf("unexpected status: %+v", st)
 	}
-	// Construct a fetch URL from the fake store and object key.
-	fetchURL := store.URL() + "/bucket/" + st.ObjectKey
-	res, err := http.Get(fetchURL)
-	if err != nil {
-		t.Fatalf("download: %v", err)
-	}
-	defer res.Body.Close()
-	b, _ := io.ReadAll(res.Body)
-	got := strings.TrimSpace(string(b))
-	want := "id,number,title,status,priority\n1,TKT-1,First,Open,1"
-	if got != want {
-		t.Fatalf("csv mismatch: got %q want %q", got, want)
-	}
+    // Read the stored object directly from the fake store.
+    b := store.objects[st.ObjectKey]
+    got := strings.TrimSpace(string(b))
+    want := "id,number,title,status,priority\n1,TKT-1,First,Open,1"
+    if got != want {
+        t.Fatalf("csv mismatch: got %q want %q", got, want)
+    }
 }

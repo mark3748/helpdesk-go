@@ -898,6 +898,9 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/assets/:id/audit", assetspkg.GetAuditHistory(a.core()))
 	auth.GET("/assets/audit/summary", authpkg.RequireRole("admin", "manager"), assetspkg.GetAuditSummary(a.core()))
 
+	// Analytics
+	auth.GET("/assets/analytics", authpkg.RequireRole("admin", "manager"), assetspkg.GetAssetAnalytics(a.core()))
+
 	// Problems
 	auth.GET("/problems", problemspkg.List(a.core()))
 	auth.POST("/problems", problemspkg.Create(a.core()))

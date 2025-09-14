@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+const maxCriticalPathDepth = 10
+
 // RelationshipRequest represents a request to create or update an asset relationship
 type RelationshipRequest struct {
 	ParentAssetID    uuid.UUID        `json:"parent_asset_id" binding:"required"`
@@ -597,11 +599,80 @@ func (s *Service) getDownstreamAssetCount(ctx context.Context, assetID uuid.UUID
 	return count
 }
 
-func (s *Service) getCriticalPathAssets(_ context.Context, _ uuid.UUID) ([]uuid.UUID, error) {
-	// TODO: Implement critical path analysis for asset dependencies.
-	// This should identify assets that are part of the critical path using graph traversal algorithms.
-	// See issue tracker: https://github.com/your-org/your-repo/issues/XXX
-	return []uuid.UUID{}, nil
+func (s *Service) getCriticalPathAssets(ctx context.Context, rootAssetID uuid.UUID) ([]uuid.UUID, error) {
+	// Implement critical path analysis using recursive CTE to find dependency chains
+	query := fmt.Sprintf(`
+               WITH RECURSIVE dependency_path AS (
+                       -- Base case: start with the root asset
+                       SELECT
+                               ar.parent_asset_id as asset_id,
+                               ar.child_asset_id as dependent_id,
+                               1 as depth,
+                               ARRAY[ar.parent_asset_id] as path,
+                               ar.relationship_type
+                       FROM asset_relationships ar
+                       WHERE ar.parent_asset_id = $1 AND ar.relationship_type IN ('depends_on', 'requires')
+
+                       UNION ALL
+
+                       -- Recursive case: find assets that depend on current assets
+                       SELECT
+                               ar.parent_asset_id,
+                               ar.child_asset_id,
+                               dp.depth + 1,
+                               dp.path || ar.parent_asset_id,
+                               ar.relationship_type
+                       FROM asset_relationships ar
+                       JOIN dependency_path dp ON ar.parent_asset_id = dp.dependent_id
+                       WHERE dp.depth < %d -- Prevent infinite loops
+                       AND NOT ar.parent_asset_id = ANY(dp.path) -- Prevent cycles
+                       AND ar.relationship_type IN ('depends_on', 'requires')
+               ),
+               critical_assets AS (
+			-- Find assets that are single points of failure
+			SELECT DISTINCT dp.asset_id
+			FROM dependency_path dp
+			WHERE dp.asset_id IN (
+				-- Assets with multiple dependents (high impact if they fail)
+                               SELECT ar.parent_asset_id
+                               FROM asset_relationships ar
+                               WHERE ar.relationship_type IN ('depends_on', 'requires')
+                               GROUP BY ar.parent_asset_id
+                               HAVING COUNT(ar.child_asset_id) > 1
+			)
+			OR dp.asset_id IN (
+				-- Assets that are themselves critical (marked as such)
+				SELECT a.id
+				FROM assets a
+				WHERE a.custom_fields->>'is_critical' = 'true'
+			)
+		)
+		SELECT DISTINCT ca.asset_id
+		FROM critical_assets ca
+		JOIN assets a ON ca.asset_id = a.id
+		WHERE a.status = 'active' -- Only include active assets
+               ORDER BY ca.asset_id`, maxCriticalPathDepth)
+
+	rows, err := s.db.Query(ctx, query, rootAssetID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute critical path query: %w", err)
+	}
+	defer rows.Close()
+
+	var criticalAssets []uuid.UUID
+	for rows.Next() {
+		var assetID uuid.UUID
+		if err := rows.Scan(&assetID); err != nil {
+			return nil, fmt.Errorf("failed to scan critical asset ID: %w", err)
+		}
+		criticalAssets = append(criticalAssets, assetID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating critical path results: %w", err)
+	}
+
+	return criticalAssets, nil
 }
 
 func (s *Service) isSinglePointOfFailure(ctx context.Context, assetID uuid.UUID) bool {

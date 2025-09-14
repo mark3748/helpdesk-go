@@ -625,9 +625,30 @@ func (s *Service) generateFieldChanges(oldValues, newValues map[string]interface
 
 // AuditListResponse represents paginated audit events
 type AuditListResponse struct {
-	Events []AuditEvent `json:"events"`
-	Total  int          `json:"total"`
-	Page   int          `json:"page"`
-	Limit  int          `json:"limit"`
-	Pages  int          `json:"pages"`
+    Events []AuditEvent `json:"events"`
+    Total  int          `json:"total"`
+    Page   int          `json:"page"`
+    Limit  int          `json:"limit"`
+    Pages  int          `json:"pages"`
+}
+
+// createAuditEntry is a small helper used by lifecycle workflows to record simple field changes.
+func (s *Service) createAuditEntry(ctx context.Context, assetID uuid.UUID, actorID uuid.UUID, action string, field string, oldValue interface{}, newValue interface{}, notes string) error {
+    category := "lifecycle"
+    if field == "assigned_to" {
+        category = "assignment"
+    }
+    n := notes // ensure addressable
+    event := &AuditEvent{
+        AssetID:   assetID,
+        Action:    action,
+        ActorID:   &actorID,
+        ActorType: "user",
+        Category:  category,
+        Severity:  "info",
+        OldValues: map[string]interface{}{field: oldValue},
+        NewValues: map[string]interface{}{field: newValue},
+        Notes:     &n,
+    }
+    return s.RecordAuditEvent(ctx, event)
 }
