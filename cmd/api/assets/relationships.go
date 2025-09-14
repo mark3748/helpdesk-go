@@ -603,28 +603,28 @@ func (s *Service) getCriticalPathAssets(ctx context.Context, rootAssetID uuid.UU
 		WITH RECURSIVE dependency_path AS (
 			-- Base case: start with the root asset
 			SELECT 
-				ar.parent_id as asset_id,
-				ar.child_id as dependent_id,
-				1 as depth,
-				ARRAY[ar.parent_id] as path,
-				ar.relationship_type
-			FROM asset_relationships ar
-			WHERE ar.parent_id = $1 AND ar.relationship_type IN ('depends_on', 'requires')
+                               ar.parent_asset_id as asset_id,
+                               ar.child_asset_id as dependent_id,
+                               1 as depth,
+                               ARRAY[ar.parent_asset_id] as path,
+                               ar.relationship_type
+                       FROM asset_relationships ar
+                       WHERE ar.parent_asset_id = $1 AND ar.relationship_type IN ('depends_on', 'requires')
 			
 			UNION ALL
 			
 			-- Recursive case: find assets that depend on current assets
 			SELECT 
-				ar.parent_id,
-				ar.child_id,
-				dp.depth + 1,
-				dp.path || ar.parent_id,
-				ar.relationship_type
-			FROM asset_relationships ar
-			JOIN dependency_path dp ON ar.parent_id = dp.dependent_id
-			WHERE dp.depth < 10 -- Prevent infinite loops
-			AND NOT ar.parent_id = ANY(dp.path) -- Prevent cycles
-			AND ar.relationship_type IN ('depends_on', 'requires')
+                               ar.parent_asset_id,
+                               ar.child_asset_id,
+                               dp.depth + 1,
+                               dp.path || ar.parent_asset_id,
+                               ar.relationship_type
+                       FROM asset_relationships ar
+                       JOIN dependency_path dp ON ar.parent_asset_id = dp.dependent_id
+                       WHERE dp.depth < 10 -- Prevent infinite loops
+                       AND NOT ar.parent_asset_id = ANY(dp.path) -- Prevent cycles
+                       AND ar.relationship_type IN ('depends_on', 'requires')
 		),
 		critical_assets AS (
 			-- Find assets that are single points of failure
@@ -632,11 +632,11 @@ func (s *Service) getCriticalPathAssets(ctx context.Context, rootAssetID uuid.UU
 			FROM dependency_path dp
 			WHERE dp.asset_id IN (
 				-- Assets with multiple dependents (high impact if they fail)
-				SELECT ar.parent_id
-				FROM asset_relationships ar
-				WHERE ar.relationship_type IN ('depends_on', 'requires')
-				GROUP BY ar.parent_id
-				HAVING COUNT(ar.child_id) > 1
+                               SELECT ar.parent_asset_id
+                               FROM asset_relationships ar
+                               WHERE ar.relationship_type IN ('depends_on', 'requires')
+                               GROUP BY ar.parent_asset_id
+                               HAVING COUNT(ar.child_asset_id) > 1
 			)
 			OR dp.asset_id IN (
 				-- Assets that are themselves critical (marked as such)

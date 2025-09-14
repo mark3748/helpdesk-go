@@ -388,11 +388,11 @@ func (s *Service) getWorkflow(ctx context.Context, workflowID uuid.UUID) (*Asset
 
 // executeAssignmentWorkflow handles asset assignment workflows
 func (s *Service) executeAssignmentWorkflow(ctx context.Context, workflow *AssetWorkflow) error {
-    // Extract assignment data from request
-    if workflow.RequestData == nil {
-        return fmt.Errorf("invalid assignment data format")
-    }
-    assignmentData := workflow.RequestData
+	// Extract assignment data from request
+	if workflow.RequestData == nil {
+		return fmt.Errorf("invalid assignment data format")
+	}
+	assignmentData := workflow.RequestData
 
 	assignedToID, ok := assignmentData["assigned_to"].(string)
 	if !ok || assignedToID == "" {
@@ -406,30 +406,30 @@ func (s *Service) executeAssignmentWorkflow(ctx context.Context, workflow *Asset
 
 	// Update asset assignment
 	_, err = s.db.Exec(ctx, `
-		UPDATE assets 
-		SET assigned_to = $1, updated_at = CURRENT_TIMESTAMP 
-		WHERE id = $2`,
+               UPDATE assets
+               SET assigned_to_user_id = $1, updated_at = CURRENT_TIMESTAMP
+               WHERE id = $2`,
 		assignedToUUID, workflow.AssetID)
 	if err != nil {
 		return fmt.Errorf("failed to update asset assignment: %w", err)
 	}
 
-    // Create audit entry
-    err = s.createAuditEntry(ctx, workflow.AssetID, workflow.RequestedBy, "assign",
-        "assigned_to", "", assignedToID, "Asset assigned via workflow")
-    if err != nil {
-        return fmt.Errorf("failed to create audit entry: %w", err)
-    }
+	// Create audit entry
+	err = s.createAuditEntry(ctx, workflow.AssetID, workflow.RequestedBy, "assign",
+		"assigned_to", "", assignedToID, "Asset assigned via workflow")
+	if err != nil {
+		return fmt.Errorf("failed to create audit entry: %w", err)
+	}
 
 	return nil
 }
 
 func (s *Service) executeCheckoutWorkflow(ctx context.Context, workflow *AssetWorkflow) error {
-    // Extract checkout data from request
-    if workflow.RequestData == nil {
-        return fmt.Errorf("invalid checkout data format")
-    }
-    checkoutData := workflow.RequestData
+	// Extract checkout data from request
+	if workflow.RequestData == nil {
+		return fmt.Errorf("invalid checkout data format")
+	}
+	checkoutData := workflow.RequestData
 
 	checkedOutTo, ok := checkoutData["checked_out_to"].(string)
 	if !ok || checkedOutTo == "" {
@@ -464,7 +464,7 @@ func (s *Service) executeCheckoutWorkflow(ctx context.Context, workflow *AssetWo
 	}
 
 	// Create audit entry
-	err = s.createAuditEntry(ctx, workflow.AssetID, workflow.RequestedBy, "checkout", 
+	err = s.createAuditEntry(ctx, workflow.AssetID, workflow.RequestedBy, "checkout",
 		"status", "active", "checked_out", fmt.Sprintf("Asset checked out to %s", checkedOutTo))
 	if err != nil {
 		return fmt.Errorf("failed to create audit entry: %w", err)

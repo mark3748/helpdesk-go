@@ -342,7 +342,9 @@ func exportAuditEvents(ctx context.Context, c Config, db DB, store ObjectStore, 
 	defer rows.Close()
 	bufCSV := &bytes.Buffer{}
 	w := csv.NewWriter(bufCSV)
-	_ = w.Write([]string{"id", "actor_type", "actor_id", "entity_type", "entity_id", "action", "at"})
+	if err := w.Write([]string{"id", "actor_type", "actor_id", "entity_type", "entity_id", "action", "at"}); err != nil {
+		return "", "", "", err
+	}
 	bufJSON := &bytes.Buffer{}
 	bufJSON.WriteByte('[')
 	first := true
@@ -353,25 +355,30 @@ func exportAuditEvents(ctx context.Context, c Config, db DB, store ObjectStore, 
 		if err := rows.Scan(&id, &actorType, &actorID, &entityType, &entityID, &action, &at); err != nil {
 			return "", "", "", err
 		}
-        _ = w.Write([]string{id, actorType, actorID, entityType, entityID, action, at.UTC().Format(time.RFC3339Nano)})
+		if err := w.Write([]string{id, actorType, actorID, entityType, entityID, action, at.UTC().Format(time.RFC3339Nano)}); err != nil {
+			return "", "", "", err
+		}
 		if !first {
 			bufJSON.WriteByte(',')
 		}
 		first = false
-        b, _ := json.Marshal(map[string]any{
-            "id":          id,
-            "actor_type":  actorType,
-            "actor_id":    actorID,
-            "entity_type": entityType,
-            "entity_id":   entityID,
-            "action":      action,
-            "at":          at.UTC().Format(time.RFC3339Nano),
-        })
-        bufJSON.Write(b)
-        lastID = id
-        lastAt = at.UTC()
+		b, _ := json.Marshal(map[string]any{
+			"id":          id,
+			"actor_type":  actorType,
+			"actor_id":    actorID,
+			"entity_type": entityType,
+			"entity_id":   entityID,
+			"action":      action,
+			"at":          at.UTC().Format(time.RFC3339Nano),
+		})
+		bufJSON.Write(b)
+		lastID = id
+		lastAt = at.UTC()
 	}
 	w.Flush()
+	if err := w.Error(); err != nil {
+		return "", "", "", err
+	}
 	bufJSON.WriteByte(']')
 	if lastID == "" {
 		return "", "", "", nil

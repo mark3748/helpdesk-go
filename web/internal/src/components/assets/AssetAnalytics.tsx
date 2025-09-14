@@ -217,12 +217,12 @@ export default function AssetAnalytics() {
           {/* Monthly Acquisitions Trend */}
           <Card title="Monthly Asset Acquisitions" loading={isLoading}>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={analytics.monthly_acquisitions}>
+              <BarChart data={analytics.monthly_acquisitions}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis yAxisId="left" />
                 <YAxis yAxisId="right" orientation="right" />
-                <Tooltip 
+                <Tooltip
                   formatter={(value, name) => [
                     name === 'value' ? formatCurrency(Number(value)) : value,
                     name === 'value' ? 'Total Value' : 'Count'
@@ -231,7 +231,7 @@ export default function AssetAnalytics() {
                 <Legend />
                 <Bar yAxisId="left" dataKey="count" fill="#8884d8" name="Count" />
                 <Line yAxisId="right" type="monotone" dataKey="value" stroke="#82ca9d" name="Value" />
-              </LineChart>
+              </BarChart>
             </ResponsiveContainer>
           </Card>
 
