@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"io"
-	"net/http"
-	"strings"
-	"testing"
-	"time"
+    "context"
+    "encoding/json"
+    "strings"
+    "testing"
+    "time"
 
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5"
@@ -83,29 +81,17 @@ func TestHandleAuditExportJob(t *testing.T) {
 	if st.Status != "done" || st.ObjectKey == "" || st.JSONKey == "" {
 		t.Fatalf("unexpected status: %+v", st)
 	}
-	csvURL := store.URL() + "/bucket/" + st.ObjectKey
-	res, err := http.Get(csvURL)
-	if err != nil {
-		t.Fatalf("download csv: %v", err)
-	}
-	b, _ := io.ReadAll(res.Body)
-	res.Body.Close()
-	got := strings.TrimSpace(string(b))
-	want := "id,actor_type,actor_id,entity_type,entity_id,action,at\n1,user,u1,ticket,t1,create,1970-01-01T00:00:00Z"
-	if got != want {
-		t.Fatalf("csv mismatch: got %q want %q", got, want)
-	}
-	jURL := store.URL() + "/bucket/" + st.JSONKey
-	res, err = http.Get(jURL)
-	if err != nil {
-		t.Fatalf("download json: %v", err)
-	}
-	jb, _ := io.ReadAll(res.Body)
-	res.Body.Close()
-	var arr []map[string]string
-	if err := json.Unmarshal(jb, &arr); err != nil {
-		t.Fatalf("json decode: %v", err)
-	}
+    // Read the CSV directly from the fake store
+    got := strings.TrimSpace(string(store.objects[st.ObjectKey]))
+    want := "id,actor_type,actor_id,entity_type,entity_id,action,at\n1,user,u1,ticket,t1,create,1970-01-01T00:00:00Z"
+    if got != want {
+        t.Fatalf("csv mismatch: got %q want %q", got, want)
+    }
+    jb := store.objects[st.JSONKey]
+    var arr []map[string]string
+    if err := json.Unmarshal(jb, &arr); err != nil {
+        t.Fatalf("json decode: %v", err)
+    }
 	if len(arr) != 1 || arr[0]["id"] != "1" || arr[0]["action"] != "create" {
 		t.Fatalf("json mismatch: %+v", arr)
 	}

@@ -353,23 +353,23 @@ func exportAuditEvents(ctx context.Context, c Config, db DB, store ObjectStore, 
 		if err := rows.Scan(&id, &actorType, &actorID, &entityType, &entityID, &action, &at); err != nil {
 			return "", "", "", err
 		}
-		_ = w.Write([]string{id, actorType, actorID, entityType, entityID, action, at.Format(time.RFC3339Nano)})
+        _ = w.Write([]string{id, actorType, actorID, entityType, entityID, action, at.UTC().Format(time.RFC3339Nano)})
 		if !first {
 			bufJSON.WriteByte(',')
 		}
 		first = false
-		b, _ := json.Marshal(map[string]any{
-			"id":          id,
-			"actor_type":  actorType,
-			"actor_id":    actorID,
-			"entity_type": entityType,
-			"entity_id":   entityID,
-			"action":      action,
-			"at":          at.Format(time.RFC3339Nano),
-		})
-		bufJSON.Write(b)
-		lastID = id
-		lastAt = at
+        b, _ := json.Marshal(map[string]any{
+            "id":          id,
+            "actor_type":  actorType,
+            "actor_id":    actorID,
+            "entity_type": entityType,
+            "entity_id":   entityID,
+            "action":      action,
+            "at":          at.UTC().Format(time.RFC3339Nano),
+        })
+        bufJSON.Write(b)
+        lastID = id
+        lastAt = at.UTC()
 	}
 	w.Flush()
 	bufJSON.WriteByte(']')

@@ -1,12 +1,11 @@
 package assets
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-	"time"
+    "context"
+    "fmt"
+    "time"
 
-	"github.com/google/uuid"
+    "github.com/google/uuid"
 )
 
 // AssetAnalytics represents comprehensive asset analytics data
