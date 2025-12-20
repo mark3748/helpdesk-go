@@ -861,6 +861,15 @@ func (db *eventCaptureDB) QueryRow(ctx context.Context, sql string, args ...inte
 			}
 			return nil
 		}}
+	case strings.Contains(s, "exists"):
+		return &fakeRow{scan: func(dest ...any) error {
+			if len(dest) >= 1 {
+				if p, ok := dest[0].(*bool); ok {
+					*p = true
+				}
+			}
+			return nil
+		}}
 	default:
 		return &fakeRow{scan: func(dest ...any) error {
 			for _, d := range dest {
