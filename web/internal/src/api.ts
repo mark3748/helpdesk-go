@@ -21,9 +21,14 @@ export function subscribeEvents(onStatus?: (connected: boolean) => void) {
   const connect = () => {
     // Delay connection to handle potential immediate cleanup (React Strict Mode)
     timer = window.setTimeout(() => {
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host; // includes port
-      const url = `${proto}//${host}/api/events`;
+      let url = '';
+      if (import.meta.env && import.meta.env.VITE_WS_URL) {
+        url = import.meta.env.VITE_WS_URL;
+      } else {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host; // includes port
+        url = `${proto}//${host}/api/events`;
+      }
 
       if (ws) {
         ws.close();

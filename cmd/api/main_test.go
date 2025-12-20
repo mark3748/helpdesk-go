@@ -898,7 +898,7 @@ func TestCreateTicket_EventRecorded(t *testing.T) {
 	db := &eventCaptureDB{}
 	app := newTestApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil)
 
-	body := `{"title":"foo","requester_id":"00000000-0000-0000-0000-000000000001","priority":1}`
+	body := `{"title":"foo","requester_id":"123e4567-e89b-12d3-a456-426614174000","priority":1}`
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

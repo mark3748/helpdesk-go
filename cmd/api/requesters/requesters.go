@@ -167,6 +167,9 @@ func Search(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusOK, []Requester{})
 			return
 		}
+		// Sanitize input to prevent wildcard abuse (performance)
+		q = strings.ReplaceAll(q, "%", "\\%")
+		q = strings.ReplaceAll(q, "_", "\\_")
 		pattern := "%" + q + "%"
 		// Limit to 20 results
 		const sql = `
