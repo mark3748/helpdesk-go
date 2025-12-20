@@ -1,0 +1,131 @@
+version: '3'
+
+# Global variables (optional, but good for versioning)
+vars:
+  BINARY_DIR: 'bin'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build API and worker binaries
+    cmds:
+      - echo "Building API binary..."
+      - go mod tidy
+      - go build -o {{.BINARY_DIR}}/api{{exeExt}} ./cmd/api
+      - echo "Building worker binary..."
+      - go build -o {{.BINARY_DIR}}/worker{{exeExt}} ./cmd/worker
+      - echo "Build complete!"
+
+  test:
+    desc: Run tests with coverage
+    env:
+      TEST_BYPASS_AUTH: true
+    cmds:
+      - echo "Running tests with coverage..."
+      - go test -cover ./...
+      - echo "Tidying modules..."
+      - go mod tidy
+      - echo "Checking for clean git state..."
+      - git diff --exit-code go.mod go.sum
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      # Cross-platform deletion
+      - cmd: '{{if eq OS "windows"}}powershell -c "Remove-Item -Recurse -Force {{.BINARY_DIR}}, helpdesk-*.tgz, rendered.yaml -ErrorAction SilentlyContinue"{{else}}rm -rf {{.BINARY_DIR}} helpdesk-*.tgz rendered.yaml{{end}}'
+    ignore_error: true
+
+  docker:
+    desc: Build Docker images
+    cmds:
+      - echo "Building Docker images..."
+      - docker build -f Dockerfile.api -t helpdesk-api .
+      - docker build -f Dockerfile.worker -t helpdesk-worker .
+      - docker build -f Dockerfile.frontend-internal -t helpdesk-internal-frontend .
+      - docker build -f Dockerfile.frontend-requester -t helpdesk-requester-frontend .
+      - echo "Docker images built successfully!"
+
+  lint-helm:
+    desc: Lint and package Helm chart
+    cmds:
+      - echo "Linting Helm chart..."
+      - helm lint helm/helpdesk
+      - echo "Verifying ingress API mapping..."
+      - helm template test helm/helpdesk > rendered.yaml
+      # Uses simple grep; on Windows, this requires 'grep' in path or Git Bash.
+      # If strict Windows compat is needed, we'd replace this with a PowerShell 'Select-String' command.
+      - "grep -A 5 'path: /api' rendered.yaml | grep 'name: test-helpdesk-api'"
+      - echo "Packaging Helm chart..."
+      - helm package helm/helpdesk
+
+  dev-up:
+    desc: Start development stack
+    cmds:
+      - echo "Starting development stack..."
+      - docker compose up -d db redis api worker
+      - 'echo "API available at: http://localhost:8080"'
+      - 'echo "Health check: curl http://localhost:8080/healthz"'
+
+  dev-down:
+    desc: Stop development stack
+    cmds:
+      - docker compose down
+
+  frontend:
+    desc: Install and build frontend applications
+    cmds:
+      - task: frontend-internal
+      - task: frontend-requester
+
+  frontend-internal:
+    internal: true
+    dir: web/internal
+    cmds:
+      - echo "Setting up internal UI..."
+      - npm install
+      - npm run build
+
+  frontend-requester:
+    internal: true
+    dir: web/requester
+    cmds:
+      - echo "Setting up requester UI..."
+      - npm install
+      - npm run build
+
+  gen-types:
+    desc: Generate TypeScript types from OpenAPI spec
+    cmds:
+      - echo "Copying OpenAPI spec..."
+      - cmd: '{{if eq OS "windows"}}copy docs\openapi.yaml web\internal\{{else}}cp docs/openapi.yaml web/internal/{{end}}'
+      - cmd: '{{if eq OS "windows"}}copy docs\openapi.yaml web\requester\{{else}}cp docs/openapi.yaml web/requester/{{end}}'
+      - echo "Generating types..."
+      - task: gen-types-internal
+      - task: gen-types-requester
+      - echo "Cleaning up..."
+      - cmd: '{{if eq OS "windows"}}del web\internal\openapi.yaml web\requester\openapi.yaml{{else}}rm web/internal/openapi.yaml web/requester/openapi.yaml{{end}}'
+
+  gen-types-internal:
+    internal: true
+    dir: web/internal
+    cmds:
+      - npm run gen:api:file
+
+  gen-types-requester:
+    internal: true
+    dir: web/requester
+    cmds:
+      - npm run gen:api:file
+
+  dev-full:
+    desc: Start full development stack with frontends
+    cmds:
+      - echo "Starting full stack..."
+      - docker compose up -d db redis api worker internal requester
+      - 'echo "API: http://localhost:8080"'
+      - 'echo "Internal UI: http://localhost:5175"'
+      - 'echo "Requester UI: http://localhost:5174"'
