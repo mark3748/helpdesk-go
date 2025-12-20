@@ -4,10 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
@@ -312,11 +310,11 @@ func syncUser(c *gin.Context, a *app.App, externalID, username, email, name stri
 			// Subsequent retries: append random suffix
 			randomBytes := make([]byte, 4)
 			if _, err := rand.Read(randomBytes); err != nil {
-				// Fallback to timestamp if random generation fails
-				username = fmt.Sprintf("%s_%d", originalUsername, time.Now().UnixNano())
-			} else {
-				username = originalUsername + "_" + base64.RawURLEncoding.EncodeToString(randomBytes)
+				// If crypto/rand fails, this is a serious system issue
+				// Return error rather than using a predictable fallback
+				return "", errors.New("failed to generate unique username: random generation unavailable")
 			}
+			username = originalUsername + "_" + base64.RawURLEncoding.EncodeToString(randomBytes)
 		}
 	}
 	
