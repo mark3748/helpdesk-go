@@ -176,7 +176,7 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
           {children || <Outlet />}
 
           <div style={{ textAlign: 'center', marginTop: 40, color: '#999', fontSize: 12 }}>
-            Copyright © (NH-Rashed)
+            Copyright 2025 ©
           </div>
         </Content>
       </Layout>

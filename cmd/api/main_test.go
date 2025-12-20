@@ -841,10 +841,16 @@ func (db *eventCaptureDB) QueryRow(ctx context.Context, sql string, args ...inte
 	switch {
 	case strings.HasPrefix(s, "insert into tickets"):
 		return &fakeRow{scan: func(dest ...any) error {
-			if len(dest) >= 3 {
+			if len(dest) >= 7 {
 				*(dest[0].(*string)) = "t1"
-				*(dest[1].(*string)) = "TKT-1"
+				if p, ok := dest[1].(*any); ok {
+					*p = "TKT-1"
+				}
 				*(dest[2].(*string)) = "New"
+				*(dest[3].(*string)) = ""
+				*(dest[4].(*string)) = "New"
+				*(dest[5].(**string)) = nil
+				*(dest[6].(*int)) = 1
 			}
 			return nil
 		}}
@@ -883,7 +889,7 @@ func TestCreateTicket_EventRecorded(t *testing.T) {
 	db := &eventCaptureDB{}
 	app := newTestApp(Config{Env: "test", TestBypassAuth: true}, db, nil, nil)
 
-	body := `{"title":"foo","requester_id":"u1","priority":1}`
+	body := `{"title":"foo","requester_id":"00000000-0000-0000-0000-000000000001","priority":1}`
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
