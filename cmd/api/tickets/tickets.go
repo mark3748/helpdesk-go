@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/jackc/pgconn"
 
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
@@ -24,6 +25,7 @@ import (
 	eventspkg "github.com/mark3748/helpdesk-go/cmd/api/events"
 	metrics "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 	requesterspkg "github.com/mark3748/helpdesk-go/cmd/api/requesters"
+	ws "github.com/mark3748/helpdesk-go/cmd/api/ws"
 )
 
 type Ticket struct {
@@ -112,6 +114,23 @@ func Create(a *app.App) gin.HandlerFunc {
 					app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"custom_json": "must be object"})
 				}
 				return
+			}
+		}
+		if in.RequesterID != "" {
+			if _, err := uuid.Parse(in.RequesterID); err != nil {
+				app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"requester_id": "invalid_uuid"})
+				return
+			}
+			if a.DB != nil {
+				var exists bool
+				if err := a.DB.QueryRow(c.Request.Context(), "select exists (select 1 from requesters where id = $1)", in.RequesterID).Scan(&exists); err != nil {
+					app.AbortError(c, http.StatusInternalServerError, "db_error", err.Error(), nil)
+					return
+				}
+				if !exists {
+					app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"requester_id": "not_found"})
+					return
+				}
 			}
 		}
 		if in.RequesterID == "" {
@@ -222,20 +241,22 @@ func Create(a *app.App) gin.HandlerFunc {
 		const q = `with s as (select nextval('ticket_seq') n)
 insert into tickets (number, title, description, requester_id, priority, status, source, custom_json)
 values ((select 'HD-'||n from s), $1, $2, $3, $4, coalesce(nullif($5,''),'New'), $6, coalesce(nullif($7,''),'{}')::jsonb)
-returning id::text, number, title, description, status, assignee_id::text, priority`
+values ((select 'HD-'||n from s), $1, $2, $3, $4, coalesce(nullif($5,''),'New'), $6, coalesce(nullif($7,''),'{}')::jsonb)
+returning id::text, number, title, description, status, assignee_id::text, priority::int`
 		const qAssign = `with s as (select nextval('ticket_seq') n)
 insert into tickets (number, title, description, requester_id, assignee_id, priority, status, source, custom_json)
 values ((select 'HD-'||n from s), $1, $2, $3, $4, $5, coalesce(nullif($6,''),'New'), $7, coalesce(nullif($8,''),'{}')::jsonb)
-returning id::text, number, title, description, status, assignee_id::text, priority`
+returning id::text, number, title, description, status, assignee_id::text, priority::int`
 		var t Ticket
 		var assignee *string
 		var number any
 		var status string
+		var prior int // Changed from int16 to int for scanning
 		var row = a.DB.QueryRow(c.Request.Context(), q, in.Title, in.Description, in.RequesterID, in.Priority, in.Status, in.Source, string(in.CustomJSON))
 		if defaultAssignee != "" {
 			row = a.DB.QueryRow(c.Request.Context(), qAssign, in.Title, in.Description, in.RequesterID, defaultAssignee, in.Priority, in.Status, in.Source, string(in.CustomJSON))
 		}
-		if err := row.Scan(&t.ID, &number, &t.Title, &t.Description, &status, &assignee, &t.Priority); err != nil {
+		if err := row.Scan(&t.ID, &number, &t.Title, &t.Description, &status, &assignee, &prior); err != nil {
 			var pge *pgconn.PgError
 			if errors.As(err, &pge) && pge.Code == "23505" { // unique_violation (dedup index)
 				// Select the most recent matching ticket and return it
@@ -258,13 +279,14 @@ returning id::text, number, title, description, status, assignee_id::text, prior
 					return
 				}
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			app.AbortError(c, http.StatusInternalServerError, "db_error", err.Error(), nil)
 			return
 		}
 		t.Number = number
 		t.Status = status
 		t.AssigneeID = assignee
 		t.RequesterID = in.RequesterID
+		t.Priority = int16(prior) // Cast scanned int to int16 for struct field
 		// Best-effort fill requester label
 		if a.DB != nil {
 			var name, email string
@@ -277,6 +299,7 @@ returning id::text, number, title, description, status, assignee_id::text, prior
 				t.Requester = email
 			}
 			eventspkg.Emit(c.Request.Context(), a.DB, t.ID, "ticket_created", map[string]any{"id": t.ID})
+			ws.PublishEvent(c.Request.Context(), a.Q, ws.Event{Type: "ticket_created", Data: t})
 		}
 		c.JSON(http.StatusCreated, t)
 	}
@@ -709,6 +732,7 @@ func Update(a *app.App) gin.HandlerFunc {
 		if in.AssigneeID != nil {
 			eventspkg.Emit(c.Request.Context(), a.DB, t.ID, "ticket_updated", map[string]any{"id": t.ID})
 		}
+		ws.PublishEvent(c.Request.Context(), a.Q, ws.Event{Type: "ticket_updated", Data: t})
 		c.JSON(http.StatusOK, t)
 	}
 }

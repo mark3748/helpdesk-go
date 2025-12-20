@@ -59,6 +59,7 @@ import (
 	metricspkg "github.com/mark3748/helpdesk-go/cmd/api/metrics"
 	problemspkg "github.com/mark3748/helpdesk-go/cmd/api/problems"
 	releasespkg "github.com/mark3748/helpdesk-go/cmd/api/releases"
+	requesterspkg "github.com/mark3748/helpdesk-go/cmd/api/requesters"
 	roles "github.com/mark3748/helpdesk-go/cmd/api/roles"
 	slaspkg "github.com/mark3748/helpdesk-go/cmd/api/slas"
 	teamspkg "github.com/mark3748/helpdesk-go/cmd/api/teams"
@@ -780,6 +781,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.POST("/users", authpkg.RequireRole("admin"), userspkg.CreateLocal(a.core()))
 	auth.GET("/roles", authpkg.RequireRole("admin"), roles.List(a.core()))
 
+	auth.GET("/requesters", requesterspkg.Search(a.core()))
 	auth.GET("/requesters/:id", a.getRequester)
 	auth.POST("/requesters", authpkg.RequireRole("agent", "manager"), a.createRequester)
 	auth.PATCH("/requesters/:id", authpkg.RequireRole("agent", "manager"), a.updateRequester)

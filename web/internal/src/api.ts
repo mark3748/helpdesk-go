@@ -13,65 +13,60 @@ export interface AppEvent {
  */
 export function subscribeEvents(onStatus?: (connected: boolean) => void) {
   const handlers = new Map<string, Set<(ev: AppEvent) => void>>();
-  const listeners = new Map<string, (e: MessageEvent<string>) => void>();
-  let es: EventSource | null = null;
+  let ws: WebSocket | null = null;
   let timer: number | null = null;
   let backoff = 1000;
-  let lastEventId: string | undefined;
-
-  const attachListeners = () => {
-    listeners.forEach((listener, type) => es?.addEventListener(type, listener));
-  };
+  let shouldReconnect = true;
 
   const connect = () => {
-    // EventSource does not support custom headers in browsers; pass last id via query
-    const url = lastEventId ? `/api/events?last_event_id=${encodeURIComponent(lastEventId)}` : '/api/events';
-    es = new EventSource(url, { withCredentials: true });
-    es.onopen = () => {
-      onStatus?.(true);
-      backoff = 1000;
-    };
-    es.onerror = () => {
-      onStatus?.(false);
-      if (timer) window.clearTimeout(timer);
-      es?.close();
-      timer = window.setTimeout(connect, backoff);
-      backoff = Math.min(backoff * 2, 30000);
-    };
-    attachListeners();
+    // Delay connection to handle potential immediate cleanup (React Strict Mode)
+    timer = window.setTimeout(() => {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host; // includes port
+      const url = `${proto}//${host}/api/events`;
+
+      if (ws) {
+        ws.close();
+      }
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        onStatus?.(true);
+        backoff = 1000;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data) as AppEvent;
+          const cbs = handlers.get(parsed.type);
+          cbs?.forEach((cb) => cb(parsed));
+        } catch (e) {
+          console.error('Failed to parse event', e);
+        }
+      };
+
+      ws.onclose = () => {
+        onStatus?.(false);
+        if (shouldReconnect) {
+          timer = window.setTimeout(connect, backoff);
+          backoff = Math.min(backoff * 2, 30000);
+        }
+      };
+
+      ws.onerror = (err) => {
+        if (!shouldReconnect) return;
+        console.error('WebSocket error:', err);
+      };
+    }, 50);
   };
 
   connect();
-
-  const addListener = (type: string) => {
-    if (listeners.has(type)) return;
-    const listener = (e: MessageEvent<string>) => {
-      lastEventId = e.lastEventId || lastEventId;
-      try {
-        const parsed = JSON.parse(e.data) as AppEvent;
-        const cbs = handlers.get(type);
-        cbs?.forEach((cb) => cb(parsed));
-      } catch {
-        // ignore malformed events
-      }
-    };
-    listeners.set(type, listener);
-    es?.addEventListener(type, listener);
-  };
-
-  const removeListener = (type: string) => {
-    const listener = listeners.get(type);
-    if (!listener) return;
-    es?.removeEventListener(type, listener);
-    listeners.delete(type);
-  };
 
   const on = (type: string, handler: (ev: AppEvent) => void) => {
     let set = handlers.get(type);
     if (!set) {
       set = new Set();
       handlers.set(type, set);
-      addListener(type);
     }
     set.add(handler);
     return () => {
@@ -80,7 +75,6 @@ export function subscribeEvents(onStatus?: (connected: boolean) => void) {
       set.delete(handler);
       if (set.size === 0) {
         handlers.delete(type);
-        removeListener(type);
       }
     };
   };
@@ -88,8 +82,15 @@ export function subscribeEvents(onStatus?: (connected: boolean) => void) {
   return {
     on,
     close: () => {
+      shouldReconnect = false;
       if (timer) window.clearTimeout(timer);
-      es?.close();
+      if (ws) {
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.close();
+      }
     },
   };
 }

@@ -30,7 +30,7 @@ func TestRequesterHandlers(t *testing.T) {
 	}{
 		{"create", http.MethodPost, "/requesters", `{"email":"a@b.com","name":"Ann","phone":"+1234567890"}`, http.StatusCreated},
 		{"get", http.MethodGet, "/requesters/1", "", http.StatusOK},
-		{"update", http.MethodPatch, "/requesters/1", `{"name":"Bob"}`, http.StatusOK},
+		{"update", http.MethodPatch, "/requesters/1", `{"display_name":"Bob"}`, http.StatusOK},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
