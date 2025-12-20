@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	crand "crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"embed"
 	"encoding/hex"
@@ -19,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"math/big"
@@ -43,8 +43,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 
-	"sync"
-
 	appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
 	assetspkg "github.com/mark3748/helpdesk-go/cmd/api/assets"
 	attachmentspkg "github.com/mark3748/helpdesk-go/cmd/api/attachments"
@@ -52,7 +50,6 @@ import (
 	changespkg "github.com/mark3748/helpdesk-go/cmd/api/changes"
 	commentspkg "github.com/mark3748/helpdesk-go/cmd/api/comments"
 	emailspkg "github.com/mark3748/helpdesk-go/cmd/api/emails"
-	appevents "github.com/mark3748/helpdesk-go/cmd/api/events"
 	exportspkg "github.com/mark3748/helpdesk-go/cmd/api/exports"
 	handlers "github.com/mark3748/helpdesk-go/cmd/api/handlers"
 	kbpkg "github.com/mark3748/helpdesk-go/cmd/api/kb"
@@ -103,26 +100,6 @@ var swaggerHTML = `<!DOCTYPE html>
 </html>`
 
 var (
-	statusEnum = []string{
-		"New",
-		"Open",
-		"Assigned",
-		"Accepted",
-		"In Progress",
-		"Scheduled",
-		"Pending",
-		"Pending - Awaiting Info",
-		"Pending - Awaiting Callback",
-		"Pending - Awaiting Parts",
-		"Pending - Awaiting Approval",
-		"Resolved",
-		"Closed",
-	}
-	sourceEnum   = []string{"web", "email"}
-	priorityEnum = []int16{1, 2, 3, 4}
-)
-
-var (
 	jwksRefreshTotal = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "jwks_refresh_total",
 		Help: "Number of JWKS refresh attempts.",
@@ -133,15 +110,6 @@ var (
 	})
 	metricsRegisterOnce sync.Once
 )
-
-func enumContains[T comparable](list []T, v T) bool {
-	for _, e := range list {
-		if e == v {
-			return true
-		}
-	}
-	return false
-}
 
 type Config struct {
 	Addr           string
@@ -316,24 +284,6 @@ func (a *App) core() *appcore.App {
 		ObjectStoreTimeoutMS: a.cfg.ObjectStoreTimeoutMS,
 	}
 	return &appcore.App{Cfg: cfg, DB: a.db, R: a.r, Keyf: a.keyf, M: a.m, Q: a.q}
-}
-
-// dbCtx returns a child context with the configured DB timeout applied.
-// If no timeout is configured or the request already has an earlier deadline,
-// it returns the original context.
-func (a *App) dbCtx(c *gin.Context) (context.Context, context.CancelFunc) {
-	base := c.Request.Context()
-	if a.cfg.DBTimeoutMS <= 0 {
-		return base, func() {}
-	}
-	timeout := time.Duration(a.cfg.DBTimeoutMS) * time.Millisecond
-	if dl, ok := base.Deadline(); ok {
-		remain := time.Until(dl)
-		if remain > 0 && remain < timeout {
-			return context.WithTimeout(base, remain)
-		}
-	}
-	return context.WithTimeout(base, timeout)
 }
 
 // redisCtx returns a context with Redis timeout applied relative to the parent.
@@ -753,6 +703,10 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 
 	rg.POST("/webhooks/email-inbound", webhookspkg.EmailInbound(a.core()))
 
+	// OIDC Endpoints (Dynamic)
+	rg.GET("/auth/oidc/login", handlers.OIDCLogin(a.core()))
+	rg.GET("/auth/oidc/callback", handlers.OIDCCallback(a.core()))
+
 	// Use an empty subpath to avoid introducing a double slash (e.g.,
 	// "/api//me"). The UI expects endpoints like "/api/me".
 	auth := rg.Group("")
@@ -1060,159 +1014,6 @@ type AuthUser struct {
 
 func (u AuthUser) GetRoles() []string { return u.Roles }
 
-func (a *App) authMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Testing bypass: allow unit tests to inject a user without JWKS/token.
-		if a.cfg.TestBypassAuth {
-			c.Set("user", AuthUser{
-				ID:          "test-user",
-				ExternalID:  "test",
-				Email:       "test@example.com",
-				DisplayName: "Test User",
-				Roles:       []string{"agent"},
-			})
-			c.Next()
-			return
-		}
-
-		if a.cfg.AuthMode == "local" {
-			tokenStr, err := c.Cookie("auth")
-			if err != nil || tokenStr == "" {
-				// Backward-compat: accept legacy cookie name used in some clients
-				if v, err2 := c.Cookie("hd_auth"); err2 == nil && v != "" {
-					tokenStr = v
-				} else {
-					c.AbortWithStatusJSON(401, gin.H{"error": "missing auth cookie"})
-					return
-				}
-			}
-			token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("unexpected signing method")
-				}
-				return []byte(a.cfg.AuthLocalSecret), nil
-			})
-			if err != nil || !token.Valid {
-				c.AbortWithStatusJSON(401, gin.H{"error": "invalid token"})
-				return
-			}
-			claims, ok := token.Claims.(jwt.MapClaims)
-			if !ok {
-				c.AbortWithStatusJSON(401, gin.H{"error": "invalid claims"})
-				return
-			}
-			uid, _ := claims["sub"].(string)
-			ctx := c.Request.Context()
-			var userID, mail, displayName string
-			if err := a.db.QueryRow(ctx, "select id, coalesce(email,''), coalesce(display_name,'') from users where id=$1", uid).Scan(&userID, &mail, &displayName); err != nil {
-				c.AbortWithStatusJSON(401, gin.H{"error": "unknown user"})
-				return
-			}
-			rows, err := a.db.Query(ctx, "select r.name from user_roles ur join roles r on ur.role_id=r.id where ur.user_id=$1", userID)
-			if err != nil {
-				c.AbortWithStatusJSON(500, gin.H{"error": "role lookup"})
-				return
-			}
-			defer rows.Close()
-			roles := []string{}
-			for rows.Next() {
-				var role string
-				if err := rows.Scan(&role); err == nil {
-					roles = append(roles, role)
-				}
-			}
-			authUser := AuthUser{ID: userID, ExternalID: "", Email: mail, DisplayName: displayName, Roles: roles}
-			c.Set("user", authUser)
-			c.Next()
-			return
-		}
-
-		if a.keyf == nil {
-			c.AbortWithStatusJSON(500, gin.H{"error": "jwks not configured"})
-			return
-		}
-		auth := c.GetHeader("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") {
-			c.AbortWithStatusJSON(401, gin.H{"error": "missing bearer token"})
-			return
-		}
-		tokenStr := strings.TrimPrefix(auth, "Bearer ")
-		token, err := jwt.Parse(tokenStr, a.keyf)
-		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(401, gin.H{"error": "invalid token"})
-			return
-		}
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			c.AbortWithStatusJSON(401, gin.H{"error": "invalid claims"})
-			return
-		}
-		if iss, ok := claims["iss"].(string); ok && a.cfg.OIDCIssuer != "" && iss != a.cfg.OIDCIssuer {
-			c.AbortWithStatusJSON(401, gin.H{"error": "invalid issuer"})
-			return
-		}
-		sub, _ := claims["sub"].(string)
-		email, _ := claims["email"].(string)
-		name, _ := claims["name"].(string)
-
-		ctx := c.Request.Context()
-		var userID, mail, displayName string
-		err = a.db.QueryRow(ctx, "select id, coalesce(email,''), coalesce(display_name,'') from users where external_id=$1", sub).Scan(&userID, &mail, &displayName)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				err = a.db.QueryRow(ctx, "insert into users (id, external_id, email, display_name) values (gen_random_uuid(), $1, $2, $3) returning id", sub, email, name).Scan(&userID)
-				if err != nil {
-					c.AbortWithStatusJSON(500, gin.H{"error": "user create"})
-					return
-				}
-				mail = email
-				displayName = name
-			} else {
-				c.AbortWithStatusJSON(500, gin.H{"error": "user lookup"})
-				return
-			}
-		}
-		rows, err := a.db.Query(ctx, "select r.name from user_roles ur join roles r on ur.role_id=r.id where ur.user_id=$1", userID)
-		if err != nil {
-			c.AbortWithStatusJSON(500, gin.H{"error": "role lookup"})
-			return
-		}
-		defer rows.Close()
-		roleSet := map[string]struct{}{}
-		for rows.Next() {
-			var role string
-			if err := rows.Scan(&role); err == nil {
-				roleSet[role] = struct{}{}
-			}
-		}
-		if gc := a.cfg.OIDCGroupClaim; gc != "" {
-			if v, ok := claims[gc]; ok {
-				switch g := v.(type) {
-				case []interface{}:
-					for _, it := range g {
-						if s, ok := it.(string); ok {
-							roleSet[s] = struct{}{}
-						}
-					}
-				case []string:
-					for _, s := range g {
-						roleSet[s] = struct{}{}
-					}
-				case string:
-					roleSet[g] = struct{}{}
-				}
-			}
-		}
-		roles := make([]string, 0, len(roleSet))
-		for r := range roleSet {
-			roles = append(roles, r)
-		}
-		authUser := AuthUser{ID: userID, ExternalID: sub, Email: mail, DisplayName: displayName, Roles: roles}
-		c.Set("user", authUser)
-		c.Next()
-	}
-}
-
 // seedLocalAdmin inserts an admin user for local auth if one doesn't already
 // exist. It is safe to call multiple times.
 func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
@@ -1250,10 +1051,6 @@ select $1, r.id from roles r on conflict do nothing`, uid)
 }
 
 // login/logout/role checks are provided by cmd/api/auth
-
-type roleRequest struct {
-	Role string `json:"role" binding:"required"`
-}
 
 // Users and roles handlers are now delegated to modular packages under cmd/api/users and cmd/api/auth
 
@@ -1350,6 +1147,25 @@ func (a *App) exportTicketsStatus(c *gin.Context) {
 	c.JSON(200, gin.H{"url": url})
 }
 
+// enqueueEmail pushes an email job onto the Redis-backed queue, if configured,
+// so that the worker service can send the email asynchronously.
+func (a *App) enqueueEmail(ctx context.Context, to, template string, data any) {
+	if a.q == nil {
+		return
+	}
+	payload := map[string]any{
+		"to":       to,
+		"template": template,
+		"data":     data,
+	}
+	b, _ := json.Marshal(payload)
+	if err := a.q.RPush(ctx, "email_queue", b).Err(); err != nil {
+		log.Error().Err(err).Msg("enqueue email")
+	}
+}
+
+const exportSyncLimit = 100
+
 // exportTicketsBridge preserves async behavior for large exports while delegating
 // small exports to the modular exports package for CSV generation.
 func (a *App) exportTicketsBridge(c *gin.Context) {
@@ -1428,254 +1244,25 @@ func (a *App) exportTicketsBridge(c *gin.Context) {
 	exportspkg.Tickets(a.core())(c)
 }
 
+func (a *App) addStatusHistory(ctx context.Context, ticketID, oldStatus, newStatus, modifiedBy string) {
+	valid := false
+	for _, s := range ValidTicketStatuses {
+		if s == newStatus {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return
+	}
+	if a.db == nil {
+		return
+	}
+	_, _ = a.db.Exec(ctx, "insert into ticket_status_history (ticket_id, old_status, new_status, modified_by) values ($1, $2, $3, $4)", ticketID, oldStatus, newStatus, modifiedBy)
+}
+
 // ===== Handlers =====
 
-type jsonRaw []byte
-
-func (j jsonRaw) MarshalJSON() ([]byte, error) {
-	if j == nil || len(j) == 0 {
-		return []byte("null"), nil
-	}
-	return j, nil
-}
-
-func derefInt64(p *int64) int64 {
-	if p != nil {
-		return *p
-	}
-	return 0
-}
-
-func derefInt32(p *int32) int32 {
-	if p != nil {
-		return *p
-	}
-	return 0
-}
-
-type createTicketReq struct {
-	Title       string         `json:"title" binding:"required,min=3"`
-	Description string         `json:"description"`
-	RequesterID string         `json:"requester_id" binding:"required"`
-	Priority    int16          `json:"priority" binding:"required,oneof=1 2 3 4"`
-	Urgency     *int16         `json:"urgency" binding:"omitempty,oneof=1 2 3 4"`
-	Category    *string        `json:"category"`
-	Subcategory *string        `json:"subcategory" binding:"omitempty,min=1"`
-	CustomJSON  map[string]any `json:"custom_json"`
-	Source      string         `json:"source" binding:"omitempty,oneof=web email"`
-}
-
-// Moved to cmd/api/tickets
-/* removed legacy createTicket
-	var in createTicketReq
-	if err := c.ShouldBindJSON(&in); err != nil {
-		var ve validator.ValidationErrors
-		if errors.As(err, &ve) {
-			errs := make(map[string]string)
-			typ := reflect.TypeOf(in)
-			for _, fe := range ve {
-				field, _ := typ.FieldByName(fe.StructField())
-				name := strings.Split(field.Tag.Get("json"), ",")[0]
-				if name == "" {
-					name = strings.ToLower(fe.StructField())
-				}
-				errs[name] = fe.Error()
-			}
-			c.JSON(400, gin.H{"errors": errs})
-			return
-		}
-		var ute *json.UnmarshalTypeError
-		if errors.As(err, &ute) {
-			c.JSON(400, gin.H{"errors": gin.H{ute.Field: ute.Error()}})
-			return
-		}
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	u := c.MustGet("user").(AuthUser)
-	ctx := c.Request.Context()
-	var id, number, status string
-	status = "New"
-	source := in.Source
-	if source == "" {
-		source = "web"
-	}
-	if !enumContains(sourceEnum, source) {
-		c.JSON(400, gin.H{"error": "invalid source"})
-		return
-	}
-	// If requester_id is empty (e.g., requester portal), create/link a requester using the current user
-	if in.RequesterID == "" {
-		var email, name string
-		_ = a.db.QueryRow(ctx, `select coalesce(email,''), coalesce(display_name,'') from users where id=$1`, u.ID).Scan(&email, &name)
-		_, _ = a.db.Exec(ctx, `insert into requesters (id, email, name) values ($1, nullif($2,''), nullif($3,'')) on conflict (id) do nothing`, u.ID, email, name)
-		in.RequesterID = u.ID
-	}
-	// Validate requester exists to avoid FK errors (skip in test to keep unit tests simple)
-	if a.cfg.Env != "test" {
-		var exists bool
-		if err := a.db.QueryRow(ctx, `select exists(select 1 from requesters where id=$1)`, in.RequesterID).Scan(&exists); err != nil || !exists {
-			c.JSON(400, gin.H{"error": "invalid requester_id"})
-			return
-		}
-	}
-
-	err := a.db.QueryRow(ctx, `
-        insert into tickets (id, number, title, description, requester_id, priority, urgency, category, subcategory, status, source, custom_json)
-        values (gen_random_uuid(), 'TKT-' || to_char(nextval('ticket_seq'), 'FM000000'), $1, $2, $3, $4, $5, $6, $7, $8, $9, coalesce($10::jsonb,'{}'::jsonb))
-        returning id, number, status`,
-		in.Title, in.Description, in.RequesterID, in.Priority, in.Urgency, in.Category, in.Subcategory, status, source, toJSON(in.CustomJSON)).Scan(&id, &number, &status)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	a.addStatusHistory(ctx, id, "", status, u.ID)
-	a.audit(c, "user", u.ID, "ticket", id, "create", gin.H{"title": in.Title, "requester_id": in.RequesterID})
-	a.recordTicketEvent(ctx, id, "create", u.ID, gin.H{"title": in.Title, "requester_id": in.RequesterID})
-	var requesterEmail string
-	_ = a.db.QueryRow(ctx, "select coalesce(email,'') from users where id=$1", in.RequesterID).Scan(&requesterEmail)
-	if requesterEmail != "" {
-		a.enqueueEmail(ctx, requesterEmail, "ticket_created", gin.H{"Number": number})
-	}
-   ws.PublishEvent(ctx, a.q, ws.Event{Type: "ticket_created", Data: map[string]interface{}{"id": id}})
-	c.JSON(201, gin.H{"id": id, "number": number, "status": status})
-} */
-
-func toJSON(v interface{}) *string {
-	if v == nil {
-		return nil
-	}
-	b, _ := json.Marshal(v)
-	s := string(b)
-	return &s
-}
-
-func (a *App) recordTicketEvent(ctx context.Context, ticketID, action, actorID string, diff interface{}) {
-	if ticketID == "" || action == "" {
-		return
-	}
-	// Normalize to new event schema: event_type + payload
-	// Include actor_id inside payload for consumers that need it.
-	payload := map[string]interface{}{}
-	if diff != nil {
-		// Best-effort merge: if diff is already a map, copy it.
-		if m, ok := diff.(map[string]interface{}); ok {
-			for k, v := range m {
-				payload[k] = v
-			}
-		} else {
-			payload["diff"] = diff
-		}
-	}
-	if actorID != "" {
-		payload["actor_id"] = actorID
-	}
-	appevents.Emit(ctx, a.db, ticketID, action, payload)
-}
-
-func (a *App) audit(c *gin.Context, actorType, actorID, entityType, entityID, action string, diff interface{}) {
-	ctx := c.Request.Context()
-	var prevHash *string
-	_ = a.db.QueryRow(ctx, "select hash from audit_events order by at desc limit 1").Scan(&prevHash)
-	diffJSON, _ := json.Marshal(diff)
-	data := append([]byte{}, diffJSON...)
-	if prevHash != nil {
-		data = append(data, []byte(*prevHash)...)
-	}
-	h := sha256.Sum256(data)
-	hash := fmt.Sprintf("%x", h[:])
-	_, _ = a.db.Exec(ctx, `insert into audit_events (actor_type, actor_id, entity_type, entity_id, action, diff_json, ip, ua, hash, prev_hash)
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-		actorType, actorID, entityType, entityID, action, diffJSON, c.ClientIP(), c.Request.UserAgent(), hash, prevHash)
-}
-
-func (a *App) enqueueEmail(ctx context.Context, to, template string, data interface{}) {
-	if a.q == nil {
-		return
-	}
-	job := struct {
-		Type string      `json:"type"`
-		Data interface{} `json:"data"`
-	}{
-		Type: "send_email",
-		Data: struct {
-			To       string      `json:"to"`
-			Template string      `json:"template"`
-			Data     interface{} `json:"data"`
-		}{to, template, data},
-	}
-	b, err := json.Marshal(job)
-	if err != nil {
-		log.Error().Err(err).Msg("marshal email job")
-		return
-	}
-	// Apply Redis timeout to queue operations
-	rc, cancel := a.redisCtx(ctx)
-	defer cancel()
-	if err := a.q.RPush(rc, "jobs", b).Err(); err != nil {
-		log.Error().Err(err).Msg("enqueue job")
-	}
-	size, _ := a.q.LLen(rc, "jobs").Result()
-	ws.PublishEvent(rc, a.q, ws.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
-}
-
-func (a *App) addStatusHistory(ctx context.Context, ticketID, from, to, actorID string) {
-	if !enumContains(statusEnum, to) || (from != "" && !enumContains(statusEnum, from)) {
-		return
-	}
-	_, _ = a.db.Exec(ctx, `insert into ticket_status_history (ticket_id, from_status, to_status, actor_id) values ($1,$2,$3,$4)`, ticketID, nullable(from), to, nullable(actorID))
-}
-
-func nullable(s string) interface{} {
-	if s == "" {
-		return nil
-	}
-	return s
-}
-
-// Moved to cmd/api/tickets
-/* func (a *App) getTicket(c *gin.Context) {
-	id := c.Param("id")
-	ctx := c.Request.Context()
-	var t Ticket
-	var customJSON []byte
-	var policyID *string
-	var respMS, resMS *int64
-	var paused *bool
-	var reason *string
-	var respTarget, resTarget *int32
-	err := a.db.QueryRow(ctx, `
-       select t.id, t.number, t.title, coalesce(t.description,''), t.requester_id, t.assignee_id, t.team_id, t.priority,
-              t.urgency, t.category, t.subcategory, t.status, t.scheduled_at, t.due_at, t.source, t.custom_json, t.created_at, t.updated_at,
-              sc.policy_id, sc.response_elapsed_ms, sc.resolution_elapsed_ms, sc.paused, sc.reason,
-              sp.response_target_mins, sp.resolution_target_mins
-       from tickets t
-       left join ticket_sla_clocks sc on sc.ticket_id = t.id
-       left join sla_policies sp on sp.id = sc.policy_id
-       where t.id=$1`, id).
-		Scan(&t.ID, &t.Number, &t.Title, &t.Description, &t.RequesterID, &t.AssigneeID, &t.TeamID, &t.Priority, &t.Urgency,
-			&t.Category, &t.Subcategory, &t.Status, &t.ScheduledAt, &t.DueAt, &t.Source, &customJSON, &t.CreatedAt, &t.UpdatedAt,
-			&policyID, &respMS, &resMS, &paused, &reason, &respTarget, &resTarget)
-	if err != nil {
-		c.JSON(404, gin.H{"error": "not found"})
-		return
-	}
-	t.CustomJSON = jsonRaw(customJSON)
-	if policyID != nil {
-		t.SLA = &SLAStatus{
-			PolicyID:             *policyID,
-			ResponseElapsedMS:    derefInt64(respMS),
-			ResolutionElapsedMS:  derefInt64(resMS),
-			ResponseTargetMins:   int(derefInt32(resTarget)),
-			ResolutionTargetMins: int(derefInt32(respTarget)),
-			Paused:               paused != nil && *paused,
-			Reason:               reason,
-		}
-	}
-	c.JSON(200, t)
-} */
-
-// ===== User settings (profile/password) =====
 func (a *App) getMyProfile(c *gin.Context) {
 	uVal, ok := c.Get("user")
 	if !ok {
@@ -1772,113 +1359,6 @@ func (a *App) changeMyPassword(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
-type patchTicketReq struct {
-	// Accept both title-case and lowercase to avoid breaking existing clients
-	Status      *string     `json:"status" binding:"omitempty,oneof=New new Open open Pending pending Resolved resolved Closed closed"`
-	AssigneeID  *string     `json:"assignee_id"`
-	Priority    *int16      `json:"priority" binding:"omitempty,oneof=1 2 3 4"`
-	Urgency     *int16      `json:"urgency" binding:"omitempty,oneof=1 2 3 4"`
-	ScheduledAt *time.Time  `json:"scheduled_at"`
-	DueAt       *time.Time  `json:"due_at"`
-	CustomJSON  interface{} `json:"custom_json"`
-}
-
-// Moved to cmd/api/tickets
-/* func (a *App) updateTicket(c *gin.Context) {
-	id := c.Param("id")
-	var in patchTicketReq
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	// Normalize status to Title-case for storage and consistency
-	if in.Status != nil {
-		switch strings.ToLower(*in.Status) {
-		case "new":
-			s := "New"
-			in.Status = &s
-		case "open":
-			s := "Open"
-			in.Status = &s
-		case "pending":
-			s := "Pending"
-			in.Status = &s
-		case "resolved":
-			s := "Resolved"
-			in.Status = &s
-		case "closed":
-			s := "Closed"
-			in.Status = &s
-		}
-	}
-	u := c.MustGet("user").(AuthUser)
-	ctx := c.Request.Context()
-	var oldStatus, number, requesterEmail string
-	_ = a.db.QueryRow(ctx, "select status, number, (select coalesce(email,'') from users where id=requester_id) from tickets where id=$1", id).Scan(&oldStatus, &number, &requesterEmail)
-
-	_, err := a.db.Exec(ctx, `
-        update tickets set
-            status = coalesce($1, status),
-            assignee_id = coalesce($2::uuid, assignee_id),
-            priority = coalesce($3, priority),
-            urgency = coalesce($4, urgency),
-            scheduled_at = coalesce($5, scheduled_at),
-            due_at = coalesce($6, due_at),
-            custom_json = coalesce($7::jsonb, custom_json),
-            updated_at = now()
-        where id=$8
-    `, in.Status, in.AssigneeID, in.Priority, in.Urgency, in.ScheduledAt, in.DueAt, toJSON(in.CustomJSON), id)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	if in.Status != nil && oldStatus != *in.Status {
-		a.addStatusHistory(ctx, id, oldStatus, *in.Status, u.ID)
-	}
-	diff := gin.H{}
-	if in.Status != nil {
-		diff["status"] = *in.Status
-	}
-	if in.AssigneeID != nil {
-		diff["assignee_id"] = *in.AssigneeID
-	}
-	if in.Priority != nil {
-		diff["priority"] = *in.Priority
-	}
-	if in.Urgency != nil {
-		diff["urgency"] = *in.Urgency
-	}
-	if in.ScheduledAt != nil {
-		diff["scheduled_at"] = in.ScheduledAt
-	}
-	if in.DueAt != nil {
-		diff["due_at"] = in.DueAt
-	}
-	if in.CustomJSON != nil {
-		diff["custom_json"] = in.CustomJSON
-	}
-	a.audit(c, "user", u.ID, "ticket", id, "update", diff)
-	a.recordTicketEvent(ctx, id, "update", u.ID, diff)
-	if requesterEmail != "" {
-		if in.Status != nil && *in.Status == "Resolved" && oldStatus != *in.Status {
-			b := make([]byte, 16)
-			if _, err := rand.Read(b); err == nil {
-				token := hex.EncodeToString(b)
-				_, _ = a.db.Exec(ctx, `update tickets set csat_token=$1, csat_score=null where id=$2`, token, id)
-				data := gin.H{
-					"Number":  number,
-					"CSATURL": fmt.Sprintf("/csat/%s", token),
-				}
-				a.enqueueEmail(ctx, requesterEmail, "ticket_resolved", data)
-			}
-		} else {
-			a.enqueueEmail(ctx, requesterEmail, "ticket_updated", gin.H{"Number": number})
-		}
-	}
-   ws.PublishEvent(ctx, a.q, ws.Event{Type: "ticket_updated", Data: map[string]interface{}{"id": id}})
-	c.JSON(200, gin.H{"ok": true})
-} */
-
 func (a *App) submitCSAT(c *gin.Context) {
 	token := c.Param("token")
 	score := c.PostForm("score")
@@ -1902,285 +1382,6 @@ func (a *App) submitCSAT(c *gin.Context) {
 func (a *App) csatForm(c *gin.Context) {
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(200, `<!doctype html><html><body><form method="POST"><button name="score" value="good">Good</button><button name="score" value="bad">Bad</button></form></body></html>`)
-}
-
-type commentReq struct {
-	BodyMD     string `json:"body_md" binding:"required"`
-	IsInternal bool   `json:"is_internal"`
-	// AuthorID is ignored server-side; author is derived from authenticated user
-	AuthorID string `json:"author_id,omitempty"`
-}
-
-// Moved to cmd/api/comments
-/* func (a *App) listComments(c *gin.Context) {
-	id := c.Param("id")
-	ctx := c.Request.Context()
-	rows, err := a.db.Query(ctx, `
-       select id, ticket_id, author_id, body_md, is_internal, created_at
-       from ticket_comments
-       where ticket_id=$1 and is_internal=false
-       order by created_at
-    `, id)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	defer rows.Close()
-	var cs []Comment
-	for rows.Next() {
-		var cm Comment
-		if err := rows.Scan(&cm.ID, &cm.TicketID, &cm.AuthorID, &cm.BodyMD, &cm.IsInternal, &cm.CreatedAt); err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
-			return
-		}
-		cs = append(cs, cm)
-	}
-	if err := rows.Err(); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(200, cs)
-} */
-
-// Moved to cmd/api/comments
-/* func (a *App) addComment(c *gin.Context) {
-	id := c.Param("id")
-	var in commentReq
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	u := c.MustGet("user").(AuthUser)
-	ctx := c.Request.Context()
-	var cid string
-	err := a.db.QueryRow(ctx, `
-        insert into ticket_comments (id, ticket_id, author_id, body_md, is_internal)
-        values (gen_random_uuid(), $1, $2, $3, $4) returning id
-    `, id, u.ID, in.BodyMD, in.IsInternal).Scan(&cid)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	a.audit(c, "user", u.ID, "ticket", id, "comment_add", gin.H{"comment_id": cid, "author_id": u.ID})
-	a.recordTicketEvent(ctx, id, "comment_add", u.ID, gin.H{"comment_id": cid, "author_id": u.ID})
-	c.JSON(201, gin.H{"id": cid})
-} */
-
-// ===== Attachments =====
-type presignReq struct {
-	Filename string `json:"filename" binding:"required"`
-	Bytes    int64  `json:"bytes" binding:"required"`
-	Mime     string `json:"mime"`
-}
-
-func (a *App) presignAttachment(c *gin.Context) {
-	if a.m == nil {
-		c.JSON(500, gin.H{"error": "object store not configured"})
-		return
-	}
-	var in presignReq
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	objectKey := uuid.New().String()
-	// If backing store is MinIO, return a real presigned URL
-	if _, ok := a.m.(*minio.Client); ok {
-		url, err := a.m.PresignedPutObject(c.Request.Context(), a.cfg.MinIOBucket, objectKey, time.Minute)
-		if err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
-			return
-		}
-		headers := map[string]string{}
-		if in.Mime != "" {
-			headers["Content-Type"] = in.Mime
-		}
-		c.JSON(201, gin.H{"upload_url": url.String(), "headers": headers, "attachment_id": objectKey})
-		return
-	}
-	// Filesystem store: provide an internal upload URL
-	headers := map[string]string{}
-	if in.Mime != "" {
-		headers["Content-Type"] = in.Mime
-	}
-	// Always return the /api/ prefixed path so the UI works consistently
-	c.JSON(201, gin.H{"upload_url": "/api/attachments/upload/" + objectKey, "headers": headers, "attachment_id": objectKey})
-}
-
-type finalizeReq struct {
-	AttachmentID string `json:"attachment_id" binding:"required"`
-	Filename     string `json:"filename" binding:"required"`
-	Bytes        int64  `json:"bytes" binding:"required"`
-	Mime         string `json:"mime"`
-}
-
-func (a *App) finalizeAttachment(c *gin.Context) {
-	if a.m == nil {
-		c.JSON(500, gin.H{"error": "minio not configured"})
-		return
-	}
-	ticketID := c.Param("id")
-	u := c.MustGet("user").(AuthUser)
-	var in finalizeReq
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	// Validate that the attachment ID is a UUID to prevent path traversal
-	if _, err := uuid.Parse(strings.TrimSpace(in.AttachmentID)); err != nil {
-		c.JSON(400, gin.H{"error": "invalid attachment_id"})
-		return
-	}
-	ctx := c.Request.Context()
-	info, err := a.m.StatObject(ctx, a.cfg.MinIOBucket, in.AttachmentID, minio.StatObjectOptions{})
-	if err != nil || info.Size != in.Bytes {
-		c.JSON(400, gin.H{"error": "upload incomplete"})
-		return
-	}
-	_, err = a.db.Exec(ctx, `insert into attachments (id, ticket_id, uploader_id, object_key, filename, bytes, mime) values ($1,$2,$3,$4,$5,$6,$7)`,
-		in.AttachmentID, ticketID, u.ID, in.AttachmentID, in.Filename, in.Bytes, in.Mime)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	a.audit(c, "user", u.ID, "ticket", ticketID, "attachment_add", gin.H{"attachment_id": in.AttachmentID})
-	a.recordTicketEvent(ctx, ticketID, "attachment_add", u.ID, gin.H{"attachment_id": in.AttachmentID})
-	c.JSON(201, gin.H{"id": in.AttachmentID})
-}
-
-// uploadAttachmentObject handles PUT uploads for filesystem object store.
-func (a *App) uploadAttachmentObject(c *gin.Context) {
-	if a.m == nil {
-		c.JSON(500, gin.H{"error": "object store not configured"})
-		return
-	}
-	// Only support when using filesystem store; MinIO uses presigned URLs directly
-	if _, ok := a.m.(*minio.Client); ok {
-		c.JSON(400, gin.H{"error": "invalid upload target"})
-		return
-	}
-	objectKey := strings.TrimSpace(c.Param("objectKey"))
-	if _, err := uuid.Parse(objectKey); err != nil {
-		c.JSON(400, gin.H{"error": "invalid object key"})
-		return
-	}
-	// Read body into memory (acceptable for dev-size uploads). Could stream with io.Copy + tee if needed.
-	data, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "read body"})
-		return
-	}
-	ct := c.GetHeader("Content-Type")
-	if ct == "" {
-		ct = "application/octet-stream"
-	}
-	if _, err := a.m.PutObject(c.Request.Context(), a.cfg.MinIOBucket, objectKey, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{ContentType: ct}); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	c.Status(200)
-}
-
-func (a *App) listAttachments(c *gin.Context) {
-	ticketID := c.Param("id")
-	ctx := c.Request.Context()
-	rows, err := a.db.Query(ctx, "select id, filename, bytes, mime, created_at from attachments where ticket_id=$1", ticketID)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	defer rows.Close()
-	type Att struct {
-		ID       string    `json:"id"`
-		Filename string    `json:"filename"`
-		Bytes    int64     `json:"bytes"`
-		Mime     *string   `json:"mime"`
-		Created  time.Time `json:"created_at"`
-	}
-	out := []Att{}
-	for rows.Next() {
-		var a Att
-		if err := rows.Scan(&a.ID, &a.Filename, &a.Bytes, &a.Mime, &a.Created); err == nil {
-			out = append(out, a)
-		}
-	}
-	c.JSON(200, out)
-}
-
-// getAttachment streams the attachment file or redirects to object storage if configured.
-func (a *App) getAttachment(c *gin.Context) {
-	ticketID := c.Param("id")
-	attID := c.Param("attID")
-	ctx := c.Request.Context()
-	var objectKey, filename string
-	var mime *string
-	err := a.db.QueryRow(ctx, "select object_key, filename, mime from attachments where id=$1 and ticket_id=$2", attID, ticketID).Scan(&objectKey, &filename, &mime)
-	if err != nil {
-		c.JSON(404, gin.H{"error": "not found"})
-		return
-	}
-	// If MinIO endpoint is configured, generate a presigned URL and redirect.
-	if a.cfg.MinIOEndpoint != "" {
-		if mc, ok := a.m.(*minio.Client); ok {
-			url, err := mc.PresignedGetObject(ctx, a.cfg.MinIOBucket, objectKey, time.Minute, nil)
-			if err != nil {
-				c.JSON(500, gin.H{"error": err.Error()})
-				return
-			}
-			c.Redirect(http.StatusFound, url.String())
-			return
-		}
-	}
-	// Serve from filesystem store when configured
-	if a.cfg.FileStorePath != "" {
-		dir := a.cfg.FileStorePath
-		if a.cfg.MinIOBucket != "" {
-			dir = filepath.Join(dir, a.cfg.MinIOBucket)
-		}
-		// Safely join and ensure the final path stays within the base directory
-		base := filepath.Clean(dir)
-		fp := filepath.Join(base, objectKey)
-		clean := filepath.Clean(fp)
-		if !strings.HasPrefix(clean, base+string(os.PathSeparator)) && clean != base {
-			c.JSON(404, gin.H{"error": "not found"})
-			return
-		}
-		if mime != nil && *mime != "" {
-			c.Header("Content-Type", *mime)
-		} else {
-			c.Header("Content-Type", "application/octet-stream")
-		}
-		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-		c.File(clean)
-		return
-	}
-	c.JSON(500, gin.H{"error": "object store not configured"})
-}
-
-func (a *App) deleteAttachment(c *gin.Context) {
-	if a.m == nil {
-		c.JSON(500, gin.H{"error": "minio not configured"})
-		return
-	}
-	ticketID := c.Param("id")
-	attID := c.Param("attID")
-	u := c.MustGet("user").(AuthUser)
-	ctx := c.Request.Context()
-	var objectKey string
-	err := a.db.QueryRow(ctx, "select object_key from attachments where id=$1 and ticket_id=$2", attID, ticketID).Scan(&objectKey)
-	if err != nil {
-		c.JSON(404, gin.H{"error": "not found"})
-		return
-	}
-	_ = a.m.RemoveObject(ctx, a.cfg.MinIOBucket, objectKey, minio.RemoveObjectOptions{})
-	_, err = a.db.Exec(ctx, "delete from attachments where id=$1", attID)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	a.audit(c, "user", u.ID, "ticket", ticketID, "attachment_delete", gin.H{"attachment_id": attID})
-	a.recordTicketEvent(ctx, ticketID, "attachment_delete", u.ID, gin.H{"attachment_id": attID})
-	c.JSON(200, gin.H{"ok": true})
 }
 
 // ===== Requesters =====
@@ -2287,309 +1488,3 @@ func (a *App) updateRequester(c *gin.Context) {
 	}
 	c.JSON(200, out)
 }
-
-// ===== Watchers =====
-type watcherReq struct {
-	UserID string `json:"user_id" binding:"required"`
-}
-
-// Legacy watchers handlers removed (now provided by cmd/api/watchers)
-
-// ===== Metrics =====
-
-// metricsSLA returns SLA attainment statistics.
-/* func (a *App) metricsSLA(c *gin.Context) {
-	ctx := c.Request.Context()
-	var met, total int
-	err := a.db.QueryRow(ctx, `
-               select
-                       count(*) filter (where tsc.resolution_elapsed_ms <= sp.resolution_target_mins * 60000) as met,
-                       count(*) as total
-               from ticket_sla_clocks tsc
-               join tickets t on t.id = tsc.ticket_id
-               join sla_policies sp on sp.id = tsc.policy_id
-               where t.status = 'Resolved'
-       `).Scan(&met, &total)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "sla query"})
-		return
-	}
-	attainment := 0.0
-	if total > 0 {
-		attainment = float64(met) / float64(total)
-	}
-	c.JSON(200, gin.H{"total": total, "met": met, "sla_attainment": attainment})
-} */
-
-// metricsResolution returns average resolution time in milliseconds.
-/* func (a *App) metricsResolution(c *gin.Context) {
-	ctx := c.Request.Context()
-	var avg sql.NullFloat64
-	err := a.db.QueryRow(ctx, `
-               select avg(tsc.resolution_elapsed_ms)
-               from ticket_sla_clocks tsc
-               join tickets t on t.id = tsc.ticket_id
-               where t.status = 'Resolved' and tsc.resolution_elapsed_ms > 0
-       `).Scan(&avg)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "resolution query"})
-		return
-	}
-	c.JSON(200, gin.H{"avg_resolution_ms": avg.Float64})
-} */
-
-// metricsTicketVolume returns ticket counts per day for the last 30 days.
-/* func (a *App) metricsTicketVolume(c *gin.Context) {
-	ctx := c.Request.Context()
-	rows, err := a.db.Query(ctx, `
-               select date_trunc('day', created_at)::date as day, count(*)
-               from tickets
-               group by day
-               order by day desc
-               limit 30
-       `)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "volume query"})
-		return
-	}
-	defer rows.Close()
-	type dayCount struct {
-		Day   time.Time `json:"day"`
-		Count int       `json:"count"`
-	}
-	out := []dayCount{}
-	for rows.Next() {
-		var dc dayCount
-		if err := rows.Scan(&dc.Day, &dc.Count); err == nil {
-			out = append(out, dc)
-		}
-	}
-	c.JSON(200, gin.H{"daily": out})
-} */
-
-// metricsAgent returns per-status counts for the current agent.
-/* func (a *App) metricsAgent(c *gin.Context) {
-	u := c.MustGet("user").(AuthUser)
-	ctx := c.Request.Context()
-	rows, err := a.db.Query(ctx, `select status, count(*) from tickets where assignee_id=$1 group by status`, u.ID)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "metrics query"})
-		return
-	}
-	defer rows.Close()
-	out := map[string]int{}
-	for rows.Next() {
-		var status string
-		var cnt int
-		if err := rows.Scan(&status, &cnt); err == nil {
-			out[status] = cnt
-		}
-	}
-	c.JSON(200, out)
-} */
-
-// metricsManager returns global per-status counts.
-/* func (a *App) metricsManager(c *gin.Context) {
-	ctx := c.Request.Context()
-	rows, err := a.db.Query(ctx, `select status, count(*) from tickets group by status`)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "metrics query"})
-		return
-	}
-	defer rows.Close()
-	out := map[string]int{}
-	for rows.Next() {
-		var status string
-		var cnt int
-		if err := rows.Scan(&status, &cnt); err == nil {
-			out[status] = cnt
-		}
-	}
-	c.JSON(200, out)
-} */
-
-// ===== Exports =====
-const exportSyncLimit = 100
-
-type exportTicketsReq struct {
-	IDs []string `json:"ids" binding:"required"`
-}
-
-/* func (a *App) exportTickets(c *gin.Context) {
-	if a.m == nil {
-		c.JSON(500, gin.H{"error": "minio not configured"})
-		return
-	}
-	var in exportTicketsReq
-	if err := c.ShouldBindJSON(&in); err != nil || len(in.IDs) == 0 {
-		c.JSON(400, gin.H{"error": "ids required"})
-		return
-	}
-	ctx := c.Request.Context()
-	placeholders := make([]string, len(in.IDs))
-	args := make([]any, len(in.IDs))
-	for i, id := range in.IDs {
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-		args[i] = id
-	}
-	countQ := fmt.Sprintf("select count(*) from tickets where id in (%s)", strings.Join(placeholders, ","))
-	var count int
-	if err := a.db.QueryRow(ctx, countQ, args...).Scan(&count); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	if count > exportSyncLimit {
-		if a.q == nil {
-			c.JSON(500, gin.H{"error": "queue not configured"})
-			return
-		}
-		u, _ := c.Get("user")
-		auth := u.(AuthUser)
-		jobID := uuid.New().String()
-		job := struct {
-			ID   string      `json:"id"`
-			Type string      `json:"type"`
-			Data interface{} `json:"data"`
-		}{
-			ID:   jobID,
-			Type: "export_tickets",
-			Data: struct {
-				IDs       []string `json:"ids"`
-				Requester string   `json:"requester"`
-			}{in.IDs, auth.ID},
-		}
-		jb, err := json.Marshal(job)
-		if err != nil {
-			c.JSON(500, gin.H{"error": "marshal job"})
-			return
-		}
-		status := struct {
-			Requester string `json:"requester"`
-			Status    string `json:"status"`
-		}{auth.ID, "queued"}
-		sb, _ := json.Marshal(status)
-		if err := a.q.Set(ctx, "export_tickets:"+jobID, sb, 0).Err(); err != nil {
-			c.JSON(500, gin.H{"error": "redis"})
-			return
-		}
-		if err := a.q.RPush(ctx, "jobs", jb).Err(); err != nil {
-			c.JSON(500, gin.H{"error": "enqueue"})
-			return
-		}
-		size, _ := a.q.LLen(ctx, "jobs").Result()
-           ws.PublishEvent(ctx, a.q, ws.Event{Type: "queue_changed", Data: map[string]interface{}{"size": size}})
-		c.JSON(202, gin.H{"job_id": jobID})
-		return
-	}
-	q := fmt.Sprintf("select id, number, title, status, priority from tickets where id in (%s)", strings.Join(placeholders, ","))
-	rows, err := a.db.Query(ctx, q, args...)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	defer rows.Close()
-	buf := &bytes.Buffer{}
-	w := csv.NewWriter(buf)
-	_ = w.Write([]string{"id", "number", "title", "status", "priority"})
-	for rows.Next() {
-		var id, number, title, status string
-		var priority int16
-		if err := rows.Scan(&id, &number, &title, &status, &priority); err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
-			return
-		}
-		_ = w.Write([]string{id, number, title, status, strconv.Itoa(int(priority))})
-	}
-	w.Flush()
-	objectKey := uuid.New().String() + ".csv"
-	_, err = a.m.PutObject(ctx, a.cfg.MinIOBucket, objectKey, bytes.NewReader(buf.Bytes()), int64(buf.Len()), minio.PutObjectOptions{ContentType: "text/csv"})
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	if mc, ok := a.m.(*minio.Client); ok {
-		url, err := mc.PresignedGetObject(ctx, a.cfg.MinIOBucket, objectKey, time.Minute, nil)
-		if err != nil {
-			c.JSON(500, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(200, gin.H{"url": url.String()})
-		return
-	}
-	scheme := "http"
-	if a.cfg.MinIOUseSSL {
-		scheme = "https"
-	}
-	url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, objectKey)
-	c.JSON(200, gin.H{"url": url})
-} */
-
-/* removed old exportTicketsStatus duplicate
-	if a.q == nil {
-		c.JSON(500, gin.H{"error": "queue not configured"})
-		return
-	}
-	jobID := c.Param("job_id")
-	ctx := c.Request.Context()
-	val, err := a.q.Get(ctx, "export_tickets:"+jobID).Result()
-	if err == redis.Nil {
-		c.JSON(404, gin.H{"error": "not found"})
-		return
-	}
-	if err != nil {
-		c.JSON(500, gin.H{"error": "redis"})
-		return
-	}
-	var st struct {
-		Requester string `json:"requester"`
-		Status    string `json:"status"`
-		URL       string `json:"url"`
-		ObjectKey string `json:"object_key"`
-		Error     string `json:"error"`
-	}
-	if err := json.Unmarshal([]byte(val), &st); err != nil {
-		c.JSON(500, gin.H{"error": "decode"})
-		return
-	}
-	u, _ := c.Get("user")
-	auth := u.(AuthUser)
-	if st.Requester != auth.ID {
-		c.JSON(404, gin.H{"error": "not found"})
-		return
-	}
-	if st.Status != "done" {
-		out := gin.H{"status": st.Status}
-		if st.Error != "" {
-			out["error"] = st.Error
-		}
-		c.JSON(200, out)
-		return
-	}
-	// Backward compatibility: if a URL was stored, return it.
-	if st.URL != "" {
-		c.JSON(200, gin.H{"url": st.URL})
-		return
-	}
-	// Prefer on-demand signing using the stored object key.
-	if st.ObjectKey == "" {
-		c.JSON(500, gin.H{"error": "missing object key"})
-		return
-	}
-	if mc, ok := a.m.(*minio.Client); ok {
-		// Use a longer TTL so users have time to download.
-		u, err := mc.PresignedGetObject(ctx, a.cfg.MinIOBucket, st.ObjectKey, 15*time.Minute, nil)
-		if err != nil {
-			c.JSON(500, gin.H{"error": "sign url"})
-			return
-		}
-		c.JSON(200, gin.H{"url": u.String()})
-		return
-	}
-	// Fallback to constructing a static URL when not using MinIO client.
-	scheme := "http"
-	if a.cfg.MinIOUseSSL {
-		scheme = "https"
-	}
-	url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.cfg.MinIOEndpoint, a.cfg.MinIOBucket, st.ObjectKey)
-	c.JSON(200, gin.H{"url": url})
-} */

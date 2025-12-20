@@ -418,32 +418,38 @@ returning id::text`
 				externalID = "local:" + in.Username
 			}
 		}
-		claims := jwt.MapClaims{
-			"sub":   externalID,
-			"email": email,
-			"name":  name,
-			"exp":   time.Now().Add(24 * time.Hour).Unix(),
-			"iat":   time.Now().Unix(),
-		}
-		tk := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		s, err := tk.SignedString([]byte(a.Cfg.AuthLocalSecret))
-		if err != nil {
+		if err := SetSessionCookie(c, a.Cfg.AuthLocalSecret, externalID, email, name, a.Cfg.Env == "prod"); err != nil {
 			app.AbortError(c, http.StatusInternalServerError, "sign_token_failed", "failed to sign token", nil)
 			return
 		}
-		// HttpOnly cookie for browser auth; Secure false in dev, true in prod
-		secure := a.Cfg.Env == "prod"
-		http.SetCookie(c.Writer, &http.Cookie{
-			Name:     "hd_auth",
-			Value:    s,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   secure,
-			SameSite: http.SameSiteLaxMode,
-			Expires:  time.Now().Add(24 * time.Hour),
-		})
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
+}
+
+// SetSessionCookie creates a signed JWT and sets the auth cookie.
+func SetSessionCookie(c *gin.Context, secret, externalID, email, name string, secure bool) error {
+	claims := jwt.MapClaims{
+		"sub":   externalID,
+		"email": email,
+		"name":  name,
+		"exp":   time.Now().Add(24 * time.Hour).Unix(),
+		"iat":   time.Now().Unix(),
+	}
+	tk := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	s, err := tk.SignedString([]byte(secret))
+	if err != nil {
+		return err
+	}
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "hd_auth",
+		Value:    s,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Now().Add(24 * time.Hour),
+	})
+	return nil
 }
 
 func Logout() gin.HandlerFunc {

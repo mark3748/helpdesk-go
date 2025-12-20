@@ -20,10 +20,17 @@ type DB interface {
 
 // OIDCSettings holds OpenID Connect configuration.
 type OIDCSettings struct {
-	Issuer       string              `json:"issuer"`
-	ClientID     string              `json:"client_id"`
-	ClaimPath    string              `json:"claim_path"`
-	ValueToRoles map[string][]string `json:"value_to_roles"`
+	Issuer         string              `json:"issuer"`
+	ClientID       string              `json:"client_id"`
+	ClientSecret   string              `json:"client_secret"`
+	RedirectURL    string              `json:"redirect_url"`
+	GroupClaimName string              `json:"group_claim_name"`
+	AdminGroup     string              `json:"admin_group"`
+	Scopes         string              `json:"scopes"`
+	UsernameClaim  string              `json:"username_claim"`
+	AutoOnboard    bool                `json:"auto_onboard"`
+	ClaimPath      string              `json:"claim_path"` // Deprecated: use GroupClaimName
+	ValueToRoles   map[string][]string `json:"value_to_roles"`
 }
 
 // Settings represents persisted configuration values.
