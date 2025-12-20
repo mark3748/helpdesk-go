@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"math/big"
@@ -41,8 +42,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
-
-	"sync"
 
 	appcore "github.com/mark3748/helpdesk-go/cmd/api/app"
 	assetspkg "github.com/mark3748/helpdesk-go/cmd/api/assets"
@@ -101,24 +100,6 @@ var swaggerHTML = `<!DOCTYPE html>
 </html>`
 
 var (
-	statusEnum = []string{
-		"New",
-		"Open",
-		"Assigned",
-		"Accepted",
-		"In Progress",
-		"Scheduled",
-		"Pending",
-		"Pending - Awaiting Info",
-		"Pending - Awaiting Callback",
-		"Pending - Awaiting Parts",
-		"Pending - Awaiting Approval",
-		"Resolved",
-		"Closed",
-	}
-)
-
-var (
 	jwksRefreshTotal = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "jwks_refresh_total",
 		Help: "Number of JWKS refresh attempts.",
@@ -129,15 +110,6 @@ var (
 	})
 	metricsRegisterOnce sync.Once
 )
-
-func enumContains[T comparable](list []T, v T) bool {
-	for _, e := range list {
-		if e == v {
-			return true
-		}
-	}
-	return false
-}
 
 type Config struct {
 	Addr           string
@@ -1270,6 +1242,23 @@ func (a *App) exportTicketsBridge(c *gin.Context) {
 	// Delegate small exports to modular implementation (restore body for handler)
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
 	exportspkg.Tickets(a.core())(c)
+}
+
+func (a *App) addStatusHistory(ctx context.Context, ticketID, oldStatus, newStatus, modifiedBy string) {
+	valid := false
+	for _, s := range []string{"New", "Open", "Assigned", "Accepted", "In Progress", "Scheduled", "Pending", "Pending - Awaiting Info", "Pending - Awaiting Callback", "Pending - Awaiting Parts", "Pending - Awaiting Approval", "Resolved", "Closed"} {
+		if s == newStatus {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return
+	}
+	if a.db == nil {
+		return
+	}
+	_, _ = a.db.Exec(ctx, "insert into ticket_status_history (ticket_id, old_status, new_status, modified_by) values ($1, $2, $3, $4)", ticketID, oldStatus, newStatus, modifiedBy)
 }
 
 // ===== Handlers =====

@@ -187,7 +187,7 @@ func (db readyzDB) Query(ctx context.Context, sql string, args ...interface{}) (
 	return nil, nil
 }
 func (db readyzDB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
-	return readyzRow{err: db.err}
+	return readyzRow(db)
 }
 func (db readyzDB) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
