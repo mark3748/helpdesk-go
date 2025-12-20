@@ -25,6 +25,9 @@ export function subscribeEvents(onStatus?: (connected: boolean) => void) {
       const host = window.location.host; // includes port
       const url = `${proto}//${host}/api/events`;
 
+      if (ws) {
+        ws.close();
+      }
       ws = new WebSocket(url);
 
       ws.onopen = () => {
@@ -54,7 +57,7 @@ export function subscribeEvents(onStatus?: (connected: boolean) => void) {
         if (!shouldReconnect) return;
         console.error('WebSocket error:', err);
       };
-    }, 0);
+    }, 50);
   };
 
   connect();
