@@ -4,11 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
@@ -309,8 +312,8 @@ func syncUser(c *gin.Context, a *app.App, externalID, username, email, name stri
 			// Subsequent retries: append random suffix
 			randomBytes := make([]byte, 4)
 			if _, err := rand.Read(randomBytes); err != nil {
-				// Fallback to attempt number if random generation fails
-				username = originalUsername + "_attempt_" + base64.RawURLEncoding.EncodeToString([]byte{byte(attempt)})
+				// Fallback to timestamp if random generation fails
+				username = fmt.Sprintf("%s_%d", originalUsername, time.Now().UnixNano())
 			} else {
 				username = originalUsername + "_" + base64.RawURLEncoding.EncodeToString(randomBytes)
 			}
@@ -382,7 +385,7 @@ func syncRoles(c *gin.Context, a *app.App, userID string, groups []string, setti
 		err := a.DB.QueryRow(c.Request.Context(), "SELECT id FROM roles WHERE name=$1", r).Scan(&rid)
 		if err != nil {
 			// Log error if role doesn't exist
-			if err.Error() == "no rows in result set" || strings.Contains(err.Error(), "no rows") {
+			if errors.Is(err, pgx.ErrNoRows) {
 				log.Warn().Str("role", r).Str("user_id", userID).Msg("role not found in database - check OIDC role mapping configuration")
 			} else {
 				log.Error().Err(err).Str("role", r).Str("user_id", userID).Msg("failed to lookup role")
