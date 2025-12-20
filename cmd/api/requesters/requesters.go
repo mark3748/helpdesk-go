@@ -15,7 +15,7 @@ import (
 type Requester struct {
 	ID    string `json:"id"`
 	Email string `json:"email,omitempty"`
-	Name  string `json:"name,omitempty"`
+	Name  string `json:"display_name,omitempty"`
 	Phone string `json:"phone,omitempty"`
 }
 
@@ -43,7 +43,7 @@ func Create(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var in struct {
 			Email string `json:"email"`
-			Name  string `json:"name"`
+			Name  string `json:"display_name"`
 			Phone string `json:"phone"`
 		}
 		if err := c.ShouldBindJSON(&in); err != nil {
@@ -102,7 +102,7 @@ func Update(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var in struct {
 			Email *string `json:"email"`
-			Name  *string `json:"name"`
+			Name  *string `json:"display_name"`
 			Phone *string `json:"phone"`
 		}
 		if err := c.ShouldBindJSON(&in); err != nil {
@@ -152,5 +152,42 @@ func Update(a *app.App) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, r)
+	}
+}
+
+// Search finds requesters by name or email.
+func Search(a *app.App) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if a.DB == nil {
+			c.JSON(http.StatusOK, []Requester{})
+			return
+		}
+		q := strings.ToLower(strings.TrimSpace(c.Query("q")))
+		if q == "" {
+			c.JSON(http.StatusOK, []Requester{})
+			return
+		}
+		// Limit to 20 results
+		const sql = `
+			select id::text, coalesce(email,''), coalesce(name,''), coalesce(phone,'')
+			from requesters
+			where lower(name) like '%' || $1 || '%' or lower(email) like '%' || $1 || '%'
+			order by name asc, email asc
+			limit 20`
+		rows, err := a.DB.Query(c.Request.Context(), sql, q)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+		out := []Requester{}
+		for rows.Next() {
+			var r Requester
+			if err := rows.Scan(&r.ID, &r.Email, &r.Name, &r.Phone); err != nil {
+				continue
+			}
+			out = append(out, r)
+		}
+		c.JSON(http.StatusOK, out)
 	}
 }

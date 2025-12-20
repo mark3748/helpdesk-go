@@ -27,6 +27,12 @@ export async function fetchRequester(id: string): Promise<Requester> {
   return apiFetch<Requester>(`/requesters/${id}`);
 }
 
+export async function searchRequesters(query: string): Promise<Requester[]> {
+  console.log('API searchRequesters called with:', query);
+  if (!query) return [];
+  return apiFetch<Requester[]>(`/requesters?q=${encodeURIComponent(query)}`);
+}
+
 export async function createRequester(data: {
   email: string;
   display_name: string;

@@ -1,6 +1,7 @@
-import { Modal, Form, Input, Select, message } from 'antd';
+import { useState, useRef } from 'react';
+import { Modal, Form, Input, Select, message, Spin } from 'antd';
 import { useMutation } from '@tanstack/react-query';
-import { createTicket, createRequester } from '../../shared/api';
+import { createTicket, createRequester, searchRequesters } from '../../shared/api';
 
 interface Props {
   open: boolean;
@@ -10,6 +11,38 @@ interface Props {
 
 export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const [form] = Form.useForm();
+  const [options, setOptions] = useState<{ label: string; value: string }[]>([]);
+  const [fetching, setFetching] = useState(false);
+  const [isManual, setIsManual] = useState(false);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const fetchUser = (value: string) => {
+    console.log('fetchUser called with:', value);
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
+    }
+    searchTimeout.current = setTimeout(() => {
+      console.log('Executing search for:', value);
+      setFetching(true);
+      if (!value) {
+        setOptions([]);
+        setFetching(false);
+        return;
+      }
+      searchRequesters(value).then((newOptions) => {
+        console.log('Search results:', newOptions);
+        setOptions(newOptions.map((r) => ({
+          label: r.display_name ? `${r.display_name} <${r.email || 'no email'}>` : r.email || r.id || 'Unknown',
+          value: r.id || '',
+        })));
+        setFetching(false);
+      }).catch(err => {
+        console.error('Search failed:', err);
+        setFetching(false);
+      });
+    }, 500);
+  };
+
   const create = useMutation({
     mutationFn: async (values: {
       title: string;
@@ -20,7 +53,11 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
       requester_name?: string;
     }) => {
       let requesterId = values.requester_id;
-      if (!requesterId) {
+      // If manual mode or no ID selected
+      if (!requesterId || isManual) {
+        if (!values.requester_email || !values.requester_name) {
+          throw new Error('Name and email required for new requester');
+        }
         const r = await createRequester({
           email: String(values.requester_email),
           display_name: String(values.requester_name),
@@ -37,9 +74,10 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
     onSuccess: () => {
       message.success('Ticket created');
       form.resetFields();
+      setIsManual(false);
       onCreated();
     },
-    onError: () => message.error('Failed to create ticket'),
+    onError: (err) => message.error(`Failed to create ticket: ${err.message}`),
   });
 
   return (
@@ -51,34 +89,48 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
       confirmLoading={create.isPending}
     >
       <Form form={form} layout="vertical" onFinish={(values) => create.mutate(values as any)}>
-        <Form.Item name="title" label="Title" rules={[{ required: true }]}> 
+        <Form.Item name="title" label="Title" rules={[{ required: true }]}>
           <Input />
         </Form.Item>
         <Form.Item name="description" label="Description">
           <Input.TextArea rows={4} />
         </Form.Item>
-        <Form.Item
-          name="requester_id"
-          label="Requester ID"
-          rules={[
-            ({ getFieldValue }) => ({
-              validator(_, value) {
-                if (value || (getFieldValue('requester_email') && getFieldValue('requester_name')))
-                  return Promise.resolve();
-                return Promise.reject(new Error('Provide requester ID or name and email'));
-              },
-            }),
-          ]}
-        >
-          <Input />
-        </Form.Item>
-        <Form.Item name="requester_email" label="Requester Email">
-          <Input />
-        </Form.Item>
-        <Form.Item name="requester_name" label="Requester Name">
-          <Input />
-        </Form.Item>
-        <Form.Item name="priority" label="Priority" initialValue={2} rules={[{ required: true }]}> 
+
+        {!isManual ? (
+          <Form.Item
+            name="requester_id"
+            label="Requester"
+            extra={<a onClick={() => setIsManual(true)}>Can't find? Create new requester</a>}
+          >
+            <Select
+              showSearch
+              placeholder="Search requester..."
+              filterOption={false}
+              onSearch={fetchUser}
+              notFoundContent={fetching ? <Spin size="small" /> : null}
+              options={options}
+              allowClear
+              onSelect={() => {
+                form.setFieldsValue({ requester_email: undefined, requester_name: undefined });
+              }}
+            />
+          </Form.Item>
+        ) : (
+          <div style={{ border: '1px solid #eee', padding: 8, marginBottom: 16, borderRadius: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <strong>New Requester</strong>
+              <a onClick={() => setIsManual(false)}>Back to search</a>
+            </div>
+            <Form.Item name="requester_email" label="Requester Email" rules={[{ required: true }]}>
+              <Input />
+            </Form.Item>
+            <Form.Item name="requester_name" label="Requester Name" rules={[{ required: true }]}>
+              <Input />
+            </Form.Item>
+          </div>
+        )}
+
+        <Form.Item name="priority" label="Priority" initialValue={2} rules={[{ required: true }]}>
           <Select
             options={[
               { value: 1, label: '1 - Critical' },

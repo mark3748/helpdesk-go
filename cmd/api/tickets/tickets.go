@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/jackc/pgconn"
 
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
@@ -111,6 +112,12 @@ func Create(a *app.App) gin.HandlerFunc {
 				} else {
 					app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"custom_json": "must be object"})
 				}
+				return
+			}
+		}
+		if in.RequesterID != "" {
+			if _, err := uuid.Parse(in.RequesterID); err != nil {
+				app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"requester_id": "invalid_uuid"})
 				return
 			}
 		}
@@ -258,7 +265,7 @@ returning id::text, number, title, description, status, assignee_id::text, prior
 					return
 				}
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			app.AbortError(c, http.StatusInternalServerError, "db_error", err.Error(), nil)
 			return
 		}
 		t.Number = number
