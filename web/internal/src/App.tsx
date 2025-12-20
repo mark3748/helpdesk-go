@@ -26,58 +26,73 @@ import AssetImport from './components/assets/AssetImport';
 import AssetAnalytics from './components/assets/AssetAnalytics';
 import AssetDetail from './components/assets/AssetDetail';
 
+import { ConfigProvider, App as AntdApp } from 'antd';
+
 const queryClient = new QueryClient();
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          {/* Public login route */}
-          <Route path="/login" element={<Login />} />
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: '#6B4EFF',
+          fontFamily: "'Inter', system-ui, sans-serif",
+          colorBgLayout: '#F3F4F8',
+          borderRadius: 8,
+        },
+      }}
+    >
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AntdApp>
+            <Routes>
+              {/* Public login route */}
+              <Route path="/login" element={<Login />} />
 
-          <Route element={<SidebarLayout />}>
-            {/* Landing: show login if unauthenticated, otherwise neutral page */}
-            <Route index element={<Landing />} />
-            <Route element={<RequireRole role="agent" />}>
-              <Route path="/tickets" element={<QueueList />} />
-              <Route path="/tickets/:id" element={<TicketDetail />} />
-              <Route path="/metrics" element={<AgentMetrics />} />
-              <Route path="/assets" element={<AssetList />} />
-              <Route path="/assets/:id" element={<AssetDetail />} />
-              <Route path="/assets/dashboard" element={<AssetDashboard />} />
-            </Route>
-            <Route element={<RequireRole role="admin" />}>
-              <Route path="/settings" element={<AdminSettings />} />
-              <Route path="/settings/mail" element={<MailSettings />} />
-              <Route path="/settings/oidc" element={<OIDCSettings />} />
-              <Route path="/settings/storage" element={<StorageSettings />} />
-              <Route path="/settings/users" element={<AdminUsers />} />
-              <Route path="/assets/categories" element={<AssetCategories />} />
-              <Route path="/assets/import" element={<AssetImport />} />
-              <Route path="/assets/analytics" element={<AssetAnalytics />} />
-              <Route path="/settings/*" element={<ComingSoon title="Settings area" detail="Additional admin settings will appear here." />} />
-            </Route>
-            {/* User account settings (any authenticated user) */}
-            <Route path="/me/settings" element={<UserSettings />} />
-            {/* Asset checkouts accessible by both agents and managers */}
-            <Route element={<RequireAnyRole roles={['agent', 'manager']} />}>
-              <Route path="/assets/checkouts" element={<AssetCheckout />} />
-            </Route>
-            <Route element={<RequireRole role="manager" />}>
-              <Route path="/manager" element={<QueueManager />} />
-              <Route path="/manager/analytics" element={<ManagerAnalytics />} />
-              <Route path="/assets/new" element={<AssetForm />} />
-              <Route path="/assets/:id/edit" element={<AssetForm />} />
-              <Route path="/assets/bulk" element={<BulkOperations />} />
-              <Route path="/assets/audit" element={<AssetAudit />} />
-            </Route>
-            {/* 404 catch-all inside the layout: redirect to a sensible default */}
-            <Route path="*" element={<NotFoundRedirect />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
+              <Route element={<SidebarLayout />}>
+                {/* Landing: show login if unauthenticated, otherwise neutral page */}
+                <Route index element={<Landing />} />
+                <Route element={<RequireRole role="agent" />}>
+                  <Route path="/tickets" element={<QueueList />} />
+                  <Route path="/tickets/:id" element={<TicketDetail />} />
+                  <Route path="/metrics" element={<AgentMetrics />} />
+                  <Route path="/assets" element={<AssetList />} />
+                  <Route path="/assets/:id" element={<AssetDetail />} />
+                  <Route path="/assets/dashboard" element={<AssetDashboard />} />
+                </Route>
+                <Route element={<RequireRole role="admin" />}>
+                  <Route path="/settings" element={<AdminSettings />} />
+                  <Route path="/settings/mail" element={<MailSettings />} />
+                  <Route path="/settings/oidc" element={<OIDCSettings />} />
+                  <Route path="/settings/storage" element={<StorageSettings />} />
+                  <Route path="/settings/users" element={<AdminUsers />} />
+                  <Route path="/assets/categories" element={<AssetCategories />} />
+                  <Route path="/assets/import" element={<AssetImport />} />
+                  <Route path="/assets/analytics" element={<AssetAnalytics />} />
+                  <Route path="/settings/*" element={<ComingSoon title="Settings area" detail="Additional admin settings will appear here." />} />
+                </Route>
+                {/* User account settings (any authenticated user) */}
+                <Route path="/me/settings" element={<UserSettings />} />
+                {/* Asset checkouts accessible by both agents and managers */}
+                <Route element={<RequireAnyRole roles={['agent', 'manager']} />}>
+                  <Route path="/assets/checkouts" element={<AssetCheckout />} />
+                </Route>
+                <Route element={<RequireRole role="manager" />}>
+                  <Route path="/manager" element={<QueueManager />} />
+                  <Route path="/manager/analytics" element={<ManagerAnalytics />} />
+                  <Route path="/assets/new" element={<AssetForm />} />
+                  <Route path="/assets/:id/edit" element={<AssetForm />} />
+                  <Route path="/assets/bulk" element={<BulkOperations />} />
+                  <Route path="/assets/audit" element={<AssetAudit />} />
+                </Route>
+                {/* 404 catch-all inside the layout: redirect to a sensible default */}
+                <Route path="*" element={<NotFoundRedirect />} />
+              </Route>
+            </Routes>
+          </AntdApp>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ConfigProvider>
   );
 }
 

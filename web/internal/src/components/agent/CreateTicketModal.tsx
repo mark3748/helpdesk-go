@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Modal, Form, Input, Select, message, Spin } from 'antd';
+import { Modal, Form, Input, Select, App, Spin } from 'antd';
 import { useMutation } from '@tanstack/react-query';
 import { createTicket, createRequester, searchRequesters } from '../../shared/api';
 
@@ -11,6 +11,7 @@ interface Props {
 
 export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const [form] = Form.useForm();
+  const { message } = App.useApp();
   const [options, setOptions] = useState<{ label: string; value: string }[]>([]);
   const [fetching, setFetching] = useState(false);
   const [isManual, setIsManual] = useState(false);
