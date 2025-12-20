@@ -10,9 +10,10 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
-	"github.com/rs/zerolog/log"
+	"github.com/jackc/pgx/v5/pgconn"
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"
 )
 
@@ -59,7 +60,17 @@ func OIDCLogin(a *app.App) gin.HandlerFunc {
 		if s.OIDC.Scopes != "" {
 			// Split by comma or space
 			customScopes := strings.Fields(strings.ReplaceAll(s.OIDC.Scopes, ",", " "))
-			config.Scopes = append(config.Scopes, customScopes...)
+			// Deduplicate scopes
+			seen := make(map[string]bool)
+			for _, scope := range config.Scopes {
+				seen[scope] = true
+			}
+			for _, scope := range customScopes {
+				if !seen[scope] {
+					config.Scopes = append(config.Scopes, scope)
+					seen[scope] = true
+				}
+			}
 		}
 
 		state, err := generateRandomString(32)
@@ -219,12 +230,8 @@ func OIDCCallback(a *app.App) gin.HandlerFunc {
 		// Sync Roles
 		if len(groups) > 0 {
 			if err := syncRoles(c, a, userID, groups, s.OIDC); err != nil {
-				// log error but continue?
+				log.Error().Err(err).Msg("failed to sync roles")
 			}
-		} else if s.OIDC.AutoOnboard {
-			// Assign default role if auto-onboard is on and no groups?
-			// Actually auto-onboard usually means allow login at all.
-			// If we are here, we are allowing login.
 		}
 
 		// Set Session
@@ -255,7 +262,7 @@ func syncUser(c *gin.Context, a *app.App, externalID, username, email, name stri
 	var existingID string
 	checkQ := `SELECT id::text FROM users WHERE external_id = $1`
 	err := a.DB.QueryRow(c.Request.Context(), checkQ, externalID).Scan(&existingID)
-	
+
 	if err == nil {
 		// User exists, update their information
 		updateQ := `UPDATE users SET email=$2, display_name=$3, username=$4 WHERE external_id=$1 RETURNING id::text`
@@ -283,7 +290,7 @@ func syncUser(c *gin.Context, a *app.App, externalID, username, email, name stri
 
 	var id string
 	originalUsername := username
-	
+
 	// Try up to 5 times with different suffixes if there's a username conflict
 	for attempt := 0; attempt < 5; attempt++ {
 		err = a.DB.QueryRow(c.Request.Context(), insertQ, externalID, username, email, name).Scan(&id)
@@ -291,13 +298,16 @@ func syncUser(c *gin.Context, a *app.App, externalID, username, email, name stri
 			// Success
 			return id, nil
 		}
-		
+
 		// Check if it's a username conflict
-		if !strings.Contains(err.Error(), "duplicate") && !strings.Contains(err.Error(), "unique") {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			// This is a unique constraint violation
+		} else {
 			// Not a username conflict, return the error
 			return "", err
 		}
-		
+
 		// Generate a new username with suffix
 		if attempt == 0 {
 			// First retry: use last 8 chars of externalID
@@ -317,7 +327,7 @@ func syncUser(c *gin.Context, a *app.App, externalID, username, email, name stri
 			username = originalUsername + "_" + base64.RawURLEncoding.EncodeToString(randomBytes)
 		}
 	}
-	
+
 	// All retries failed
 	return "", errors.New("failed to create user: username conflict after multiple attempts")
 }
