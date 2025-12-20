@@ -281,25 +281,40 @@ func syncUser(c *gin.Context, a *app.App, externalID, username, email, name stri
     RETURNING id::text`
 
 	var id string
-	err = a.DB.QueryRow(c.Request.Context(), insertQ, externalID, username, email, name).Scan(&id)
-	if err != nil {
-		// If username conflict, try appending suffix for uniqueness
-		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
-			// Try with a suffix - use last 8 chars of externalID or entire ID if shorter
+	originalUsername := username
+	
+	// Try up to 5 times with different suffixes if there's a username conflict
+	for attempt := 0; attempt < 5; attempt++ {
+		err = a.DB.QueryRow(c.Request.Context(), insertQ, externalID, username, email, name).Scan(&id)
+		if err == nil {
+			// Success
+			return id, nil
+		}
+		
+		// Check if it's a username conflict
+		if !strings.Contains(err.Error(), "duplicate") && !strings.Contains(err.Error(), "unique") {
+			// Not a username conflict, return the error
+			return "", err
+		}
+		
+		// Generate a new username with suffix
+		if attempt == 0 {
+			// First retry: use last 8 chars of externalID
 			suffix := externalID
 			if len(externalID) > 8 {
 				suffix = externalID[len(externalID)-8:]
 			}
-			username = username + "_" + suffix
-			err = a.DB.QueryRow(c.Request.Context(), insertQ, externalID, username, email, name).Scan(&id)
-			if err != nil {
-				return "", err
-			}
+			username = originalUsername + "_" + suffix
 		} else {
-			return "", err
+			// Subsequent retries: append random suffix
+			randomBytes := make([]byte, 4)
+			rand.Read(randomBytes)
+			username = originalUsername + "_" + base64.RawURLEncoding.EncodeToString(randomBytes)
 		}
 	}
-	return id, nil
+	
+	// All retries failed
+	return "", errors.New("failed to create user: username conflict after multiple attempts")
 }
 
 func syncRoles(c *gin.Context, a *app.App, userID string, groups []string, settings OIDCSettings) error {
