@@ -56,9 +56,10 @@ tasks:
       - helm lint helm/helpdesk
       - echo "Verifying ingress API mapping..."
       - helm template test helm/helpdesk > rendered.yaml
-      # Uses simple grep; on Windows, this requires 'grep' in path or Git Bash.
-      # If strict Windows compat is needed, we'd replace this with a PowerShell 'Select-String' command.
-      - "grep -A 5 'path: /api' rendered.yaml | grep 'name: test-helpdesk-api'"
+      # Cross-platform ingress API mapping check:
+      # - On Unix-like systems, use grep.
+      # - On Windows, use PowerShell Select-String.
+      - cmd: '{{if eq OS "windows"}}powershell -Command "Select-String -Path rendered.yaml -Pattern ''path: /api'' -Context 0,5 | Select-String -Pattern ''name: test-helpdesk-api''"{{else}}grep -A 5 ''path: /api'' rendered.yaml | grep ''name: test-helpdesk-api''{{end}}'
       - echo "Packaging Helm chart..."
       - helm package helm/helpdesk
 

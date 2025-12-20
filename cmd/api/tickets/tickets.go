@@ -121,6 +121,17 @@ func Create(a *app.App) gin.HandlerFunc {
 				app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"requester_id": "invalid_uuid"})
 				return
 			}
+			if a.DB != nil {
+				var exists bool
+				if err := a.DB.QueryRow(c.Request.Context(), "select exists (select 1 from requesters where id = $1)", in.RequesterID).Scan(&exists); err != nil {
+					app.AbortError(c, http.StatusInternalServerError, "db_error", err.Error(), nil)
+					return
+				}
+				if !exists {
+					app.AbortError(c, http.StatusBadRequest, "invalid_request", "validation error", map[string]string{"requester_id": "not_found"})
+					return
+				}
+			}
 		}
 		if in.RequesterID == "" {
 			if in.Requester == nil {

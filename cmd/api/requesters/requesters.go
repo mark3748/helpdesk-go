@@ -162,19 +162,20 @@ func Search(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusOK, []Requester{})
 			return
 		}
-		q := strings.ToLower(strings.TrimSpace(c.Query("q")))
+		q := strings.TrimSpace(c.Query("q"))
 		if q == "" {
 			c.JSON(http.StatusOK, []Requester{})
 			return
 		}
+		pattern := "%" + q + "%"
 		// Limit to 20 results
 		const sql = `
 			select id::text, coalesce(email,''), coalesce(name,''), coalesce(phone,'')
 			from requesters
-			where lower(name) like '%' || $1 || '%' or lower(email) like '%' || $1 || '%'
+			where name ILIKE $1 or email ILIKE $1
 			order by name asc, email asc
 			limit 20`
-		rows, err := a.DB.Query(c.Request.Context(), sql, q)
+		rows, err := a.DB.Query(c.Request.Context(), sql, pattern)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

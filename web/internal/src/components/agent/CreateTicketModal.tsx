@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
 import { Modal, Form, Input, Select, App, Spin } from 'antd';
 import { useMutation } from '@tanstack/react-query';
-import { createTicket, createRequester, searchRequesters } from '../../shared/api';
+import { createTicket, createRequester } from '../../shared/api';
+import { searchRequesters } from './shared/api';
 
 interface Props {
   open: boolean;
@@ -15,7 +16,7 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const [options, setOptions] = useState<{ label: string; value: string }[]>([]);
   const [fetching, setFetching] = useState(false);
   const [isManual, setIsManual] = useState(false);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(null);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchUser = (value: string) => {
     console.log('fetchUser called with:', value);

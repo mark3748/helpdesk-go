@@ -192,7 +192,9 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
 
             <Dropdown menu={{ items: userMenuItems, onClick: ({ key }) => key === 'logout' && doLogout() }}>
               <Space style={{ cursor: 'pointer', marginLeft: 12 }}>
-                <Avatar src="https://i.pravatar.cc/150?img=32" /> {/* Mock avatar */}
+                <Avatar style={{ backgroundColor: '#6B4EFF', verticalAlign: 'middle' }}>
+                  {(displayName && displayName.charAt(0).toUpperCase()) || '?'}
+                </Avatar>
                 <div style={{ lineHeight: 1.2 }}>
                   <Typography.Text strong style={{ display: 'block' }}>{displayName}</Typography.Text>
                 </div>
@@ -205,7 +207,7 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
           {children || <Outlet />}
 
           <div style={{ textAlign: 'center', marginTop: 40, color: '#999', fontSize: 12 }}>
-            Copyright 2025 ©
+            Copyright {new Date().getFullYear()} ©
           </div>
         </Content>
       </Layout>
