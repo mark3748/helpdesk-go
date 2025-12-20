@@ -308,8 +308,12 @@ func syncUser(c *gin.Context, a *app.App, externalID, username, email, name stri
 		} else {
 			// Subsequent retries: append random suffix
 			randomBytes := make([]byte, 4)
-			rand.Read(randomBytes)
-			username = originalUsername + "_" + base64.RawURLEncoding.EncodeToString(randomBytes)
+			if _, err := rand.Read(randomBytes); err != nil {
+				// Fallback to attempt number if random generation fails
+				username = originalUsername + "_attempt_" + base64.RawURLEncoding.EncodeToString([]byte{byte(attempt)})
+			} else {
+				username = originalUsername + "_" + base64.RawURLEncoding.EncodeToString(randomBytes)
+			}
 		}
 	}
 	
