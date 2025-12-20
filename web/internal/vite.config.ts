@@ -14,6 +14,7 @@ export default defineConfig({
       '/api': {
         target: apiTarget,
         changeOrigin: true,
+        ws: true,
         // Keep the /api prefix so the backend sees /api routes directly
         // (backend mounts all routes under /api).
         // No rewrite needed.
