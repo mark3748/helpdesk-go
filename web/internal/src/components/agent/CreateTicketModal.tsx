@@ -1,8 +1,7 @@
 import { useState, useRef } from 'react';
 import { Modal, Form, Input, Select, App, Spin } from 'antd';
 import { useMutation } from '@tanstack/react-query';
-import { createTicket, createRequester } from '../../shared/api';
-import { searchRequesters } from './shared/api';
+import { createTicket, createRequester, searchRequesters } from '../../shared/api';
 
 interface Props {
   open: boolean;
@@ -33,12 +32,12 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
       }
       searchRequesters(value).then((newOptions) => {
         console.log('Search results:', newOptions);
-        setOptions(newOptions.map((r) => ({
+        setOptions(newOptions.map((r: any) => ({
           label: r.display_name ? `${r.display_name} <${r.email || 'no email'}>` : r.email || r.id || 'Unknown',
           value: r.id || '',
         })));
         setFetching(false);
-      }).catch(err => {
+      }).catch((err: any) => {
         console.error('Search failed:', err);
         setFetching(false);
       });
