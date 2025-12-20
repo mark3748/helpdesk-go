@@ -1147,8 +1147,8 @@ func (a *App) exportTicketsStatus(c *gin.Context) {
 	c.JSON(200, gin.H{"url": url})
 }
 
-// exportTicketsBridge preserves async behavior for large exports while delegating
-// small exports to the modular exports package for CSV generation.
+// enqueueEmail pushes an email job onto the Redis-backed queue, if configured,
+// so that the worker service can send the email asynchronously.
 func (a *App) enqueueEmail(ctx context.Context, to, template string, data any) {
 	if a.q == nil {
 		return
@@ -1246,7 +1246,7 @@ func (a *App) exportTicketsBridge(c *gin.Context) {
 
 func (a *App) addStatusHistory(ctx context.Context, ticketID, oldStatus, newStatus, modifiedBy string) {
 	valid := false
-	for _, s := range []string{"New", "Open", "Assigned", "Accepted", "In Progress", "Scheduled", "Pending", "Pending - Awaiting Info", "Pending - Awaiting Callback", "Pending - Awaiting Parts", "Pending - Awaiting Approval", "Resolved", "Closed"} {
+	for _, s := range ValidTicketStatuses {
 		if s == newStatus {
 			valid = true
 			break
