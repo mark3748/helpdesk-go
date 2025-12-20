@@ -285,8 +285,12 @@ func syncUser(c *gin.Context, a *app.App, externalID, username, email, name stri
 	if err != nil {
 		// If username conflict, try appending suffix for uniqueness
 		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
-			// Try with a suffix
-			username = username + "_" + externalID[len(externalID)-8:]
+			// Try with a suffix - use last 8 chars of externalID or entire ID if shorter
+			suffix := externalID
+			if len(externalID) > 8 {
+				suffix = externalID[len(externalID)-8:]
+			}
+			username = username + "_" + suffix
 			err = a.DB.QueryRow(c.Request.Context(), insertQ, externalID, username, email, name).Scan(&id)
 			if err != nil {
 				return "", err
