@@ -2,7 +2,7 @@ import { Layout, Menu, Dropdown, Typography, Avatar, Space, Input, Badge, Button
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useMe } from './auth';
 import { useQueryClient } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import {
   AppstoreOutlined,
   UserOutlined,
@@ -52,6 +52,35 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
   const qc = useQueryClient();
   const roles = me?.roles || [];
   const isSuper = roles.includes('admin');
+
+  useEffect(() => {
+    const titles: Record<string, string> = {
+      '/': 'Dashboard',
+      '/tickets': 'Tickets',
+      '/metrics': 'Metrics',
+      '/assets': 'Assets',
+      '/settings': 'Settings',
+      '/settings/mail': 'Mail Settings',
+      '/settings/oidc': 'OIDC Settings',
+      '/settings/storage': 'Storage Settings',
+      '/settings/users': 'User Management',
+      '/manager': 'Queue Manager',
+      '/manager/analytics': 'Manager Analytics',
+      '/me/settings': 'My Settings',
+    };
+
+    let title = 'Helpdesk';
+    const path = loc.pathname;
+
+    if (titles[path]) {
+      title = `${titles[path]} - Helpdesk`;
+    } else {
+      if (path.startsWith('/tickets/')) title = 'Ticket Detail - Helpdesk';
+      else if (path.startsWith('/assets/')) title = 'Assets - Helpdesk';
+    }
+
+    document.title = title;
+  }, [loc]);
 
   // Filter items based on role
   const visibleItems = navItems.filter((g) => isSuper || roles.includes(g.role));
