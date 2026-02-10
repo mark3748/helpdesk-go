@@ -154,18 +154,18 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
       if (item.path && fullPath === item.path) {
         return [item.key];
       }
-      // Check children paths - use exact match for paths with query strings, startsWith for paths without
+      // Check children paths - prioritize query-specific matches over prefix matches
       if (item.children) {
+        // First pass: exact matches for paths with query strings
         for (const child of item.children) {
-          if (child.path) {
-            // Exact match if child path includes query string
-            if (child.path.includes('?') && fullPath === child.path) {
-              return [child.key];
-            }
-            // Use startsWith for paths without query strings (handles dynamic segments)
-            if (!child.path.includes('?') && fullPath.startsWith(child.path)) {
-              return [child.key];
-            }
+          if (child.path && child.path.includes('?') && fullPath === child.path) {
+            return [child.key];
+          }
+        }
+        // Second pass: prefix matches for paths without query strings (handles dynamic segments)
+        for (const child of item.children) {
+          if (child.path && !child.path.includes('?') && fullPath.startsWith(child.path)) {
+            return [child.key];
           }
         }
       }

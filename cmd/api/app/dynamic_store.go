@@ -70,6 +70,9 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	err := d.DB.QueryRow(ctx, "select storage from settings where id=1").Scan(&storageRaw)
 	if err != nil {
 		// Cache the "no config" state to avoid repeated DB queries
+		// Clear any stale cached client to prevent serving old credentials
+		d.cached = nil
+		d.cachedBucket = ""
 		d.lastChecked = time.Now()
 		if err == pgx.ErrNoRows {
 			return d.Fallback, "", nil
@@ -80,6 +83,9 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 
 	if len(storageRaw) == 0 {
 		// Cache the "empty config" state
+		// Clear any stale cached client to prevent serving old credentials
+		d.cached = nil
+		d.cachedBucket = ""
 		d.lastChecked = time.Now()
 		return d.Fallback, "", nil
 	}
@@ -87,6 +93,9 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	var cfg map[string]string
 	if err := json.Unmarshal(storageRaw, &cfg); err != nil {
 		// Cache the "invalid config" state
+		// Clear any stale cached client to prevent serving old credentials
+		d.cached = nil
+		d.cachedBucket = ""
 		d.lastChecked = time.Now()
 		return d.Fallback, "", nil
 	}
@@ -108,6 +117,9 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 
 	if endpoint == "" || bucket == "" {
 		// Cache the "incomplete config" state
+		// Clear any stale cached client to prevent serving old credentials
+		d.cached = nil
+		d.cachedBucket = ""
 		d.lastChecked = time.Now()
 		return d.Fallback, "", nil
 	}
@@ -136,6 +148,9 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	})
 	if err != nil {
 		// Cache the "client creation failure" state
+		// Clear any stale cached client to prevent serving old credentials
+		d.cached = nil
+		d.cachedBucket = ""
 		d.lastChecked = time.Now()
 		return d.Fallback, "", nil
 	}
