@@ -21,7 +21,8 @@ export default function StorageSettings() {
 
   const onFinish = async (values: any) => {
     // Convert boolean to string for backend map[string]string
-    const payload = { ...values, use_ssl: String(values.use_ssl) };
+    // Use nullish coalescing to handle undefined explicitly
+    const payload = { ...values, use_ssl: String(values.use_ssl ?? false) };
     await apiFetch('/settings/storage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -33,7 +34,8 @@ export default function StorageSettings() {
   const onTest = async () => {
     try {
       const values = await form.validateFields();
-      const payload = { ...values, use_ssl: String(values.use_ssl) };
+      // Use nullish coalescing to handle undefined explicitly
+      const payload = { ...values, use_ssl: String(values.use_ssl ?? false) };
       const res = await apiFetch<any>('/settings/storage/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

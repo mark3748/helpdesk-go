@@ -115,7 +115,7 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 		useSSL = false
 	}
 
-	if endpoint == "" || bucket == "" {
+	if endpoint == "" || bucket == "" || access == "" || secret == "" {
 		// Cache the "incomplete config" state
 		// Clear any stale cached client to prevent serving old credentials
 		d.cached = nil
@@ -173,6 +173,9 @@ func (d *DynamicObjectStore) PutObject(ctx context.Context, bucketName string, o
 	if err != nil {
 		return minio.UploadInfo{}, err
 	}
+	if store == nil {
+		return minio.UploadInfo{}, fmt.Errorf("no object store configured")
+	}
 	// override bucket if dynamic
 	return store.PutObject(ctx, realBucket, objectName, reader, objectSize, opts)
 }
@@ -181,6 +184,9 @@ func (d *DynamicObjectStore) RemoveObject(ctx context.Context, bucketName string
 	store, realBucket, err := d.resolve(ctx, bucketName)
 	if err != nil {
 		return err
+	}
+	if store == nil {
+		return fmt.Errorf("no object store configured")
 	}
 	return store.RemoveObject(ctx, realBucket, objectName, opts)
 }
@@ -202,6 +208,9 @@ func (d *DynamicObjectStore) StatObject(ctx context.Context, bucketName, objectN
 	if err != nil {
 		return minio.ObjectInfo{}, err
 	}
+	if store == nil {
+		return minio.ObjectInfo{}, fmt.Errorf("no object store configured")
+	}
 	return store.StatObject(ctx, realBucket, objectName, opts)
 }
 
@@ -211,112 +220,13 @@ func (d *DynamicObjectStore) PresignedPutObject(ctx context.Context, bucketName,
 	if err != nil {
 		return nil, err
 	}
+	if store == nil {
+		return nil, fmt.Errorf("no object store configured")
+	}
 	return store.PresignedPutObject(ctx, realBucket, objectName, expiry)
 }
 
-// NOTE: `FsObjectStore` does NOT support presigned URLs.
-// The `Get` handler serves files directly for FS.
-// Only `Presign` (upload) supports FS via a hack (returning internal URL).
-//
-// If we want to hide FS specifics, `PresignedGet` for FS could return an internal URL?
-// `Get` handler redirects to `PresignedGet` result.
-// If FS returns `nil` for `PresignedGet`, the handler needs to know to serve bytes.
-//
-// Maybe `Get` handler keeps "Serve bytes" logic but uses interface to "Get content"?
-// But MinIO redirects.
-//
-// Let's stick to the interface approach.
-// `PresignedGet` -> returns URL.
-// For FS, it could return empty URL?
-//
-// Handlers `Get`:
-// url, err := store.PresignedGet(...)
-// if url != nil { redirect(url); return }
-// // else fallback to serving content?
-// reader, err := store.GetObject(...)
-// copy(writer, reader)
-//
-// MinIO `GetObject` streams content.
-// `FsObjectStore` `GetObject` opens file.
-//
-// This unifies everything!
-//
-// But I need to implement `GetObject` for MinIO too.
-//
-// For now, to minimize changes:
-// `DynamicObjectStore` can have a method `Unwrap() any`?
-// No, that defeats the purpose if underlying changes.
-//
-// Let's add `PresignedGet` and `PresignedPut` to interface.
-// For `FsObjectStore`, `PresignedGet` returns error "not supported".
-// `DynamicObjectStore` delegates.
-//
-// Handler `Get`:
-// u, err := a.M.PresignedGet(...)
-// if err == nil { redirect(u); return }
-// // if error is "not supported" (FS), proceed to file serving.
-// // How to serve file? `StatObject` + `io.Reader`?
-// // `FsObjectStore` needs to expose `Reader`?
-//
-// This is getting complicated for a quick fix.
-//
-// ALTERNATIVE:
-// `DynamicObjectStore` embeds `*minio.Client`? No, it switches.
-//
-// Let's look at `handlers/attachments.go` again.
-// `Get` handler checks `if mc, ok := a.M.(*minio.Client)` then `if fs, ok := a.M.(*app.FsObjectStore)`.
-//
-// If I configure `DynamicObjectStore` to have `IsSelectable() bool`?
-//
-// What if `DynamicObjectStore` implements `ObjectStore` AND we update handlers to use:
-// `store := a.M`
-// `if dyn, ok := store.(*DynamicObjectStore); ok { store = dyn.Current(ctx) }`
-// Then `store` is either `*minio.Client` or `*FsObjectStore`.
-//
-// This seems easiest!
-// `DynamicObjectStore.Current(ctx)` returns the underlying `ObjectStore` (MinIO or FS).
-// Then the existing type switches in handlers `store.(*minio.Client)` will work!
-//
-// So:
-// 1. Create `DynamicObjectStore` struct.
-// 2. Add `Current(ctx) ObjectStore` method.
-// 3. In handlers, resolve:
-//    `store := a.M`
-//    `if d, ok := store.(*app.DynamicObjectStore); ok { store = d.Current(c.Request.Context()) }`
-// 4. Then proceed with `if mc, ok := store.(*minio.Client) ...`
-//
-// This requires:
-// - Making `DynamicObjectStore` public in `app` package.
-// - Updating 4 handlers: `Get`, `Upload`, `Presign`, `Finalize`, `Delete`, `UploadObject` (maybe).
-// - And `features.go`.
-//
-// This requires minimal interface changes (none!).
-// I just need to make sure `DynamicObjectStore` implements the EXISTING `ObjectStore` interface (Put, Remove) so it can be assigned to `a.M`.
-// And `Put/Remove` on `DynamicObjectStore` should delegate too (for cases where we just call method).
-//
-// Implementation Details for `DynamicObjectStore`:
-// - `cachedBucket` string.
-// - `Current(ctx)` returns `ObjectStore`.
-// - `GetBucket(ctx)` returns the bucket name to use.
-//
-// But wait, the handlers access `a.Cfg.MinIOBucket`.
-// If I use dynamic store, I need the dynamic bucket name.
-//
-// `DynamicObjectStore` should probably ALSO expose the bucket name.
-// `GetBucketName(ctx, defaultName string) string`.
-//
-// So in handlers:
-// `store, bucket := app.ResolveStore(ctx, a.M, a.Cfg.MinIOBucket)`
-//
-// I can add a helper `ResolveStore` in `app` package.
-//
-// `Modify app/app.go` to add `ResolveStore`.
-// `Modify app/dynamic_store.go` to add struct.
-// `Modify properties` of `DynamicObjectStore` to be thread-safe cache.
-//
-// The existing `ObjectStore` interface:
-// 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
-// 	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
-//
-// `DynamicObjectStore` must implement these.
-// And checking `IsConfigured`.
+// PresignedGet/PresignedPut are supported by remote object stores; filesystem-backed
+// implementations may instead return a "not supported" error so handlers can fall back
+// to direct file serving.
+

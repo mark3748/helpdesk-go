@@ -44,7 +44,7 @@ func (f *fakeStore) StatObject(ctx context.Context, bucketName, objectName strin
 	return minio.ObjectInfo{Key: objectName, Size: int64(len(data))}, nil
 }
 func (f *fakeStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
-	return nil, nil
+	return nil, fmt.Errorf("PresignedPutObject not supported in fakeStore")
 }
 
 // fakeDB implements app.DB for tests.

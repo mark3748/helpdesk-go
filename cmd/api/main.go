@@ -634,17 +634,11 @@ func main() {
 		store = &appcore.FsObjectStore{Base: base}
 	}
 
-	// If we have a DB, wrap the store in a DynamicObjectStore to allow runtime overrides
-	if pool != nil {
+	// If we have a DB and a store, wrap the store in a DynamicObjectStore to allow runtime overrides
+	if pool != nil && store != nil {
 		store = &appcore.DynamicObjectStore{
 			DB:       pool,
 			Fallback: store,
-		}
-	} else if store == nil {
-		// Fallback for tests or no-storage mode
-		store = &appcore.DynamicObjectStore{
-			DB:       pool,
-			Fallback: nil,
 		}
 	}
 
