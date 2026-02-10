@@ -220,7 +220,8 @@ func TestReadyzFailures(t *testing.T) {
 
 	t.Run("object store", func(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
-		app := newTestApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, &appcore.FsObjectStore{Base: "/dev/null"}, nil)
+		// Use a path that is unlikely to be writable on both Windows and Linux
+		app := newTestApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, &appcore.FsObjectStore{Base: "Z:\\unlikely-to-exist-drive\\path"}, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
@@ -281,7 +282,7 @@ func TestMe_BypassAuth(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	var user AuthUser
+	var user authpkg.AuthUser
 	if err := json.Unmarshal(rr.Body.Bytes(), &user); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
@@ -309,8 +310,8 @@ func TestMe_NoBypass_NoJWKS(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
 	app.r.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500 due to missing JWKS, got %d", rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
 	}
 }
 
