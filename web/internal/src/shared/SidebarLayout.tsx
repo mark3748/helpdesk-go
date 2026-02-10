@@ -179,6 +179,14 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
     return ['dashboard'];
   }, [activeRole, loc.pathname, loc.search]);
 
+  // Compute defaultOpenKeys from the active role's config
+  const defaultOpenKeys = useMemo(() => {
+    const items = NAV_CONFIG[activeRole] || [];
+    return items
+      .filter(item => item.children && Array.isArray(item.children))
+      .map(item => String(item.key));
+  }, [activeRole]);
+
 
   async function doLogout() {
     try {
@@ -235,7 +243,7 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
           <Menu
             mode="inline"
             selectedKeys={selectedKeys}
-            defaultOpenKeys={['tickets-group']}
+            defaultOpenKeys={defaultOpenKeys}
             style={{ borderRight: 0 }}
             items={menuItems}
           />
