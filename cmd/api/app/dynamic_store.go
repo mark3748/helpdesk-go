@@ -33,6 +33,7 @@ type DynamicObjectStore struct {
 var _ ObjectStore = (*DynamicObjectStore)(nil)
 
 func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string, error) {
+	// Fast path: capture current state under read lock
 	d.mu.RLock()
 	client := d.cached
 	bucket := d.cachedBucket
@@ -40,6 +41,7 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	d.mu.RUnlock()
 
 	// Respect TTL for both positive (client exists) and negative (no config) caching
+	// Note: using captured values is safe; state may have changed but this is just an optimization
 	if time.Since(last) < 5*time.Second {
 		if client != nil {
 			return client, bucket, nil
@@ -51,7 +53,7 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	// Double check with write lock
+	// Double check with write lock (re-read actual values to avoid race)
 	if time.Since(d.lastChecked) < 5*time.Second {
 		if d.cached != nil {
 			return d.cached, d.cachedBucket, nil

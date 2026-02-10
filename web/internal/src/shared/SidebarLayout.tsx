@@ -154,11 +154,18 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
       if (item.path && fullPath === item.path) {
         return [item.key];
       }
-      // Check children paths
+      // Check children paths - use exact match for paths with query strings, startsWith for paths without
       if (item.children) {
         for (const child of item.children) {
-          if (child.path && fullPath === child.path) {
-            return [child.key];
+          if (child.path) {
+            // Exact match if child path includes query string
+            if (child.path.includes('?') && fullPath === child.path) {
+              return [child.key];
+            }
+            // Use startsWith for paths without query strings (handles dynamic segments)
+            if (!child.path.includes('?') && fullPath.startsWith(child.path)) {
+              return [child.key];
+            }
           }
         }
       }
