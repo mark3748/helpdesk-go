@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -220,8 +221,14 @@ func TestReadyzFailures(t *testing.T) {
 
 	t.Run("object store", func(t *testing.T) {
 		setMail(map[string]string{"host": "", "port": ""})
-		// Use a path that is unlikely to be writable on both Windows and Linux
-		app := newTestApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, &appcore.FsObjectStore{Base: "Z:\\unlikely-to-exist-drive\\path"}, nil)
+		// Use a path that is unlikely to be writable on both Windows and Linux.
+		// On Windows, a non-existent drive letter like Z:\ is reliable.
+		// On Linux, /root/ or a path where a component is a file usually fails.
+		path := "Z:\\unlikely-to-exist-drive\\path"
+		if runtime.GOOS != "windows" {
+			path = "/root/unlikely-to-exist-path"
+		}
+		app := newTestApp(Config{Env: "test", MinIOBucket: "b"}, readyzDB{}, &appcore.FsObjectStore{Base: path}, nil)
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		app.r.ServeHTTP(rr, req)
