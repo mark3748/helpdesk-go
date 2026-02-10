@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Form, Input, Button, message } from 'antd';
+import { Form, Input, Button, message, Checkbox } from 'antd';
 import { useSettings } from '../../api';
 import { apiFetch } from '../../shared/api';
 
@@ -67,8 +67,7 @@ export default function StorageSettings() {
           <Input.Password />
         </Form.Item>
         <Form.Item name="use_ssl" valuePropName="checked">
-          <Input type="checkbox" style={{ width: 'auto', marginRight: 8 }} />
-          <span>Use SSL</span>
+          <Checkbox>Use SSL</Checkbox>
         </Form.Item>
         <Form.Item>
           <div style={{ display: 'flex', gap: '8px' }}>

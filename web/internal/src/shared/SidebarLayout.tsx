@@ -143,8 +143,41 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
     });
   }, [activeRole]);
 
-  const parts = loc.pathname.split('/').filter(Boolean);
-  const selected = parts.length > 0 ? parts[0] : 'dashboard';
+  // Derive selected keys by matching current location (path + query) against nav config
+  const selectedKeys = useMemo(() => {
+    const items = NAV_CONFIG[activeRole] || [];
+    const fullPath = loc.pathname + loc.search;
+    
+    // Find matching item in flat or nested structure
+    for (const item of items) {
+      // Check parent item path
+      if (item.path && fullPath === item.path) {
+        return [item.key];
+      }
+      // Check children paths - prioritize query-specific matches over prefix matches
+      if (item.children) {
+        // First pass: exact matches for paths with query strings
+        for (const child of item.children) {
+          if (child.path && child.path.includes('?') && fullPath === child.path) {
+            return [child.key];
+          }
+        }
+        // Second pass: prefix matches for paths without query strings (handles dynamic segments)
+        for (const child of item.children) {
+          if (child.path && !child.path.includes('?') && fullPath.startsWith(child.path)) {
+            return [child.key];
+          }
+        }
+      }
+      // Fallback: if pathname (without query) starts with item path, select it
+      if (item.path && loc.pathname.startsWith(item.path) && item.path !== '/') {
+        return [item.key];
+      }
+    }
+    
+    // Default to dashboard if no match
+    return ['dashboard'];
+  }, [activeRole, loc.pathname, loc.search]);
 
 
   async function doLogout() {
@@ -201,7 +234,7 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <Menu
             mode="inline"
-            selectedKeys={[selected]}
+            selectedKeys={selectedKeys}
             defaultOpenKeys={['tickets-group']}
             style={{ borderRight: 0 }}
             items={menuItems}

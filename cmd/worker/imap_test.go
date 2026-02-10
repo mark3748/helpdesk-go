@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
 	"strings"
@@ -30,10 +31,17 @@ func (f *fakeStore) PutObject(ctx context.Context, bucket, object string, r io.R
 }
 
 func (f *fakeStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
+	key := bucketName + "/" + objectName
+	delete(f.objects, key)
 	return nil
 }
 func (f *fakeStore) StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error) {
-	return minio.ObjectInfo{}, nil
+	key := bucketName + "/" + objectName
+	data, exists := f.objects[key]
+	if !exists {
+		return minio.ObjectInfo{}, fmt.Errorf("object not found")
+	}
+	return minio.ObjectInfo{Key: objectName, Size: int64(len(data))}, nil
 }
 func (f *fakeStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
 	return nil, nil
