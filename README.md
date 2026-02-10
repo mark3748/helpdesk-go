@@ -1,6 +1,8 @@
 # Helpdesk (Go) — Complete Ticketing System
 A fully functional FootPrints-style ticketing system built in Go, with PostgreSQL backend and Kubernetes deployment ready out of the box.
 
+[![ci](https://github.com/mark3748/helpdesk-go/actions/workflows/ci.yml/badge.svg)](https://github.com/mark3748/helpdesk-go/actions/workflows/ci.yml)
+
 ## What You Get
 - Go API service (Gin): Complete ticket management with comments, attachments, watchers, exports, and metrics
 - PostgreSQL backend with embedded migrations (goose): JSONB custom fields, full-text search, CSAT tracking
