@@ -39,16 +39,24 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	last := d.lastChecked
 	d.mu.RUnlock()
 
-	if time.Since(last) < 5*time.Second && client != nil {
-		return client, bucket, nil
+	// Respect TTL for both positive (client exists) and negative (no config) caching
+	if time.Since(last) < 5*time.Second {
+		if client != nil {
+			return client, bucket, nil
+		}
+		// Return fallback during negative cache window
+		return d.Fallback, "", nil
 	}
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	// Double check
-	if time.Since(d.lastChecked) < 5*time.Second && d.cached != nil {
-		return d.cached, d.cachedBucket, nil
+	// Double check with write lock
+	if time.Since(d.lastChecked) < 5*time.Second {
+		if d.cached != nil {
+			return d.cached, d.cachedBucket, nil
+		}
+		return d.Fallback, "", nil
 	}
 
 	// Load settings

@@ -143,34 +143,34 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
     });
   }, [activeRole]);
 
-  // Derive selected keys by matching current pathname against nav config
+  // Derive selected keys by matching current location (path + query) against nav config
   const selectedKeys = useMemo(() => {
     const items = NAV_CONFIG[activeRole] || [];
-    const path = loc.pathname;
+    const fullPath = loc.pathname + loc.search;
     
     // Find matching item in flat or nested structure
     for (const item of items) {
       // Check parent item path
-      if (item.path && path === item.path) {
+      if (item.path && fullPath === item.path) {
         return [item.key];
       }
       // Check children paths
       if (item.children) {
         for (const child of item.children) {
-          if (child.path && path.startsWith(child.path)) {
+          if (child.path && fullPath === child.path) {
             return [child.key];
           }
         }
       }
-      // Fallback: if path starts with item path, select it
-      if (item.path && path.startsWith(item.path) && item.path !== '/') {
+      // Fallback: if pathname (without query) starts with item path, select it
+      if (item.path && loc.pathname.startsWith(item.path) && item.path !== '/') {
         return [item.key];
       }
     }
     
     // Default to dashboard if no match
     return ['dashboard'];
-  }, [activeRole, loc.pathname]);
+  }, [activeRole, loc.pathname, loc.search]);
 
 
   async function doLogout() {

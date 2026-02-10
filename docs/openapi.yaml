@@ -69,6 +69,7 @@ components:
         title: { type: string }
         description: { type: string }
         requester_id: { type: string, format: uuid }
+        requester: { type: string }
         assignee_id: 
           type: [string, "null"]
           format: uuid
