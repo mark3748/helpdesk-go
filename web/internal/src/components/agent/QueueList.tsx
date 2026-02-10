@@ -113,7 +113,7 @@ export default function QueueList() {
       title: 'Name',
       key: 'name',
       render: (_: any, record: Ticket) => (
-        <Text strong>{record.requester_id ? 'Requester ' + record.requester_id.slice(0, 4) : 'Unknown'}</Text>
+        <Text strong>{record.requester || 'Unknown'}</Text>
       ),
     },
     {

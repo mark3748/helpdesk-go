@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "gen:api": "openapi-typescript http://localhost:8080/openapi.yaml -o src/types/openapi.ts",
     "gen:api:container": "openapi-typescript http://api:8080/openapi.yaml -o src/types/openapi.ts",
-    "gen:api:file": "openapi-typescript ./openapi.yaml -o src/types/openapi.ts"
+    "gen:api:file": "openapi-typescript ../../docs/openapi.yaml -o src/types/openapi.ts",
+    "gen:api:docker": "openapi-typescript ./openapi.yaml -o src/types/openapi.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.85.6",
@@ -34,6 +35,6 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
     "vite": "^7.1.2",
-    "openapi-typescript": "^6.7.6"
+    "openapi-typescript": "^7.0.0"
   }
 }

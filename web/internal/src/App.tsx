@@ -25,6 +25,7 @@ import AssetCategories from './components/assets/AssetCategories';
 import AssetImport from './components/assets/AssetImport';
 import AssetAnalytics from './components/assets/AssetAnalytics';
 import AssetDetail from './components/assets/AssetDetail';
+import CustomerList from './components/agent/CustomerList';
 
 import { ConfigProvider, App as AntdApp } from 'antd';
 
@@ -59,6 +60,7 @@ export default function App() {
                   <Route path="/assets" element={<AssetList />} />
                   <Route path="/assets/:id" element={<AssetDetail />} />
                   <Route path="/assets/dashboard" element={<AssetDashboard />} />
+                  <Route path="/users" element={<CustomerList />} />
                 </Route>
                 <Route element={<RequireRole role="admin" />}>
                   <Route path="/settings" element={<AdminSettings />} />

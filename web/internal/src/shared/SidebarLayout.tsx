@@ -1,8 +1,8 @@
-import { Layout, Menu, Dropdown, Typography, Avatar, Space, Input, Badge, Button } from 'antd';
+import { Layout, Menu, Dropdown, Typography, Avatar, Space, Input, Badge, Button, Segmented } from 'antd';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useMe } from './auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useState, useMemo } from 'react';
 import {
   AppstoreOutlined,
   UserOutlined,
@@ -13,45 +13,87 @@ import {
   SearchOutlined,
   GlobalOutlined,
   DownOutlined,
-  MenuFoldOutlined
+  MenuFoldOutlined,
+  TeamOutlined,
+  SolutionOutlined,
+  DashboardOutlined,
+  DatabaseOutlined
 } from '@ant-design/icons';
 
 const { Sider, Content, Header } = Layout;
 
 type Role = 'agent' | 'manager' | 'admin';
 type NavChild = { key: string; label: string; path: string };
-type NavGroup = { key: string; label: string; role: Role; icon?: ReactNode; children?: NavChild[]; path?: string };
+type NavGroup = { key: string; label: string; icon?: ReactNode; children?: NavChild[]; path?: string };
 
-// Flattened structure for the new design while keeping role-based logic
-const navItems: NavGroup[] = [
-  { key: 'dashboard', label: 'Dashboard', role: 'agent', icon: <AppstoreOutlined />, path: '/tickets' }, // Mapping Dashboard to Tickets for now
-  { key: 'profile', label: 'Profile', role: 'agent', icon: <UserOutlined />, path: '/me/settings' },
-  {
-    key: 'tickets-group',
-    label: 'Tickets',
-    role: 'agent',
-    icon: <ContainerOutlined />,
-    children: [
-      { key: 'tickets-all', label: 'All Tickets', path: '/tickets' },
-      { key: 'tickets-active', label: 'Active Tickets', path: '/tickets?status=active' }, // Placeholder paths
-      { key: 'tickets-assigned', label: 'Assigned Tickets', path: '/tickets?assignee=me' },
-      { key: 'tickets-closed', label: 'Closed Tickets', path: '/tickets?status=closed' },
-    ],
-  },
-  { key: 'categories', label: 'Categories', role: 'admin', icon: <AppstoreOutlined />, path: '/assets/categories' },
-  { key: 'customers', label: 'Customers', role: 'agent', icon: <UserOutlined />, path: '/users' },
-  { key: 'notifications', label: 'Notifications', role: 'agent', icon: <BellOutlined />, path: '/notifications' },
-  { key: 'settings', label: 'Settings', role: 'admin', icon: <SettingOutlined />, path: '/settings' },
-  { key: 'reports', label: 'Reports', role: 'manager', icon: <FileTextOutlined />, path: '/manager/analytics' },
-];
+const ROLE_LABELS: Record<Role, string> = {
+  agent: 'Agent',
+  manager: 'Manager',
+  admin: 'Admin',
+};
+
+const NAV_CONFIG: Record<Role, NavGroup[]> = {
+  agent: [
+    { key: 'dashboard', label: 'Dashboard', icon: <DashboardOutlined />, path: '/' },
+    { key: 'tickets-dashboard', label: 'Tickets', icon: <AppstoreOutlined />, path: '/tickets' },
+    {
+      key: 'tickets-group',
+      label: 'Ticket Views',
+      icon: <ContainerOutlined />,
+      children: [
+        { key: 'tickets-all', label: 'All Tickets', path: '/tickets' },
+        { key: 'tickets-assigned', label: 'My Tickets', path: '/tickets?assignee=me' },
+        { key: 'tickets-unassigned', label: 'Grab Tickets', path: '/tickets?assignee=none' },
+        { key: 'tickets-closed', label: 'Closed Tickets', path: '/tickets?status=closed' },
+      ],
+    },
+    { key: 'assets', label: 'Assets', icon: <DatabaseOutlined />, path: '/assets' },
+    { key: 'customers', label: 'Customers', icon: <TeamOutlined />, path: '/users' },
+    { key: 'profile', label: 'Profile', icon: <UserOutlined />, path: '/me/settings' },
+  ],
+  manager: [
+    { key: 'dashboard', label: 'Dashboard', icon: <DashboardOutlined />, path: '/' },
+    { key: 'manager-queue', label: 'Queue Manager', icon: <AppstoreOutlined />, path: '/manager' },
+    { key: 'manager-analytics', label: 'Analytics', icon: <FileTextOutlined />, path: '/manager/analytics' },
+    { key: 'assets-dashboard', label: 'Asset Dashboard', icon: <DatabaseOutlined />, path: '/assets/dashboard' },
+  ],
+  admin: [
+    { key: 'admin-settings', label: 'General Settings', icon: <SettingOutlined />, path: '/settings' },
+    { key: 'admin-users', label: 'User Management', icon: <TeamOutlined />, path: '/settings/users' },
+    { key: 'admin-assets', label: 'Asset Categories', icon: <DatabaseOutlined />, path: '/assets/categories' },
+    { key: 'admin-mail', label: 'Mail Settings', icon: <SolutionOutlined />, path: '/settings/mail' },
+    { key: 'admin-oidc', label: 'OIDC Settings', icon: <GlobalOutlined />, path: '/settings/oidc' },
+    { key: 'admin-storage', label: 'Storage Settings', icon: <DatabaseOutlined />, path: '/settings/storage' },
+  ],
+};
+
 
 export function SidebarLayout({ children }: { children?: ReactNode }) {
   const { data: me } = useMe();
   const loc = useLocation();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const roles = me?.roles || [];
-  const isSuper = roles.includes('admin');
+  const userRoles = me?.roles || [];
+
+  // Determine available roles for the switcher
+  const availableRoles = useMemo(() => {
+    const roles: Role[] = [];
+    if (userRoles.includes('agent')) roles.push('agent');
+    if (userRoles.includes('manager')) roles.push('manager');
+    if (userRoles.includes('admin')) roles.push('admin');
+    // Basic fallback if no roles match
+    if (roles.length === 0) roles.push('agent');
+    return roles;
+  }, [userRoles]);
+
+  const [activeRole, setActiveRole] = useState<Role>(availableRoles[0]);
+
+  // Sync active role if available roles change (e.g. on load)
+  useEffect(() => {
+    if (!availableRoles.includes(activeRole)) {
+      setActiveRole(availableRoles[0]);
+    }
+  }, [availableRoles, activeRole]);
 
   useEffect(() => {
     const titles: Record<string, string> = {
@@ -82,28 +124,69 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
     document.title = title;
   }, [loc]);
 
-  // Filter items based on role
-  const visibleItems = navItems.filter((g) => isSuper || roles.includes(g.role));
-
-  const menuItems = visibleItems.map((g) => {
-    if (g.children) {
+  const menuItems = useMemo(() => {
+    const items = NAV_CONFIG[activeRole] || [];
+    return items.map((g) => {
+      if (g.children) {
+        return {
+          key: g.key,
+          icon: g.icon,
+          label: g.label,
+          children: g.children.map((c) => ({ key: c.key, label: <Link to={c.path}>{c.label}</Link> })),
+        };
+      }
       return {
         key: g.key,
         icon: g.icon,
-        label: g.label,
-        children: g.children.map((c) => ({ key: c.key, label: <Link to={c.path}>{c.label}</Link> })),
+        label: <Link to={g.path || '#'}>{g.label}</Link>,
       };
-    }
-    return {
-      key: g.key,
-      icon: g.icon,
-      label: <Link to={g.path || '#'}>{g.label}</Link>,
-    };
-  });
+    });
+  }, [activeRole]);
 
-  const parts = loc.pathname.split('/').filter(Boolean);
-  const selected = parts.length > 0 ? parts[0] : 'dashboard'; // Naive selection logic
-  // Better selection logic could be implemented
+  // Derive selected keys by matching current location (path + query) against nav config
+  const selectedKeys = useMemo(() => {
+    const items = NAV_CONFIG[activeRole] || [];
+    const fullPath = loc.pathname + loc.search;
+    
+    // Find matching item in flat or nested structure
+    for (const item of items) {
+      // Check parent item path
+      if (item.path && fullPath === item.path) {
+        return [item.key];
+      }
+      // Check children paths - prioritize query-specific matches over prefix matches
+      if (item.children) {
+        // First pass: exact matches for paths with query strings
+        for (const child of item.children) {
+          if (child.path && child.path.includes('?') && fullPath === child.path) {
+            return [child.key];
+          }
+        }
+        // Second pass: prefix matches for paths without query strings (handles dynamic segments)
+        for (const child of item.children) {
+          if (child.path && !child.path.includes('?') && fullPath.startsWith(child.path)) {
+            return [child.key];
+          }
+        }
+      }
+      // Fallback: if pathname (without query) starts with item path, select it
+      if (item.path && loc.pathname.startsWith(item.path) && item.path !== '/') {
+        return [item.key];
+      }
+    }
+    
+    // Default to dashboard if no match
+    return ['dashboard'];
+  }, [activeRole, loc.pathname, loc.search]);
+
+  // Compute defaultOpenKeys from the active role's config
+  const defaultOpenKeys = useMemo(() => {
+    const items = NAV_CONFIG[activeRole] || [];
+    return items
+      .filter(item => item.children && Array.isArray(item.children))
+      .map(item => String(item.key));
+  }, [activeRole]);
+
 
   async function doLogout() {
     try {
@@ -135,20 +218,36 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
           left: 0,
           top: 0,
           zIndex: 100,
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 24px' }}>
+        <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 24px', flexShrink: 0 }}>
           <Typography.Title level={4} style={{ margin: 0, color: '#6B4EFF', fontWeight: 800 }}>
             HELPDESK
           </Typography.Title>
         </div>
-        <Menu
-          mode="inline"
-          defaultSelectedKeys={[selected]}
-          defaultOpenKeys={['tickets-group']}
-          style={{ borderRight: 0 }}
-          items={menuItems}
-        />
+
+        {availableRoles.length > 1 && (
+          <div style={{ padding: '0 16px 16px' }}>
+            <Segmented
+              block
+              options={availableRoles.map(r => ({ label: ROLE_LABELS[r], value: r }))}
+              value={activeRole}
+              onChange={(v) => setActiveRole(v as Role)}
+            />
+          </div>
+        )}
+
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <Menu
+            mode="inline"
+            selectedKeys={selectedKeys}
+            defaultOpenKeys={defaultOpenKeys}
+            style={{ borderRight: 0 }}
+            items={menuItems}
+          />
+        </div>
       </Sider>
       <Layout style={{ marginLeft: 260, transition: 'all 0.2s' }}>
         <Header
@@ -159,12 +258,12 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
             alignItems: 'center',
             justifyContent: 'space-between',
             marginBottom: 24,
-            height: 80, // Taller header as per design
+            height: 80,
           }}
         >
           {/* Left: Search */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Button type="text" icon={<MenuFoldOutlined />} style={{ display: 'none' }} /> {/* Mobile toggle placeholder */}
+            <Button type="text" icon={<MenuFoldOutlined />} style={{ display: 'none' }} />
             <Input
               prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
               placeholder="Search"

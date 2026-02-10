@@ -1,0 +1,39 @@
+failed to load config from C:\Users\mark3\projects\helpdesk-go\web\internal\vite.config.ts
+error during build:
+Error: 
+You installed esbuild for another platform than the one you're currently using.
+This won't work because esbuild is written with native code and needs to
+install a platform-specific binary executable.
+
+Specifically the "@esbuild/linux-x64" package is present but this platform
+needs the "@esbuild/win32-x64" package instead. People often get into this
+situation by installing esbuild on Windows or macOS and copying "node_modules"
+into a Docker image that runs Linux, or by copying "node_modules" between
+Windows and WSL environments.
+
+If you are installing with npm, you can try not copying the "node_modules"
+directory when you copy the files over, and running "npm ci" or "npm install"
+on the destination platform after the copy. Or you could consider using yarn
+instead of npm which has built-in support for installing a package on multiple
+platforms simultaneously.
+
+If you are installing with yarn, you can try listing both this platform and the
+other platform in your ".yarnrc.yml" file using the "supportedArchitectures"
+feature: https://yarnpkg.com/configuration/yarnrc/#supportedArchitectures
+Keep in mind that this means multiple copies of esbuild will be present.
+
+Another alternative is to use the "esbuild-wasm" package instead, which works
+the same way on all platforms. But it comes with a heavy performance cost and
+can sometimes be 10x slower than the "esbuild" package, so you may also not
+want to do that.
+
+    at generateBinPath (C:\Users\mark3\projects\helpdesk-go\web\internal\node_modules\esbuild\lib\main.js:1739:17)
+    at esbuildCommandAndArgs (C:\Users\mark3\projects\helpdesk-go\web\internal\node_modules\esbuild\lib\main.js:1820:33)
+    at ensureServiceIsRunning (C:\Users\mark3\projects\helpdesk-go\web\internal\node_modules\esbuild\lib\main.js:1977:25)
+    at build (C:\Users\mark3\projects\helpdesk-go\web\internal\node_modules\esbuild\lib\main.js:1876:26)
+    at bundleConfigFile (file:///C:/Users/mark3/projects/helpdesk-go/web/internal/node_modules/vite/dist/node/chunks/config.js:35806:23)
+    at bundleAndLoadConfigFile (file:///C:/Users/mark3/projects/helpdesk-go/web/internal/node_modules/vite/dist/node/chunks/config.js:35793:24)
+    at loadConfigFromFile (file:///C:/Users/mark3/projects/helpdesk-go/web/internal/node_modules/vite/dist/node/chunks/config.js:35762:179)
+    at resolveConfig (file:///C:/Users/mark3/projects/helpdesk-go/web/internal/node_modules/vite/dist/node/chunks/config.js:35411:28)
+    at resolveConfigToBuild (file:///C:/Users/mark3/projects/helpdesk-go/web/internal/node_modules/vite/dist/node/chunks/config.js:33442:9)
+    at createBuilder (file:///C:/Users/mark3/projects/helpdesk-go/web/internal/node_modules/vite/dist/node/chunks/config.js:33874:25)

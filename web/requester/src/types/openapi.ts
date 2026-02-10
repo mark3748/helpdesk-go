@@ -3,2122 +3,3482 @@
  * Do not make direct changes to the file.
  */
 
-
 export interface paths {
-  "/asset-categories": {
-    /** List asset categories */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["AssetCategory"][];
-          };
+    "/asset-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-    /**
-     * Create asset category
-     * @description Requires `admin` or `manager` role.
-     */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CreateCategoryRequest"];
-        };
-      };
-      responses: {
-        /** @description Created */
-        201: {
-          content: {
-            "application/json": components["schemas"]["AssetCategory"];
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/asset-categories/{id}": {
-    /** Get asset category */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["AssetCategory"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/assets": {
-    /** List assets */
-    get: {
-      parameters: {
-        query?: {
-          /** @description Search query */
-          q?: string;
-          category_id?: string;
-          status?: components["schemas"]["AssetStatus"][];
-          condition?: components["schemas"]["AssetCondition"];
-          assigned_to?: string;
-          manufacturer?: string;
-          location?: string;
-          page?: number;
-          limit?: number;
-          sort_by?: string;
-          sort_order?: "asc" | "desc";
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["AssetListResponse"];
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-    /**
-     * Create asset
-     * @description Requires `admin` or `manager` role.
-     */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CreateAssetRequest"];
-        };
-      };
-      responses: {
-        /** @description Created */
-        201: {
-          content: {
-            "application/json": components["schemas"]["Asset"];
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Asset tag already exists */
-        409: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/assets/{id}": {
-    /** Get asset */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["Asset"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-    /**
-     * Delete asset
-     * @description Requires `admin` role.
-     */
-    delete: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-    /**
-     * Update asset
-     * @description Requires `admin` or `manager` role.
-     */
-    patch: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["UpdateAssetRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["Asset"];
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/assets/{id}/assign": {
-    /**
-     * Assign asset to user
-     * @description Requires `admin` or `manager` role.
-     */
-    post: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["AssignAssetRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              message?: string;
+        /** List asset categories */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
             };
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/assets/{id}/checkout": {
-    /**
-     * Checkout asset
-     * @description Requires `admin` or `manager` role.
-     */
-    post: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CheckoutRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["AssetCheckout"];
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Asset not found */
-        404: {
-          content: never;
-        };
-        /** @description Asset already checked out */
-        409: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/assets/checkin": {
-    /**
-     * Checkin asset
-     * @description Requires `admin` or `manager` role.
-     */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CheckinRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Checkout not found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/assets/checkouts/active": {
-    /** List active checkouts */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["AssetCheckout"][];
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/assets/checkouts/overdue": {
-    /** List overdue checkouts */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["AssetCheckout"][];
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/assets/{id}/history": {
-    /** Get asset history */
-    get: {
-      parameters: {
-        query?: {
-          page?: number;
-          limit?: number;
-        };
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              history?: components["schemas"]["AssetHistory"][];
-              total?: number;
-              page?: number;
-              limit?: number;
-              pages?: number;
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssetCategory"][];
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
-          };
         };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Asset not found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/assets/{id}/assignments": {
-    /** Get asset assignments */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["AssetAssignment"][];
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Asset not found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/livez": {
-    /** Liveness check */
-    get: operations["healthLiveness"];
-  };
-  "/readyz": {
-    /** Readiness check */
-    get: operations["healthReadiness"];
-  };
-  "/healthz": {
-    /** Health check */
-    get: operations["healthCheck"];
-  };
-  "/login": {
-    /**
-     * Login (local mode)
-     * @description Enabled only when `AUTH_MODE=local`.
-     */
-    post: operations["authLogin"];
-  };
-  "/logout": {
-    /** Logout (local mode) */
-    post: operations["authLogout"];
-  };
-  "/me": {
-    /** Current user */
-    get: operations["getCurrentUser"];
-  };
-  "/me/profile": {
-    /** Current user's profile (local auth) */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              /** Format: email */
-              email?: string;
-              display_name?: string;
+        put?: never;
+        /**
+         * Create asset category
+         * @description Requires `admin` or `manager` role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
             };
-          };
-        };
-        /** @description Unauthorized */
-        401: {
-          content: never;
-        };
-      };
-    };
-    /** Update current user's profile (local auth) */
-    patch: {
-      requestBody: {
-        content: {
-          "application/json": {
-            /** Format: email */
-            email?: string;
-            display_name?: string;
-          };
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Unauthorized */
-        401: {
-          content: never;
-        };
-        /** @description Profile managed by identity provider */
-        409: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/me/password": {
-    /** Change password (local auth) */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": {
-            old_password: string;
-            new_password: string;
-          };
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Unauthorized */
-        401: {
-          content: never;
-        };
-        /** @description Password managed by identity provider */
-        409: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/events": {
-    /**
-     * Event stream
-     * @description Server-sent events for ticket and queue updates. Heartbeat comments (`:hb`) are sent about every 30s.
-     */
-    get: {
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "text/event-stream": string;
-          };
-        };
-      };
-    };
-  };
-  "/users/{id}/roles": {
-    /** List roles for a user */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": string[];
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-    /** Add role to a user */
-    post: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["RoleRequest"];
-        };
-      };
-      responses: {
-        /** @description Created */
-        201: {
-          content: never;
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/users/{id}/roles/{role}": {
-    /** Remove role from a user */
-    delete: {
-      parameters: {
-        path: {
-          id: string;
-          role: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/requesters": {
-    /** Create requester */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CreateRequesterRequest"];
-        };
-      };
-      responses: {
-        /** @description Created */
-        201: {
-          content: {
-            "application/json": components["schemas"]["Requester"];
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/requesters/{id}": {
-    /** Get requester */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["Requester"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-      };
-    };
-    /** Update requester */
-    patch: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["UpdateRequesterRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["Requester"];
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/tickets": {
-    /** List tickets */
-    get: {
-      parameters: {
-        query?: {
-          status?: string;
-          priority?: number;
-          team?: string;
-          assignee?: string;
-          search?: string;
-          /**
-           * @description Pagination cursor. Accepts either:
-           * - A timestamp in RFC3339/RFC3339Nano (legacy form), or
-           * - A composite value "<RFC3339Nano>|<id>" returned by the API, which
-           *   prevents skipping items when multiple rows share the same timestamp.
-           */
-          cursor?: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": {
-              items?: components["schemas"]["Ticket"][];
-              /**
-               * @description Composite cursor of the form "<RFC3339Nano>|<id>" for stable keyset pagination.
-               * @example 2024-01-02T03:04:05.123456Z|00000000-0000-0000-0000-000000000123
-               */
-              next_cursor?: string;
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateCategoryRequest"];
+                };
             };
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-    /** Create ticket */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CreateTicketRequest"];
-        };
-      };
-      responses: {
-        /** @description Created */
-        201: {
-          content: {
-            "application/json": {
-              /** Format: uuid */
-              id?: string;
-              number?: string;
-              status?: string;
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssetCategory"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
-          };
         };
-        /** @description Validation error */
-        400: {
-          content: {
-            "application/json": components["schemas"]["ValidationError"];
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-  };
-  "/tickets/{id}": {
-    /** Get ticket */
-    get: {
-      parameters: {
-        path: {
-          id: string;
+    "/asset-categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["Ticket"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          content: never;
-        };
-      };
-    };
-    /**
-     * Update ticket
-     * @description Requires `agent` role.
-     */
-    patch: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["UpdateTicketRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: never;
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/tickets/{id}/comments": {
-    /** List public comments */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["Comment"][];
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-    /** Add comment */
-    post: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CommentRequest"];
-        };
-      };
-      responses: {
-        /** @description Created */
-        201: {
-          content: {
-            "application/json": {
-              /** Format: uuid */
-              id?: string;
+        /** Get asset category */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
             };
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-  };
-  "/tickets/{id}/attachments": {
-    /** List attachments */
-    get: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["Attachment"][];
-          };
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
-    };
-    /** Finalize attachment */
-    post: {
-      parameters: {
-        path: {
-          id: string;
-        };
-      };
-      requestBody: {
-        content: {
-          "application/json": {
-            /** Format: uuid */
-            attachment_id: string;
-            filename: string;
-            /** Format: int64 */
-            bytes: number;
-            mime?: string;
-          };
-        };
-      };
-      responses: {
-        /** @description Created */
-        201: {
-          content: {
-            "application/json": {
-              /** Format: uuid */
-              id?: string;
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssetCategory"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
-          };
         };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-  };
-  "/tickets/{id}/attachments/presign": {
-    /**
-     * Presign attachment upload
-     * @description Returns an upload URL and headers. When using MinIO/S3, `upload_url` is a presigned S3 URL.
-     * When using filesystem storage in dev, `upload_url` is an internal API path under `/api/attachments/upload/{attachment_id}`.
-     */
-    post: {
-      parameters: {
-        path: {
-          id: string;
+    "/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
-      requestBody: {
-        content: {
-          "application/json": {
-            filename: string;
-            /** Format: int64 */
-            bytes: number;
-            mime?: string;
-          };
-        };
-      };
-      responses: {
-        /** @description Created */
-        201: {
-          content: {
-            "application/json": {
-              upload_url?: string;
-              headers?: {
-                [key: string]: string;
-              };
-              /** Format: uuid */
-              attachment_id?: string;
+        /** List assets */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Search query */
+                    q?: string;
+                    category_id?: string;
+                    status?: components["schemas"]["AssetStatus"][];
+                    condition?: components["schemas"]["AssetCondition"];
+                    assigned_to?: string;
+                    manufacturer?: string;
+                    location?: string;
+                    page?: number;
+                    limit?: number;
+                    sort_by?: string;
+                    sort_order?: "asc" | "desc";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
             };
-          };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssetListResponse"];
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-        /** @description Bad Request */
-        400: {
-          content: never;
+        put?: never;
+        /**
+         * Create asset
+         * @description Requires `admin` or `manager` role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateAssetRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Asset"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Asset tag already exists */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-  };
-  "/users": {
-    /** List users (admin) */
-    get: {
-      parameters: {
-        query?: {
-          /** @description Case-insensitive substring match on email, username, or display_name. */
-          q?: string;
+    "/assets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          content: {
-            "application/json": components["schemas"]["UserSummary"][];
-          };
+        /** Get asset */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Asset"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-        /** @description Server Error */
-        500: {
-          content: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete asset
+         * @description Requires `admin` role.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-      };
+        options?: never;
+        head?: never;
+        /**
+         * Update asset
+         * @description Requires `admin` or `manager` role.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateAssetRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Asset"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        trace?: never;
     };
-    /** Create local user (admin) */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": {
-            username: string;
-            /** Format: email */
-            email?: string;
-            display_name?: string;
-            password: string;
-          };
+    "/assets/{id}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-      };
-      responses: {
-        /** @description Created */
-        201: {
-          content: never;
+        get?: never;
+        put?: never;
+        /**
+         * Assign asset to user
+         * @description Requires `admin` or `manager` role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AssignAssetRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            message?: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
         };
-        /** @description Bad Request */
-        400: {
-          content: never;
-        };
-        /** @description Server Error */
-        500: {
-          content: never;
-        };
-      };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-  };
-  "/users/{id}": {
-    /** Get user (admin) */
-    get: operations["getUserByIdAdmin"];
-  };
-  "/roles": {
-    /** List available roles (admin) */
-    get: operations["listRoles"];
-  };
-  "/metrics/agent": {
-    /** Agent metrics (per-status counts for current user) */
-    get: operations["getAgentMetrics"];
-  };
-  "/metrics/manager": {
-    /** Manager metrics (global per-status counts) */
-    get: operations["getManagerMetrics"];
-  };
-  "/tickets/{id}/attachments/{attID}": {
-    /** Download attachment */
-    get: operations["downloadAttachment"];
-    /** Delete attachment */
-    delete: operations["deleteAttachment"];
-  };
-  "/tickets/{id}/watchers": {
-    /** List watcher user IDs */
-    get: operations["listWatchers"];
-    /** Add watcher */
-    post: operations["addWatcher"];
-  };
-  "/tickets/{id}/watchers/{userID}": {
-    /** Remove watcher */
-    delete: operations["removeWatcher"];
-  };
-  "/csat/{token}": {
-    /**
-     * CSAT form
-     * @description Public endpoint embedded in emails.
-     */
-    get: operations["getCsatForm"];
-    /**
-     * Submit CSAT score
-     * @description Public endpoint embedded in emails.
-     */
-    post: operations["submitCsatScore"];
-  };
-  "/metrics/sla": {
-    /**
-     * SLA attainment
-     * @description Requires `agent` role.
-     */
-    get: operations["getSlaMetrics"];
-  };
-  "/metrics/resolution": {
-    /**
-     * Average resolution time
-     * @description Requires `agent` role.
-     */
-    get: operations["getResolutionMetrics"];
-  };
-  "/metrics/tickets": {
-    /**
-     * Ticket volume per day (30)
-     * @description Requires `agent` role.
-     */
-    get: operations["getTicketVolumeMetrics"];
-  };
-  "/exports/tickets": {
-    /**
-     * Export tickets to CSV
-     * @description Requires object store configuration. Requires `agent` role.
-     */
-    post: operations["exportTickets"];
-  };
-  "/exports/tickets/{job_id}": {
-    /** Check export job status */
-    get: operations["getExportJobStatus"];
-  };
-  "/teams": {
-    /** List teams */
-    get: operations["listTeams"];
-  };
-  "/slas": {
-    /** List SLA policies */
-    get: operations["listSLAs"];
-  };
-  "/kb": {
-    /** Search knowledge base articles */
-    get: operations["searchKB"];
-    /** Create knowledge base article */
-    post: operations["createKB"];
-  };
-  "/kb/{slug}": {
-    /** Get knowledge base article */
-    get: operations["getKB"];
-    /** Update knowledge base article */
-    put: operations["updateKB"];
-    /** Delete knowledge base article */
-    delete: operations["deleteKB"];
-  };
-  "/webhooks/email-inbound": {
-    /** Accept inbound email webhook */
-    post: operations["emailInbound"];
-  };
+    "/assets/{id}/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Checkout asset
+         * @description Requires `admin` or `manager` role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CheckoutRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssetCheckout"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Asset not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Asset already checked out */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/checkin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Checkin asset
+         * @description Requires `admin` or `manager` role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CheckinRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Checkout not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/checkouts/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List active checkouts */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssetCheckout"][];
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/checkouts/overdue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List overdue checkouts */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssetCheckout"][];
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get asset history */
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            history?: components["schemas"]["AssetHistory"][];
+                            total?: number;
+                            page?: number;
+                            limit?: number;
+                            pages?: number;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Asset not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/{id}/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get asset assignments */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssetAssignment"][];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Asset not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/livez": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liveness check */
+        get: operations["healthLiveness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Readiness check */
+        get: operations["healthReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/healthz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health check */
+        get: operations["healthCheck"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login (local mode)
+         * @description Enabled only when `AUTH_MODE=local`.
+         */
+        post: operations["authLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout (local mode) */
+        post: operations["authLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current user */
+        get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current user's profile (local auth) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: email */
+                            email?: string;
+                            display_name?: string;
+                        };
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update current user's profile (local auth) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: email */
+                        email?: string;
+                        display_name?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Profile managed by identity provider */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change password (local auth) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        old_password: string;
+                        new_password: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Password managed by identity provider */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Event stream
+         * @description Server-sent events for ticket and queue updates. Heartbeat comments (`:hb`) are sent about every 30s.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/event-stream": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List roles for a user */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string[];
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** Add role to a user */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RoleRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{id}/roles/{role}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove role from a user */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    role: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/requesters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create requester */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateRequesterRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Requester"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/requesters/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get requester */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Requester"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update requester */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateRequesterRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Requester"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tickets */
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                    priority?: number;
+                    team?: string;
+                    assignee?: string;
+                    search?: string;
+                    /**
+                     * @description Pagination cursor. Accepts either:
+                     *     - A timestamp in RFC3339/RFC3339Nano (legacy form), or
+                     *     - A composite value "<RFC3339Nano>|<id>" returned by the API, which
+                     *       prevents skipping items when multiple rows share the same timestamp.
+                     */
+                    cursor?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items?: components["schemas"]["Ticket"][];
+                            /**
+                             * @description Composite cursor of the form "<RFC3339Nano>|<id>" for stable keyset pagination.
+                             * @example 2024-01-02T03:04:05.123456Z|00000000-0000-0000-0000-000000000123
+                             */
+                            next_cursor?: string;
+                        };
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** Create ticket */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateTicketRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            id?: string;
+                            number?: string;
+                            status?: string;
+                        };
+                    };
+                };
+                /** @description Validation error */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationError"];
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get ticket */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ticket"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update ticket
+         * @description Requires `agent` role.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateTicketRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/tickets/{id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List public comments */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Comment"][];
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** Add comment */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CommentRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            id?: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List attachments */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Attachment"][];
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** Finalize attachment */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        attachment_id: string;
+                        filename: string;
+                        /** Format: int64 */
+                        bytes: number;
+                        mime?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            id?: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}/attachments/presign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Presign attachment upload
+         * @description Returns an upload URL and headers. When using MinIO/S3, `upload_url` is a presigned S3 URL.
+         *     When using filesystem storage in dev, `upload_url` is an internal API path under `/api/attachments/upload/{attachment_id}`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        filename: string;
+                        /** Format: int64 */
+                        bytes: number;
+                        mime?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            upload_url?: string;
+                            headers?: {
+                                [key: string]: string;
+                            };
+                            /** Format: uuid */
+                            attachment_id?: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List users (admin) */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Case-insensitive substring match on email, username, or display_name. */
+                    q?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserSummary"][];
+                    };
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** Create local user (admin) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        username: string;
+                        /** Format: email */
+                        email?: string;
+                        display_name?: string;
+                        password: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get user (admin) */
+        get: operations["getUserByIdAdmin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List available roles (admin) */
+        get: operations["listRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/agent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Agent metrics (per-status counts for current user) */
+        get: operations["getAgentMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/manager": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Manager metrics (global per-status counts) */
+        get: operations["getManagerMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}/attachments/{attID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download attachment */
+        get: operations["downloadAttachment"];
+        put?: never;
+        post?: never;
+        /** Delete attachment */
+        delete: operations["deleteAttachment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}/watchers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List watcher user IDs */
+        get: operations["listWatchers"];
+        put?: never;
+        /** Add watcher */
+        post: operations["addWatcher"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}/watchers/{userID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove watcher */
+        delete: operations["removeWatcher"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/csat/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * CSAT form
+         * @description Public endpoint embedded in emails.
+         */
+        get: operations["getCsatForm"];
+        put?: never;
+        /**
+         * Submit CSAT score
+         * @description Public endpoint embedded in emails.
+         */
+        post: operations["submitCsatScore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/sla": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * SLA attainment
+         * @description Requires `agent` role.
+         */
+        get: operations["getSlaMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Average resolution time
+         * @description Requires `agent` role.
+         */
+        get: operations["getResolutionMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ticket volume per day (30)
+         * @description Requires `agent` role.
+         */
+        get: operations["getTicketVolumeMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/exports/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export tickets to CSV
+         * @description Requires object store configuration. Requires `agent` role.
+         */
+        post: operations["exportTickets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/exports/tickets/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check export job status */
+        get: operations["getExportJobStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List teams */
+        get: operations["listTeams"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/slas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List SLA policies */
+        get: operations["listSLAs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/kb": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search knowledge base articles */
+        get: operations["searchKB"];
+        put?: never;
+        /** Create knowledge base article */
+        post: operations["createKB"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/kb/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get knowledge base article */
+        get: operations["getKB"];
+        /** Update knowledge base article */
+        put: operations["updateKB"];
+        post?: never;
+        /** Delete knowledge base article */
+        delete: operations["deleteKB"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/webhooks/email-inbound": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept inbound email webhook */
+        post: operations["emailInbound"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
-
 export type webhooks = Record<string, never>;
-
 export interface components {
-  schemas: {
-    UserSummary: {
-      /** Format: uuid */
-      id?: string;
-      external_id?: string;
-      username?: string;
-      /** Format: email */
-      email?: string;
-      display_name?: string;
-      roles?: string[];
-    };
-    AuthUser: {
-      /** Format: uuid */
-      id?: string;
-      external_id?: string;
-      /** Format: email */
-      email?: string;
-      display_name?: string;
-      roles?: string[];
-    };
-    Ticket: {
-      /** Format: uuid */
-      id?: string;
-      number?: string;
-      title?: string;
-      description?: string;
-      /** Format: uuid */
-      requester_id?: string;
-      /** Format: uuid */
-      assignee_id?: string | null;
-      /** Format: uuid */
-      team_id?: string | null;
-      priority?: number;
-      urgency?: number | null;
-      category?: string | null;
-      subcategory?: string | null;
-      status?: string;
-      /** Format: date-time */
-      scheduled_at?: string | null;
-      /** Format: date-time */
-      due_at?: string | null;
-      source?: string;
-      custom_json?: Record<string, never>;
-      /** Format: date-time */
-      created_at?: string;
-      /** Format: date-time */
-      updated_at?: string;
-      sla?: components["schemas"]["SLAStatus"];
-    };
-    SLAStatus: {
-      /** Format: uuid */
-      policy_id?: string;
-      response_elapsed_ms?: number;
-      resolution_elapsed_ms?: number;
-      response_target_mins?: number;
-      resolution_target_mins?: number;
-      paused?: boolean;
-      reason?: string | null;
-    };
-    Comment: {
-      /** Format: uuid */
-      id?: string;
-      /** Format: uuid */
-      ticket_id?: string;
-      /** Format: uuid */
-      author_id?: string;
-      body_md?: string;
-      is_internal?: boolean;
-      /** Format: date-time */
-      created_at?: string;
-    };
-    Attachment: {
-      /** Format: uuid */
-      id?: string;
-      filename?: string;
-      /** Format: int64 */
-      bytes?: number;
-      mime?: string | null;
-      /** Format: date-time */
-      created_at?: string;
-    };
-    Requester: {
-      /** Format: uuid */
-      id?: string;
-      /** Format: email */
-      email?: string;
-      display_name?: string;
-    };
-    CreateRequesterRequest: {
-      /** Format: email */
-      email: string;
-      display_name: string;
-    };
-    UpdateRequesterRequest: {
-      /** Format: email */
-      email?: string;
-      display_name?: string;
-    };
-    CreateTicketRequest: {
-      title: string;
-      description?: string;
-      /** Format: uuid */
-      requester_id: string;
-      priority: number;
-      urgency?: number;
-      category?: string;
-      subcategory?: string;
-      custom_json?: Record<string, never>;
-    };
-    UpdateTicketRequest: {
-      status?: string;
-      /** Format: uuid */
-      assignee_id?: string;
-      priority?: number;
-      urgency?: number;
-      /** Format: date-time */
-      scheduled_at?: string;
-      /** Format: date-time */
-      due_at?: string;
-      custom_json?: Record<string, never>;
-    };
-    CommentRequest: {
-      body_md: string;
-      is_internal?: boolean;
-      /** Format: uuid */
-      author_id?: string;
-    };
-    WatcherRequest: {
-      /** Format: uuid */
-      user_id: string;
-    };
-    RoleRequest: {
-      role: string;
-    };
-    ExportTicketsRequest: {
-      ids: string[];
-    };
-    ExportJobAccepted: {
-      job_id?: string;
-    };
-    ExportJobStatus: {
-      status?: string;
-      /** Format: uri */
-      url?: string;
-      error?: string;
-    };
-    ValidationError: {
-      errors?: {
-        [key: string]: string;
-      };
-    };
-    /** @enum {string} */
-    AssetCondition: "excellent" | "good" | "fair" | "poor" | "broken";
-    /** @enum {string} */
-    AssetStatus: "active" | "inactive" | "maintenance" | "retired" | "disposed";
-    AssetCategory: {
-      /** Format: uuid */
-      id?: string;
-      name?: string;
-      description?: string;
-      /** Format: uuid */
-      parent_id?: string | null;
-      custom_fields?: Record<string, never>;
-      /** Format: date-time */
-      created_at?: string;
-      /** Format: date-time */
-      updated_at?: string;
-    };
-    Asset: {
-      /** Format: uuid */
-      id?: string;
-      asset_tag?: string;
-      name?: string;
-      description?: string | null;
-      /** Format: uuid */
-      category_id?: string | null;
-      status?: components["schemas"]["AssetStatus"];
-      condition?: components["schemas"]["AssetCondition"] | null;
-      purchase_price?: number | null;
-      /** Format: date-time */
-      purchase_date?: string | null;
-      /** Format: date-time */
-      warranty_expiry?: string | null;
-      depreciation_rate?: number | null;
-      current_value?: number | null;
-      serial_number?: string | null;
-      model?: string | null;
-      manufacturer?: string | null;
-      location?: string | null;
-      /** Format: uuid */
-      assigned_to_user_id?: string | null;
-      /** Format: date-time */
-      assigned_at?: string | null;
-      custom_fields?: Record<string, never>;
-      /** Format: uuid */
-      created_by?: string;
-      /** Format: date-time */
-      created_at?: string;
-      /** Format: date-time */
-      updated_at?: string;
-      category?: components["schemas"]["AssetCategory"] | null;
-      assigned_user?: components["schemas"]["AssetUser"] | null;
-      created_by_user?: components["schemas"]["AssetUser"] | null;
-    };
-    AssetUser: {
-      /** Format: uuid */
-      id?: string;
-      /** Format: email */
-      email?: string;
-      display_name?: string | null;
-    };
-    AssetListResponse: {
-      assets?: components["schemas"]["Asset"][];
-      total?: number;
-      page?: number;
-      limit?: number;
-      pages?: number;
-    };
-    CreateAssetRequest: {
-      asset_tag: string;
-      name: string;
-      description?: string;
-      /** Format: uuid */
-      category_id?: string;
-      status?: components["schemas"]["AssetStatus"];
-      condition?: components["schemas"]["AssetCondition"];
-      purchase_price?: number;
-      /** Format: date-time */
-      purchase_date?: string;
-      /** Format: date-time */
-      warranty_expiry?: string;
-      depreciation_rate?: number;
-      serial_number?: string;
-      model?: string;
-      manufacturer?: string;
-      location?: string;
-      custom_fields?: Record<string, never>;
-    };
-    UpdateAssetRequest: {
-      name?: string;
-      description?: string;
-      /** Format: uuid */
-      category_id?: string;
-      status?: components["schemas"]["AssetStatus"];
-      condition?: components["schemas"]["AssetCondition"];
-      purchase_price?: number;
-      /** Format: date-time */
-      purchase_date?: string;
-      /** Format: date-time */
-      warranty_expiry?: string;
-      depreciation_rate?: number;
-      current_value?: number;
-      serial_number?: string;
-      model?: string;
-      manufacturer?: string;
-      location?: string;
-      custom_fields?: Record<string, never>;
-    };
-    notes: string;
-    AssignAssetRequest: {
-      /** Format: uuid */
-      assigned_to_user_id?: string | null;
-      notes?: string;
-    };
-    CreateCategoryRequest: {
-      name: string;
-      description?: string;
-      /** Format: uuid */
-      parent_id?: string;
-      custom_fields?: Record<string, never>;
-    };
-    AssetCheckout: {
-      /** Format: uuid */
-      id?: string;
-      /** Format: uuid */
-      asset_id?: string;
-      /** Format: uuid */
-      checked_out_to_user_id?: string;
-      /** Format: uuid */
-      checked_out_by_user_id?: string;
-      /** Format: date-time */
-      checked_out_at?: string;
-      /** Format: date-time */
-      expected_return_date?: string | null;
-      /** Format: date-time */
-      actual_return_date?: string | null;
-      checkout_notes?: string | null;
-      return_notes?: string | null;
-      condition_at_checkout?: components["schemas"]["AssetCondition"] | null;
-      condition_at_return?: components["schemas"]["AssetCondition"] | null;
-      status?: string;
-      asset?: components["schemas"]["Asset"] | null;
-      checked_out_to_user?: components["schemas"]["AssetUser"] | null;
-      checked_out_by_user?: components["schemas"]["AssetUser"] | null;
-    };
-    CheckoutRequest: {
-      /** Format: uuid */
-      asset_id: string;
-      /** Format: uuid */
-      checked_out_to_user_id: string;
-      /** Format: date-time */
-      expected_return_date?: string;
-      checkout_notes?: string;
-      condition_at_checkout?: components["schemas"]["AssetCondition"];
-      requires_approval?: boolean;
-    };
-    CheckinRequest: {
-      /** Format: uuid */
-      checkout_id: string;
-      return_notes?: string;
-      condition_at_return?: components["schemas"]["AssetCondition"];
-      maintenance_needed?: boolean;
-    };
-    AssetHistory: {
-      /** Format: uuid */
-      id?: string;
-      /** Format: uuid */
-      asset_id?: string;
-      action?: string;
-      /** Format: uuid */
-      actor_id?: string | null;
-      old_values?: Record<string, never>;
-      new_values?: Record<string, never>;
-      notes?: string | null;
-      /** Format: date-time */
-      created_at?: string;
-      asset?: components["schemas"]["Asset"] | null;
-      actor?: components["schemas"]["AssetUser"] | null;
-    };
-    AssetAssignment: {
-      /** Format: uuid */
-      id?: string;
-      /** Format: uuid */
-      asset_id?: string;
-      /** Format: uuid */
-      assigned_to_user_id?: string | null;
-      /** Format: uuid */
-      assigned_by_user_id?: string;
-      /** Format: date-time */
-      assigned_at?: string;
-      /** Format: date-time */
-      unassigned_at?: string | null;
-      notes?: string | null;
-      status?: string;
-      asset?: components["schemas"]["Asset"] | null;
-      assigned_user?: components["schemas"]["AssetUser"] | null;
-      assigned_by?: components["schemas"]["AssetUser"] | null;
-    };
-    Team: {
-      /** Format: uuid */
-      id: string;
-      name: string;
-    };
-    SLA: {
-      /** Format: uuid */
-      id: string;
-      name: string;
-      priority: number;
-      response_target_mins: number;
-      resolution_target_mins: number;
-      update_cadence_mins?: number | null;
-    };
-    KBArticle: {
-      /** Format: uuid */
-      id: string;
-      slug: string;
-      title: string;
-      body_md: string;
-    };
-    EmailInboundPayload: {
-      raw_store_key: string;
-      parsed_json: Record<string, never>;
-      message_id?: string;
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
-}
-
-export type $defs = Record<string, never>;
-
-export type external = Record<string, never>;
-
-export interface operations {
-
-  /** Liveness check */
-  healthLiveness: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: never;
-      };
-    };
-  };
-  /** Readiness check */
-  healthReadiness: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: never;
-      };
-      /** @description Dependency failure */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /** Health check */
-  healthCheck: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": {
-            ok?: boolean;
-          };
+    schemas: {
+        UserSummary: {
+            /** Format: uuid */
+            id?: string;
+            external_id?: string;
+            username?: string;
+            /** Format: email */
+            email?: string;
+            display_name?: string;
+            roles?: string[];
         };
-      };
-    };
-  };
-  /**
-   * Login (local mode)
-   * @description Enabled only when `AUTH_MODE=local`.
-   */
-  authLogin: {
-    requestBody: {
-      content: {
-        "application/json": {
-          username: string;
-          password: string;
+        AuthUser: {
+            /** Format: uuid */
+            id?: string;
+            external_id?: string;
+            /** Format: email */
+            email?: string;
+            display_name?: string;
+            roles?: string[];
         };
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: never;
-      };
-      /** @description Bad Request */
-      400: {
-        content: never;
-      };
-      /** @description Unauthorized */
-      401: {
-        content: never;
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /** Logout (local mode) */
-  authLogout: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: never;
-      };
-    };
-  };
-  /** Current user */
-  getCurrentUser: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": components["schemas"]["AuthUser"];
+        Ticket: {
+            /** Format: uuid */
+            id?: string;
+            number?: string;
+            title?: string;
+            description?: string;
+            /** Format: uuid */
+            requester_id?: string;
+            requester?: string;
+            /** Format: uuid */
+            assignee_id?: string | null;
+            /** Format: uuid */
+            team_id?: string | null;
+            priority?: number;
+            urgency?: number | null;
+            category?: string | null;
+            subcategory?: string | null;
+            status?: string;
+            /** Format: date-time */
+            scheduled_at?: string | null;
+            /** Format: date-time */
+            due_at?: string | null;
+            source?: string;
+            custom_json?: Record<string, never>;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+            sla?: components["schemas"]["SLAStatus"];
         };
-      };
-      /** @description Unauthorized */
-      401: {
-        content: never;
-      };
-    };
-  };
-  /** Get user (admin) */
-  getUserByIdAdmin: {
-    parameters: {
-      path: {
-        id: string;
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": components["schemas"]["UserSummary"];
+        SLAStatus: {
+            /** Format: uuid */
+            policy_id?: string;
+            response_elapsed_ms?: number;
+            resolution_elapsed_ms?: number;
+            response_target_mins?: number;
+            resolution_target_mins?: number;
+            paused?: boolean;
+            reason?: string | null;
         };
-      };
-      /** @description Not Found */
-      404: {
-        content: never;
-      };
-    };
-  };
-  /** List available roles (admin) */
-  listRoles: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": string[];
+        Comment: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            ticket_id?: string;
+            /** Format: uuid */
+            author_id?: string;
+            body_md?: string;
+            is_internal?: boolean;
+            /** Format: date-time */
+            created_at?: string;
         };
-      };
-    };
-  };
-  /** Agent metrics (per-status counts for current user) */
-  getAgentMetrics: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": {
-            [key: string]: number;
-          };
+        Attachment: {
+            /** Format: uuid */
+            id?: string;
+            filename?: string;
+            /** Format: int64 */
+            bytes?: number;
+            mime?: string | null;
+            /** Format: date-time */
+            created_at?: string;
         };
-      };
-    };
-  };
-  /** Manager metrics (global per-status counts) */
-  getManagerMetrics: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": {
-            [key: string]: number;
-          };
+        Requester: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: email */
+            email?: string;
+            display_name?: string;
         };
-      };
-    };
-  };
-  /** Download attachment */
-  downloadAttachment: {
-    parameters: {
-      path: {
-        id: string;
-        attID: string;
-      };
-    };
-    responses: {
-      /** @description File content */
-      200: {
-        content: {
-          "application/octet-stream": string;
+        CreateRequesterRequest: {
+            /** Format: email */
+            email: string;
+            display_name: string;
         };
-      };
-      /** @description Redirect to object storage */
-      302: {
-        content: never;
-      };
-      /** @description Not Found */
-      404: {
-        content: never;
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /** Delete attachment */
-  deleteAttachment: {
-    parameters: {
-      path: {
-        id: string;
-        attID: string;
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: never;
-      };
-      /** @description Not Found */
-      404: {
-        content: never;
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /** List watcher user IDs */
-  listWatchers: {
-    parameters: {
-      path: {
-        id: string;
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": string[];
+        UpdateRequesterRequest: {
+            /** Format: email */
+            email?: string;
+            display_name?: string;
         };
-      };
-    };
-  };
-  /** Add watcher */
-  addWatcher: {
-    parameters: {
-      path: {
-        id: string;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["WatcherRequest"];
-      };
-    };
-    responses: {
-      /** @description Created */
-      201: {
-        content: never;
-      };
-      /** @description Bad Request */
-      400: {
-        content: never;
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /** Remove watcher */
-  removeWatcher: {
-    parameters: {
-      path: {
-        id: string;
-        userID: string;
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: never;
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /**
-   * CSAT form
-   * @description Public endpoint embedded in emails.
-   */
-  getCsatForm: {
-    parameters: {
-      path: {
-        token: string;
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "text/html": string;
+        CreateTicketRequest: {
+            title: string;
+            description?: string;
+            /** Format: uuid */
+            requester_id: string;
+            priority: number;
+            urgency?: number;
+            category?: string;
+            subcategory?: string;
+            custom_json?: Record<string, never>;
         };
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /**
-   * Submit CSAT score
-   * @description Public endpoint embedded in emails.
-   */
-  submitCsatScore: {
-    parameters: {
-      path: {
-        token: string;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/x-www-form-urlencoded": {
-          /** @enum {string} */
-          score: "good" | "bad";
+        UpdateTicketRequest: {
+            status?: string;
+            /** Format: uuid */
+            assignee_id?: string;
+            priority?: number;
+            urgency?: number;
+            /** Format: date-time */
+            scheduled_at?: string;
+            /** Format: date-time */
+            due_at?: string;
+            custom_json?: Record<string, never>;
         };
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: never;
-      };
-      /** @description Invalid score */
-      400: {
-        content: never;
-      };
-      /** @description Invalid token */
-      404: {
-        content: never;
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /**
-   * SLA attainment
-   * @description Requires `agent` role.
-   */
-  getSlaMetrics: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": {
-            total?: number;
-            met?: number;
-            sla_attainment?: number;
-          };
+        CommentRequest: {
+            body_md: string;
+            is_internal?: boolean;
+            /** Format: uuid */
+            author_id?: string;
         };
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /**
-   * Average resolution time
-   * @description Requires `agent` role.
-   */
-  getResolutionMetrics: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": {
-            avg_resolution_ms?: number;
-          };
+        WatcherRequest: {
+            /** Format: uuid */
+            user_id: string;
         };
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /**
-   * Ticket volume per day (30)
-   * @description Requires `agent` role.
-   */
-  getTicketVolumeMetrics: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": {
-            daily?: {
-                /** Format: date */
-                day?: string;
-                count?: number;
-              }[];
-          };
+        RoleRequest: {
+            role: string;
         };
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /**
-   * Export tickets to CSV
-   * @description Requires object store configuration. Requires `agent` role.
-   */
-  exportTickets: {
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["ExportTicketsRequest"];
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": {
+        ExportTicketsRequest: {
+            ids: string[];
+        };
+        ExportJobAccepted: {
+            job_id?: string;
+        };
+        ExportJobStatus: {
+            status?: string;
             /** Format: uri */
             url?: string;
-          };
+            error?: string;
         };
-      };
-      /** @description Accepted */
-      202: {
-        content: {
-          "application/json": components["schemas"]["ExportJobAccepted"];
+        ValidationError: {
+            errors?: {
+                [key: string]: string;
+            };
         };
-      };
-      /** @description Bad Request */
-      400: {
-        content: never;
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /** Check export job status */
-  getExportJobStatus: {
-    parameters: {
-      path: {
-        job_id: string;
-      };
-    };
-    responses: {
-      /** @description Status */
-      200: {
-        content: {
-          "application/json": components["schemas"]["ExportJobStatus"];
+        /** @enum {string} */
+        AssetCondition: "excellent" | "good" | "fair" | "poor" | "broken";
+        /** @enum {string} */
+        AssetStatus: "active" | "inactive" | "maintenance" | "retired" | "disposed";
+        AssetCategory: {
+            /** Format: uuid */
+            id?: string;
+            name?: string;
+            description?: string;
+            /** Format: uuid */
+            parent_id?: string | null;
+            custom_fields?: Record<string, never>;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
         };
-      };
-      /** @description Not Found */
-      404: {
-        content: never;
-      };
-      /** @description Server Error */
-      500: {
-        content: never;
-      };
-    };
-  };
-  /** List teams */
-  listTeams: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": components["schemas"]["Team"][];
+        Asset: {
+            /** Format: uuid */
+            id?: string;
+            asset_tag?: string;
+            name?: string;
+            description?: string | null;
+            /** Format: uuid */
+            category_id?: string | null;
+            status?: components["schemas"]["AssetStatus"];
+            condition?: components["schemas"]["AssetCondition"] | null;
+            purchase_price?: number | null;
+            /** Format: date-time */
+            purchase_date?: string | null;
+            /** Format: date-time */
+            warranty_expiry?: string | null;
+            depreciation_rate?: number | null;
+            current_value?: number | null;
+            serial_number?: string | null;
+            model?: string | null;
+            manufacturer?: string | null;
+            location?: string | null;
+            /** Format: uuid */
+            assigned_to_user_id?: string | null;
+            /** Format: date-time */
+            assigned_at?: string | null;
+            custom_fields?: Record<string, never>;
+            /** Format: uuid */
+            created_by?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+            category?: components["schemas"]["AssetCategory"] | null;
+            assigned_user?: components["schemas"]["AssetUser"] | null;
+            created_by_user?: components["schemas"]["AssetUser"] | null;
         };
-      };
-    };
-  };
-  /** List SLA policies */
-  listSLAs: {
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": components["schemas"]["SLA"][];
+        AssetUser: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: email */
+            email?: string;
+            display_name?: string | null;
         };
-      };
-    };
-  };
-  /** Search knowledge base articles */
-  searchKB: {
-    parameters: {
-      query?: {
-        q?: string;
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": components["schemas"]["KBArticle"][];
+        AssetListResponse: {
+            assets?: components["schemas"]["Asset"][];
+            total?: number;
+            page?: number;
+            limit?: number;
+            pages?: number;
         };
-      };
-    };
-  };
-  /** Create knowledge base article */
-  createKB: {
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["KBArticle"];
-      };
-    };
-    responses: {
-      /** @description Created */
-      201: {
-        content: {
-          "application/json": components["schemas"]["KBArticle"];
+        CreateAssetRequest: {
+            asset_tag: string;
+            name: string;
+            description?: string;
+            /** Format: uuid */
+            category_id?: string;
+            status?: components["schemas"]["AssetStatus"];
+            condition?: components["schemas"]["AssetCondition"];
+            purchase_price?: number;
+            /** Format: date-time */
+            purchase_date?: string;
+            /** Format: date-time */
+            warranty_expiry?: string;
+            depreciation_rate?: number;
+            serial_number?: string;
+            model?: string;
+            manufacturer?: string;
+            location?: string;
+            custom_fields?: Record<string, never>;
         };
-      };
-    };
-  };
-  /** Get knowledge base article */
-  getKB: {
-    parameters: {
-      path: {
-        slug: string;
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": components["schemas"]["KBArticle"];
+        UpdateAssetRequest: {
+            name?: string;
+            description?: string;
+            /** Format: uuid */
+            category_id?: string;
+            status?: components["schemas"]["AssetStatus"];
+            condition?: components["schemas"]["AssetCondition"];
+            purchase_price?: number;
+            /** Format: date-time */
+            purchase_date?: string;
+            /** Format: date-time */
+            warranty_expiry?: string;
+            depreciation_rate?: number;
+            current_value?: number;
+            serial_number?: string;
+            model?: string;
+            manufacturer?: string;
+            location?: string;
+            custom_fields?: Record<string, never>;
         };
-      };
-      /** @description Not Found */
-      404: {
-        content: never;
-      };
-    };
-  };
-  /** Update knowledge base article */
-  updateKB: {
-    parameters: {
-      path: {
-        slug: string;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["KBArticle"];
-      };
-    };
-    responses: {
-      /** @description OK */
-      200: {
-        content: {
-          "application/json": components["schemas"]["KBArticle"];
+        notes: string;
+        AssignAssetRequest: {
+            /** Format: uuid */
+            assigned_to_user_id?: string | null;
+            notes?: string;
         };
-      };
-      /** @description Not Found */
-      404: {
-        content: never;
-      };
+        CreateCategoryRequest: {
+            name: string;
+            description?: string;
+            /** Format: uuid */
+            parent_id?: string;
+            custom_fields?: Record<string, never>;
+        };
+        AssetCheckout: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            asset_id?: string;
+            /** Format: uuid */
+            checked_out_to_user_id?: string;
+            /** Format: uuid */
+            checked_out_by_user_id?: string;
+            /** Format: date-time */
+            checked_out_at?: string;
+            /** Format: date-time */
+            expected_return_date?: string | null;
+            /** Format: date-time */
+            actual_return_date?: string | null;
+            checkout_notes?: string | null;
+            return_notes?: string | null;
+            condition_at_checkout?: components["schemas"]["AssetCondition"] | null;
+            condition_at_return?: components["schemas"]["AssetCondition"] | null;
+            status?: string;
+            asset?: components["schemas"]["Asset"] | null;
+            checked_out_to_user?: components["schemas"]["AssetUser"] | null;
+            checked_out_by_user?: components["schemas"]["AssetUser"] | null;
+        };
+        CheckoutRequest: {
+            /** Format: uuid */
+            asset_id: string;
+            /** Format: uuid */
+            checked_out_to_user_id: string;
+            /** Format: date-time */
+            expected_return_date?: string;
+            checkout_notes?: string;
+            condition_at_checkout?: components["schemas"]["AssetCondition"];
+            requires_approval?: boolean;
+        };
+        CheckinRequest: {
+            /** Format: uuid */
+            checkout_id: string;
+            return_notes?: string;
+            condition_at_return?: components["schemas"]["AssetCondition"];
+            maintenance_needed?: boolean;
+        };
+        AssetHistory: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            asset_id?: string;
+            action?: string;
+            /** Format: uuid */
+            actor_id?: string | null;
+            old_values?: Record<string, never>;
+            new_values?: Record<string, never>;
+            notes?: string | null;
+            /** Format: date-time */
+            created_at?: string;
+            asset?: components["schemas"]["Asset"] | null;
+            actor?: components["schemas"]["AssetUser"] | null;
+        };
+        AssetAssignment: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            asset_id?: string;
+            /** Format: uuid */
+            assigned_to_user_id?: string | null;
+            /** Format: uuid */
+            assigned_by_user_id?: string;
+            /** Format: date-time */
+            assigned_at?: string;
+            /** Format: date-time */
+            unassigned_at?: string | null;
+            notes?: string | null;
+            status?: string;
+            asset?: components["schemas"]["Asset"] | null;
+            assigned_user?: components["schemas"]["AssetUser"] | null;
+            assigned_by?: components["schemas"]["AssetUser"] | null;
+        };
+        Team: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        SLA: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            priority: number;
+            response_target_mins: number;
+            resolution_target_mins: number;
+            update_cadence_mins?: number | null;
+        };
+        KBArticle: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            title: string;
+            body_md: string;
+        };
+        EmailInboundPayload: {
+            raw_store_key: string;
+            parsed_json: Record<string, never>;
+            message_id?: string;
+        };
     };
-  };
-  /** Delete knowledge base article */
-  deleteKB: {
-    parameters: {
-      path: {
-        slug: string;
-      };
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
+}
+export type $defs = Record<string, never>;
+export interface operations {
+    healthLiveness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
     };
-    responses: {
-      /** @description No Content */
-      204: {
-        content: never;
-      };
-      /** @description Not Found */
-      404: {
-        content: never;
-      };
+    healthReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Dependency failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
     };
-  };
-  /** Accept inbound email webhook */
-  emailInbound: {
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["EmailInboundPayload"];
-      };
+    healthCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        ok?: boolean;
+                    };
+                };
+            };
+        };
     };
-    responses: {
-      /** @description Accepted */
-      202: {
-        content: never;
-      };
+    authLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    username: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
     };
-  };
+    authLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthUser"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getUserByIdAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSummary"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    getAgentMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
+    getManagerMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
+    downloadAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                attID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File content */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Redirect to object storage */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                attID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listWatchers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    addWatcher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatcherRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    removeWatcher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getCsatForm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    submitCsatScore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    /** @enum {string} */
+                    score: "good" | "bad";
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid score */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid token */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getSlaMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        total?: number;
+                        met?: number;
+                        sla_attainment?: number;
+                    };
+                };
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getResolutionMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        avg_resolution_ms?: number;
+                    };
+                };
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getTicketVolumeMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        daily?: {
+                            /** Format: date */
+                            day?: string;
+                            count?: number;
+                        }[];
+                    };
+                };
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    exportTickets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportTicketsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        url?: string;
+                    };
+                };
+            };
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportJobAccepted"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getExportJobStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportJobStatus"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listTeams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"][];
+                };
+            };
+        };
+    };
+    listSLAs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SLA"][];
+                };
+            };
+        };
+    };
+    searchKB: {
+        parameters: {
+            query?: {
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"][];
+                };
+            };
+        };
+    };
+    createKB: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KBArticle"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+        };
+    };
+    getKB: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateKB: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KBArticle"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteKB: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    emailInbound: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailInboundPayload"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
 }

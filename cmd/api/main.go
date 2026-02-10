@@ -634,6 +634,14 @@ func main() {
 		store = &appcore.FsObjectStore{Base: base}
 	}
 
+	// If we have a DB and a store, wrap the store in a DynamicObjectStore to allow runtime overrides
+	if pool != nil && store != nil {
+		store = &appcore.DynamicObjectStore{
+			DB:       pool,
+			Fallback: store,
+		}
+	}
+
 	// Seed a local admin when enabled. In dev, the password is generated if
 	// ADMIN_PASSWORD is omitted (logged once).
 	if cfg.AuthMode == "local" && (cfg.Env == "dev" || os.Getenv("ADMIN_PASSWORD") != "") {
@@ -724,6 +732,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/features", handlers.Features(a.core()))
 	auth.POST("/test-connection", authpkg.RequireRole("admin"), handlers.TestConnection)
 	auth.POST("/settings/storage", authpkg.RequireRole("admin"), handlers.SaveStorageSettings)
+	auth.POST("/settings/storage/test", authpkg.RequireRole("admin"), handlers.TestStorageConnection)
 	auth.POST("/settings/oidc", authpkg.RequireRole("admin"), handlers.SaveOIDCSettings)
 	auth.POST("/settings/mail", authpkg.RequireRole("admin"), handlers.SaveMailSettings)
 	auth.POST("/settings/mail/send-test", authpkg.RequireRole("admin"), handlers.SendTestMail)
