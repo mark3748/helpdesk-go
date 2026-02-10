@@ -1,3 +1,15 @@
+# 0.4.5: UI Improvements
+
+**Summary:**
+- Internal UI: Implemented tabbed sidebar to separate manager, agent, and admin roles.
+- Internal UI: Added queue manager page.
+- Internal UI: Completed implementation of settings page, including system status.
+- Internal UI: Added full OIDC configuration support in UI.
+- Internal UI: Added full S3 (MinIO) configuration support in UI.
+- Bugfix: Fixed issue with attachments not being displayed in internal UI.
+- Bugfix: Fixed issue with user management list triggering infinite refresh loop.
+- Bugfix: Repaired tests broken by recent changes.
+
 # 0.4.3: Security Hardening + Production Polish
 
 **Summary:**
