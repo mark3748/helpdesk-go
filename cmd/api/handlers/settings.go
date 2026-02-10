@@ -3,13 +3,17 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/smtp"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 // DB defines the database methods used by the settings handlers.
@@ -406,4 +410,57 @@ func TestMailSettings(db DB) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, gin.H{"ok": true, "log_path": s.LogPath, "last_test": now.Format(time.RFC3339)})
 	}
+}
+
+// TestStorageConnection verifies the provided storage credentials.
+func TestStorageConnection(c *gin.Context) {
+	var data map[string]string
+	if err := c.ShouldBindJSON(&data); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	endpoint := data["endpoint"]
+	accessKey := data["access_key_id"]
+	secretKey := data["secret_access_key"]
+	bucket := data["bucket"]
+	useSSL := data["use_ssl"] == "true"
+
+	// Strip scheme if present
+	if strings.HasPrefix(endpoint, "https://") {
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+		useSSL = true
+	} else if strings.HasPrefix(endpoint, "http://") {
+		endpoint = strings.TrimPrefix(endpoint, "http://")
+		useSSL = false
+	}
+
+	if endpoint == "" || accessKey == "" || secretKey == "" || bucket == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required fields"})
+		return
+	}
+
+	// Initialize MinIO client
+	mc, err := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure: useSSL,
+	})
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": fmt.Sprintf("failed to create client: %v", err)})
+		return
+	}
+
+	// Check if bucket exists
+	exists, err := mc.BucketExists(c.Request.Context(), bucket)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": fmt.Sprintf("connection failed: %v", err)})
+		return
+	}
+
+	if !exists {
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": "bucket does not exist"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

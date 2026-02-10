@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"io"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/emersion/go-imap"
@@ -27,9 +29,14 @@ func (f *fakeStore) PutObject(ctx context.Context, bucket, object string, r io.R
 	return minio.UploadInfo{Bucket: bucket, Key: object, Size: int64(len(b))}, nil
 }
 
-func (f *fakeStore) RemoveObject(ctx context.Context, bucket, object string, opts minio.RemoveObjectOptions) error {
-	delete(f.objects, bucket+"/"+object)
+func (f *fakeStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
 	return nil
+}
+func (f *fakeStore) StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error) {
+	return minio.ObjectInfo{}, nil
+}
+func (f *fakeStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
+	return nil, nil
 }
 
 // fakeDB implements app.DB for tests.

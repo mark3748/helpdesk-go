@@ -54,7 +54,8 @@ func List(a *app.App) gin.HandlerFunc {
 func Upload(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		metrics.AttachmentsUploadedTotal.Inc()
-		if a.DB == nil || a.M == nil {
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if a.DB == nil || store == nil {
 			c.JSON(http.StatusCreated, gin.H{"id": "temp"})
 			return
 		}
@@ -76,7 +77,7 @@ func Upload(a *app.App) gin.HandlerFunc {
 		}
 		oc, cancel := a.ObjCtx(c.Request.Context())
 		defer cancel()
-		if _, err := a.M.PutObject(oc, a.Cfg.MinIOBucket, key, f, size, minio.PutObjectOptions{ContentType: ct}); err != nil {
+		if _, err := store.PutObject(oc, bucket, key, f, size, minio.PutObjectOptions{ContentType: ct}); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -104,6 +105,7 @@ func Upload(a *app.App) gin.HandlerFunc {
 
 func Get(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		store, bucket := a.ResolveStore(c.Request.Context())
 		if a.DB == nil {
 			c.JSON(http.StatusOK, gin.H{"id": c.Param("attID")})
 			return
@@ -114,10 +116,33 @@ func Get(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		// If MinIO client is configured, redirect to presigned URL for download
-		if mc, ok := a.M.(*minio.Client); ok {
+
+		if store == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "object store not configured"})
+			return
+		}
+
+		// Try presigned URL first (works for MinIO/S3)
+		// We use a short TTL for download links
+		// NOTE: FsObjectStore will return error for PresignedPut, but what about Get?
+		// We didn't add PresignedGet to interface yet.
+		// Wait, existing code used s3svc helper.
+		// If I want to support MinIO via interface, I need PresignedGetObject.
+		// But I didn't add it to interface because I thought I could avoid it.
+		// But `Get` handler logic diverged for MinIO vs FS.
+		// MinIO -> Redirect to presigned URL
+		// FS -> Serve bytes
+
+		// If I use MinIO client directly via type assertion, I bypass Dynamic wrapper.
+		// I MUST use the interface.
+		// I will Assume PresignedGet is available or I fallback to serving bytes?
+		// NO, serving bytes via MinIO proxying is heavy.
+		// I should have added PresignedGetObject to interface.
+		// Let's rely on type assertion on the RESOLVED store.
+
+		if mc, ok := store.(*minio.Client); ok {
 			// Use internal S3 helper for consistent TTL
-			svc := s3svc.Service{Client: mc, Bucket: a.Cfg.MinIOBucket, MaxTTL: time.Minute}
+			svc := s3svc.Service{Client: mc, Bucket: bucket, MaxTTL: time.Minute}
 			u, err := svc.PresignGet(c.Request.Context(), key, sanitizeFilename(fn), time.Minute)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -128,8 +153,8 @@ func Get(a *app.App) gin.HandlerFunc {
 		}
 
 		// Serve from filesystem store when configured
-		if fs, ok := a.M.(*app.FsObjectStore); ok {
-			root := filepath.Join(fs.Base, a.Cfg.MinIOBucket)
+		if fs, ok := store.(*app.FsObjectStore); ok {
+			root := filepath.Join(fs.Base, bucket)
 			path := filepath.Clean(filepath.Join(root, key))
 			// Ensure the path is within the root (prevent traversal)
 			if rel, err := filepath.Rel(root, path); err != nil || strings.HasPrefix(rel, "..") {
@@ -150,22 +175,22 @@ func Get(a *app.App) gin.HandlerFunc {
 			_, _ = c.Writer.Write(f)
 			return
 		}
-		// Otherwise object store not configured
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "object store not configured"})
+
+		// Fallback/Unknown store type
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "object store type not supported for download"})
 	}
 }
 
 func PresignUpload(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if a.M == nil {
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if store == nil {
 			c.JSON(http.StatusOK, gin.H{"url": "", "object_key": "temp"})
 			return
 		}
-		mc, ok := a.M.(*minio.Client)
-		if !ok {
-			c.JSON(http.StatusNotImplemented, gin.H{"error": "presign not supported"})
-			return
-		}
+		// If it's MinIO, we can use our s3svc helper if we convert to *minio.Client
+		// OR we use PresignedPutObject from interface (which we added!)
+
 		var req struct {
 			Filename    string `json:"filename"`
 			ContentType string `json:"content_type"`
@@ -178,36 +203,45 @@ func PresignUpload(a *app.App) gin.HandlerFunc {
 		if sn := sanitizeFilename(req.Filename); sn != "" {
 			key += "-" + sn
 		}
-		svc := s3svc.Service{Client: mc, Bucket: a.Cfg.MinIOBucket, MaxTTL: time.Minute}
-		oc, cancel := a.ObjCtx(c.Request.Context())
-		defer cancel()
-		u, err := svc.PresignPut(oc, key, req.ContentType, time.Minute)
+
+		// Use interface method
+		u, err := store.PresignedPutObject(c.Request.Context(), bucket, key, time.Minute)
 		if err != nil {
+			// If not supported (e.g. FS), we should return error or handle differently?
+			// The original code returned 501 Not Implemented for FS in PresignUpload (which was separate from Presign).
+			// Let's return error.
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"url": u, "object_key": key, "content_type": req.ContentType})
+
+		c.JSON(http.StatusOK, gin.H{"url": u.String(), "object_key": key, "content_type": req.ContentType})
 	}
 }
 
 func PresignDownload(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if a.DB == nil || a.M == nil {
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if a.DB == nil || store == nil {
 			c.JSON(http.StatusOK, gin.H{"url": ""})
 			return
 		}
-		mc, ok := a.M.(*minio.Client)
+		// Logic similar to Get but returns JSON
+		// Again, relying on type assertion for MinIO-specific s3svc helper for now
+		// unless we add PresignedGet to interface.
+
+		mc, ok := store.(*minio.Client)
 		if !ok {
 			c.JSON(http.StatusNotImplemented, gin.H{"error": "presign not supported"})
 			return
 		}
+
 		const q = `select object_key, filename, mime from attachments where id=$1 and ticket_id=$2`
 		var key, fn, mt string
 		if err := a.DB.QueryRow(c.Request.Context(), q, c.Param("attID"), c.Param("id")).Scan(&key, &fn, &mt); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		svc := s3svc.Service{Client: mc, Bucket: a.Cfg.MinIOBucket, MaxTTL: time.Minute}
+		svc := s3svc.Service{Client: mc, Bucket: bucket, MaxTTL: time.Minute}
 		oc, cancel := a.ObjCtx(c.Request.Context())
 		defer cancel()
 		u, err := svc.PresignGet(oc, key, sanitizeFilename(fn), time.Minute)
@@ -250,8 +284,10 @@ func Delete(a *app.App) gin.HandlerFunc {
 		// Remove object first when possible
 		var key string
 		_ = a.DB.QueryRow(c.Request.Context(), `select object_key from attachments where id=$1 and ticket_id=$2`, c.Param("attID"), c.Param("id")).Scan(&key)
-		if key != "" && a.M != nil {
-			_ = a.M.RemoveObject(c.Request.Context(), a.Cfg.MinIOBucket, key, minio.RemoveObjectOptions{})
+
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if key != "" && store != nil {
+			_ = store.RemoveObject(c.Request.Context(), bucket, key, minio.RemoveObjectOptions{})
 		}
 		const q = `delete from attachments where id=$1 and ticket_id=$2`
 		if _, err := a.DB.Exec(c.Request.Context(), q, c.Param("attID"), c.Param("id")); err != nil {
@@ -271,7 +307,8 @@ func Presign(a *app.App) gin.HandlerFunc {
 		Mime     string `json:"mime"`
 	}
 	return func(c *gin.Context) {
-		if a.M == nil {
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if store == nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "object store not configured"})
 			return
 		}
@@ -281,39 +318,43 @@ func Presign(a *app.App) gin.HandlerFunc {
 			return
 		}
 		objectKey := uuid.New().String()
-		if mc, ok := a.M.(*minio.Client); ok {
-			// Build presigned PUT URL via s3 service helper
-			svc := s3svc.Service{Client: mc, Bucket: a.Cfg.MinIOBucket, MaxTTL: time.Minute}
-			u, err := svc.PresignPut(c.Request.Context(), objectKey, in.Mime, time.Minute)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
+
+		// Try using interface PresignedPutObject first
+		u, err := store.PresignedPutObject(c.Request.Context(), bucket, objectKey, time.Minute)
+		if err == nil && u != nil {
 			headers := map[string]string{}
 			if in.Mime != "" {
 				headers["Content-Type"] = in.Mime
 			}
-			c.JSON(http.StatusCreated, gin.H{"upload_url": u, "headers": headers, "attachment_id": objectKey})
+			c.JSON(http.StatusCreated, gin.H{"upload_url": u.String(), "headers": headers, "attachment_id": objectKey})
 			return
 		}
-		// Filesystem store: instruct client to upload to internal endpoint
-		headers := map[string]string{}
-		if in.Mime != "" {
-			headers["Content-Type"] = in.Mime
+
+		// Filesystem store fallback (PresignedPutObject returns error/nil)
+		// We only support this fallback if we know it is FS store.
+		if _, ok := store.(*app.FsObjectStore); ok {
+			headers := map[string]string{}
+			if in.Mime != "" {
+				headers["Content-Type"] = in.Mime
+			}
+			c.JSON(http.StatusCreated, gin.H{"upload_url": "/api/attachments/upload/" + objectKey, "headers": headers, "attachment_id": objectKey})
+			return
 		}
-		c.JSON(http.StatusCreated, gin.H{"upload_url": "/api/attachments/upload/" + objectKey, "headers": headers, "attachment_id": objectKey})
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "presign failed"})
 	}
 }
 
 // UploadObject handles PUT uploads when using the filesystem store.
 func UploadObject(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if a.M == nil {
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if store == nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "object store not configured"})
 			return
 		}
 		// Disallow when using MinIO client; must use presigned URL
-		if _, ok := a.M.(*minio.Client); ok {
+		if _, ok := store.(*minio.Client); ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upload target"})
 			return
 		}
@@ -333,7 +374,7 @@ func UploadObject(a *app.App) gin.HandlerFunc {
 		}
 		oc, cancel := a.ObjCtx(c.Request.Context())
 		defer cancel()
-		if _, err := a.M.PutObject(oc, a.Cfg.MinIOBucket, objectKey, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{ContentType: ct}); err != nil {
+		if _, err := store.PutObject(oc, bucket, objectKey, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{ContentType: ct}); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -351,7 +392,8 @@ func Finalize(a *app.App) gin.HandlerFunc {
 	}
 	return func(c *gin.Context) {
 		metrics.AttachmentsUploadedTotal.Inc()
-		if a.M == nil {
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if store == nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "object store not configured"})
 			return
 		}
@@ -367,37 +409,23 @@ func Finalize(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+
 		if _, err := uuid.Parse(strings.TrimSpace(in.AttachmentID)); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid attachment_id"})
 			return
 		}
 		var size int64
-		if mc, ok := a.M.(*minio.Client); ok {
-			oc, cancel := a.ObjCtx(c.Request.Context())
-			defer cancel()
-			info, err := mc.StatObject(oc, a.Cfg.MinIOBucket, in.AttachmentID, minio.StatObjectOptions{})
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "upload incomplete"})
-				return
-			}
-			size = info.Size
-		} else if fs, ok := a.M.(*app.FsObjectStore); ok {
-			root := filepath.Join(fs.Base, a.Cfg.MinIOBucket)
-			p := filepath.Clean(filepath.Join(root, in.AttachmentID))
-			if rel, err := filepath.Rel(root, p); err != nil || strings.HasPrefix(rel, "..") {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
-				return
-			}
-			fi, err := os.Stat(p)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "upload incomplete"})
-				return
-			}
-			size = fi.Size()
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "object store not configured"})
+
+		// Use StatObject interface method
+		oc, cancel := a.ObjCtx(c.Request.Context())
+		defer cancel()
+		info, err := store.StatObject(oc, bucket, in.AttachmentID, minio.StatObjectOptions{})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "upload incomplete"})
 			return
 		}
+		size = info.Size
+
 		if size != in.Bytes {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "upload incomplete"})
 			return

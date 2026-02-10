@@ -109,6 +109,8 @@ type DB interface {
 type ObjectStore interface {
 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
 	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+	StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error)
+	PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error)
 }
 
 // fsObjectStore implements ObjectStore on the local filesystem for development/testing.
@@ -138,12 +140,17 @@ func (f *FsObjectStore) PutObject(ctx context.Context, bucketName, objectName st
 	if err != nil {
 		return minio.UploadInfo{}, err
 	}
-	defer out.Close()
 	if _, err := io.Copy(out, reader); err != nil {
+		out.Close()
+		_ = os.Remove(tmp)
+		return minio.UploadInfo{}, err
+	}
+	if err := out.Close(); err != nil {
 		_ = os.Remove(tmp)
 		return minio.UploadInfo{}, err
 	}
 	if err := os.Rename(tmp, clean); err != nil {
+		_ = os.Remove(tmp)
 		return minio.UploadInfo{}, err
 	}
 	return minio.UploadInfo{Bucket: bucketName, Key: objectName, Size: objectSize}, nil
@@ -230,4 +237,24 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 	a.R.Use(Logger())
 	a.R.Use(Errors())
 	return a
+}
+
+// ResolveStore returns the effective ObjectStore and bucket name for the current context.
+// If the store is dynamic, it checks for runtime configuration.
+// If not configured dynamically, it returns the fallback store and default bucket.
+func (a *App) ResolveStore(ctx context.Context) (ObjectStore, string) {
+	if dyn, ok := a.M.(*DynamicObjectStore); ok {
+		// Attempt to get dynamic client
+		store, bucket, err := dyn.getClient(ctx)
+		if err == nil && store != nil {
+			return store, bucket
+		}
+		// If error or no client, fall back to default
+		if dyn.Fallback != nil {
+			return dyn.Fallback, a.Cfg.MinIOBucket
+		}
+		return nil, ""
+	}
+	// Not dynamic
+	return a.M, a.Cfg.MinIOBucket
 }

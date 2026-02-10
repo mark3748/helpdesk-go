@@ -243,3 +243,73 @@ func TestMailTestDefaults(t *testing.T) {
 		t.Fatalf("expected smtpSendMail called")
 	}
 }
+
+func TestStorageConnectionHandler(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/settings/storage/test", TestStorageConnection)
+
+	// Test missing fields
+	body := bytes.NewBufferString(`{}`)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/settings/storage/test", body)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 got %d", w.Code)
+	}
+
+	// Test connection failure (dummy endpoint)
+	body = bytes.NewBufferString(`{
+		"endpoint": "localhost:12345",
+		"bucket": "test",
+		"access_key_id": "minio",
+		"secret_access_key": "minio123",
+		"use_ssl": "false"
+	}`)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPost, "/settings/storage/test", body)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", w.Code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["ok"] == true {
+		t.Fatalf("expected connection failure")
+	}
+	// Test scheme stripping and SSL auto-detect
+	// We provide https:// but use_ssl="false". The handler should switch use_ssl to true.
+	// Since we can't easily check the internal bool, we rely on the fact that
+	// if it DIDN'T switch, it would try HTTP -> HTTPS and fail with "Client sent an HTTP request..."
+	// or effectively succeed if the mockup server handles it.
+	// But here we are mocking minio.New? No, we are using the real minio.New but checking for error.
+	// To comfortably test this without a real MinIO, we just ensure it doesn't error on the SCHEME.
+	body = bytes.NewBufferString(`{
+		"endpoint": "https://localhost:12345",
+		"bucket": "test",
+		"access_key_id": "minio",
+		"secret_access_key": "minio123",
+		"use_ssl": "false"
+	}`)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPost, "/settings/storage/test", body)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", w.Code)
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	// We expect connection failure (no server), but NOT "fully qualified paths"
+	if resp["error"] != nil {
+		errStr := resp["error"].(string)
+		if strings.Contains(errStr, "fully qualified paths") {
+			t.Fatalf("scheme not stripped: %s", errStr)
+		}
+	}
+}

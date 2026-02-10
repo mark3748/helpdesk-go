@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Table, Button, Tag, Typography, Select } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useTickets, subscribeEvents } from '../../api';
+import { useTickets, subscribeEvents, useRequester } from '../../api';
 import type { Ticket } from '../../api';
 import CreateTicketModal from './CreateTicketModal';
 import dayjs from 'dayjs';
@@ -10,6 +10,13 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 dayjs.extend(relativeTime);
 
 const { Text } = Typography;
+
+function TicketRequester({ id }: { id?: string }) {
+  const { data: req, isLoading } = useRequester(id || '');
+  if (!id) return <Text type="secondary">Unknown</Text>;
+  if (isLoading) return <Text type="secondary">Loading...</Text>;
+  return <Text strong>{req?.display_name || req?.email || id.slice(0, 8)}</Text>;
+}
 
 export default function QueueList() {
   const navigate = useNavigate();
@@ -113,7 +120,7 @@ export default function QueueList() {
       title: 'Name',
       key: 'name',
       render: (_: any, record: Ticket) => (
-        <Text strong>{record.requester_id ? 'Requester ' + record.requester_id.slice(0, 4) : 'Unknown'}</Text>
+        <TicketRequester id={record.requester_id} />
       ),
     },
     {
