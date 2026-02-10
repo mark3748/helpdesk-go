@@ -25,18 +25,23 @@ export default function AdminUsers() {
     try {
       const data = await apiFetch<User[]>(`/users${q ? `?q=${encodeURIComponent(q)}` : ''}`);
       setUsers(data);
-      if (selected) {
-        const s = data.find((u) => u.id === selected.id);
-        setSelected(s || null);
-      }
     } catch (e: any) {
       message.error(e?.message || 'Failed to load users');
     } finally {
       setLoading(false);
     }
-  }, [q, selected]);
+  }, [q]);
 
   useEffect(() => { load(); /* initial */ }, [load]);
+
+  useEffect(() => {
+    if (selected) {
+      const s = users.find((u) => u.id === selected.id);
+      if (s && JSON.stringify(s) !== JSON.stringify(selected)) {
+        setSelected(s);
+      }
+    }
+  }, [users, selected]);
   useEffect(() => { (async () => { try { setRoles(await apiFetch<string[]>('/roles')); } catch { /* Error loading roles */ } })(); }, []);
 
   const columns = useMemo(() => ([
