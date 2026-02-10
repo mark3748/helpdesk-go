@@ -491,7 +491,11 @@ func List(a *app.App) gin.HandlerFunc {
 
 		// Keep the first 9 columns in legacy order to satisfy existing tests,
 		// and append description, created_at, and category for UI consumption.
-		sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, t.updated_at, t.description, t.created_at, t.category from tickets t left join requesters r on r.id=t.requester_id"
+		sql := `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, 
+			t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, 
+			t.updated_at, t.description, t.created_at, t.category 
+			from tickets t 
+			left join requesters r on r.id=t.requester_id`
 		if len(where) > 0 {
 			sql += " where " + strings.Join(where, " and ")
 		}
@@ -609,7 +613,12 @@ func Get(a *app.App) gin.HandlerFunc {
 			return
 		}
 		// Keep legacy column order and append description, created_at, and category for compatibility
-		const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, t.description, t.created_at, t.category from tickets t left join requesters r on r.id=t.requester_id where t.id=$1`
+		const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, 
+			t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, 
+			t.description, t.created_at, t.category 
+			from tickets t 
+			left join requesters r on r.id=t.requester_id 
+			where t.id=$1`
 		var t Ticket
 		var assignee *string
 		var number any
