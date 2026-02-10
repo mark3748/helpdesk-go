@@ -122,24 +122,10 @@ func Get(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		// Try presigned URL first (works for MinIO/S3)
-		// We use a short TTL for download links
-		// NOTE: FsObjectStore will return error for PresignedPut, but what about Get?
-		// We didn't add PresignedGet to interface yet.
-		// Wait, existing code used s3svc helper.
-		// If I want to support MinIO via interface, I need PresignedGetObject.
-		// But I didn't add it to interface because I thought I could avoid it.
-		// But `Get` handler logic diverged for MinIO vs FS.
-		// MinIO -> Redirect to presigned URL
-		// FS -> Serve bytes
-
-		// If I use MinIO client directly via type assertion, I bypass Dynamic wrapper.
-		// I MUST use the interface.
-		// I will Assume PresignedGet is available or I fallback to serving bytes?
-		// NO, serving bytes via MinIO proxying is heavy.
-		// I should have added PresignedGetObject to interface.
-		// Let's rely on type assertion on the RESOLVED store.
-
+		// Prefer a presigned URL for MinIO/S3 stores so the client downloads
+		// directly from object storage (short TTL) instead of proxying data
+		// through the API; filesystem-backed stores are served by reading from
+		// disk and streaming the bytes to the client.
 		if mc, ok := store.(*minio.Client); ok {
 			// Use internal S3 helper for consistent TTL
 			svc := s3svc.Service{Client: mc, Bucket: bucket, MaxTTL: time.Minute}
@@ -204,12 +190,15 @@ func PresignUpload(a *app.App) gin.HandlerFunc {
 			key += "-" + sn
 		}
 
+		// Only MinIO-backed stores support presigned uploads; others are not implemented.
+		if _, ok := store.(*minio.Client); !ok {
+			c.JSON(http.StatusNotImplemented, gin.H{"error": "presign not supported"})
+			return
+		}
+
 		// Use interface method
 		u, err := store.PresignedPutObject(c.Request.Context(), bucket, key, time.Minute)
 		if err != nil {
-			// If not supported (e.g. FS), we should return error or handle differently?
-			// The original code returned 501 Not Implemented for FS in PresignUpload (which was separate from Presign).
-			// Let's return error.
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

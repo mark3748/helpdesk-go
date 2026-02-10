@@ -5,7 +5,7 @@ import { apiFetch } from '../../shared/api';
 export default function CustomerList() {
     const { data: customers, isLoading } = useQuery({
         queryKey: ['customers'],
-        queryFn: () => apiFetch<any[]>('/users?role=customer'), // Assuming filtering by role if possible, or just all users for now
+        queryFn: () => apiFetch<any[]>('/requesters'), // Use requester/customer listing endpoint accessible to agents
     });
 
     const columns = [

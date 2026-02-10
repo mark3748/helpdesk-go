@@ -244,8 +244,8 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 // If not configured dynamically, it returns the fallback store and default bucket.
 func (a *App) ResolveStore(ctx context.Context) (ObjectStore, string) {
 	if dyn, ok := a.M.(*DynamicObjectStore); ok {
-		// Attempt to get dynamic client
-		store, bucket, err := dyn.getClient(ctx)
+		// Use resolve to ensure a valid bucket (including default on fallback)
+		store, bucket, err := dyn.resolve(ctx, a.Cfg.MinIOBucket)
 		if err == nil && store != nil {
 			return store, bucket
 		}

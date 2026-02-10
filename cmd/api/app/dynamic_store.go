@@ -128,21 +128,10 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	return mc, bucket, nil
 }
 
-// helper to extract bucket from current config, assuming we are inside look and have consistent state.
-// BUT wait, getClient returns (ObjectStore, bucketName, error).
-// If returning Fallback, bucketName might be empty? The interface methods take bucketName as arg.
-// Ah, the App's MinIOBucket is passed to methods.
-// BUT if we use dynamic store, the bucket name in App.Cfg is static.
-// So the dynamic store wrapper must ignore the passed bucket name if it's using the dynamic client.
-// Or we update the app to ask the store "what is your preferred bucket?".
-// The interface `PutObject` takes `bucketName`.
-// If we use dynamic, we MUST use the dynamic bucket.
-// So `DynamicObjectStore` methods will ignore the `bucketName` arg IF using dynamic,
-// and use the configured one.
-
-// Let's refine getClient to return the *active* bucket name too.
-// We need to store the bucket name in the struct when caching.
-
+// DynamicObjectStore may override the caller-provided bucket name with a bucket
+// that is resolved from runtime configuration (for example, loaded from the DB).
+// The resolve method always returns the effective bucket name to use so that
+// wrapper methods can delegate to the underlying store correctly.
 // PutObject delegates
 func (d *DynamicObjectStore) PutObject(ctx context.Context, bucketName string, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
 	store, realBucket, err := d.resolve(ctx, bucketName)
