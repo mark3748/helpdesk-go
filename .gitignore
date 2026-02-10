@@ -40,3 +40,4 @@ cmd/api/api
 .code/
 .serena/
 CLAUDE.md
+helm/local-values.yaml

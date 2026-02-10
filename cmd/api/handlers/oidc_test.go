@@ -90,13 +90,13 @@ func (r *mockRows) Scan(dest ...any) error {
 	return nil
 }
 
-func (r *mockRows) Close()                                      {}
-func (r *mockRows) Err() error                                  { return r.err }
-func (r *mockRows) CommandTag() pgconn.CommandTag               { return pgconn.CommandTag{} }
+func (r *mockRows) Close()                                       {}
+func (r *mockRows) Err() error                                   { return r.err }
+func (r *mockRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
 func (r *mockRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
-func (r *mockRows) Values() ([]interface{}, error)             { return nil, nil }
-func (r *mockRows) RawValues() [][]byte                         { return nil }
-func (r *mockRows) Conn() *pgx.Conn                             { return nil }
+func (r *mockRows) Values() ([]interface{}, error)               { return nil, nil }
+func (r *mockRows) RawValues() [][]byte                          { return nil }
+func (r *mockRows) Conn() *pgx.Conn                              { return nil }
 
 func (db *mockOIDCDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	if db.queryErr != nil {
@@ -539,7 +539,7 @@ func TestSyncRolesValueToRoles(t *testing.T) {
 
 func TestOIDCLoginStateCookieSecurity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	// This test documents that the state cookie has proper security attributes.
 	// The actual implementation in OIDCLogin sets:
 	// - HttpOnly: true (prevents XSS attacks)
@@ -565,7 +565,7 @@ func TestGenerateRandomString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	
+
 	if s1 == s2 {
 		t.Error("expected different random strings, got same")
 	}

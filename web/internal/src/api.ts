@@ -151,6 +151,21 @@ export function useSettings() {
   });
 }
 
+export function useSystemInfo() {
+  return useQuery({
+    queryKey: ['system-info'],
+    queryFn: () =>
+      apiFetch<{
+        version: string;
+        uptime: string;
+        database_status: 'connected' | 'disconnected';
+        storage_status: 'configured' | 'not_configured';
+        mail_status: 'configured' | 'not_configured';
+        oidc_status: 'configured' | 'not_configured';
+      }>('/system/info'),
+  });
+}
+
 export function useSaveMailSettings() {
   const qc = useQueryClient();
   return useMutation({

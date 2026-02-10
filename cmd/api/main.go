@@ -376,6 +376,7 @@ func NewApp(cfg Config, db DB, keyf jwt.Keyfunc, store ObjectStore, q *redis.Cli
 				}
 			}
 			if !allowed {
+				log.Warn().Str("origin", origin).Interface("allowed", cfg.AllowedOrigins).Msg("CORS origin not allowed")
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
@@ -702,6 +703,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	}
 
 	rg.POST("/webhooks/email-inbound", webhookspkg.EmailInbound(a.core()))
+	rg.GET("/system/info", handlers.GetSystemInfo)
 
 	// OIDC Endpoints (Dynamic)
 	rg.GET("/auth/oidc/login", handlers.OIDCLogin(a.core()))
@@ -752,7 +754,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/tickets", ticketspkg.List(a.core()))
 	if a.ticketRL != nil {
 		auth.POST("/tickets", a.rlMiddleware(a.ticketRL, func(c *gin.Context) string {
-			u := c.MustGet("user").(AuthUser)
+			u := c.MustGet("user").(authpkg.AuthUser)
 			return u.ID
 		}, "tickets_create"), ticketspkg.Create(a.core()))
 	} else {
@@ -765,15 +767,15 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.GET("/tickets/:id/attachments", attachmentspkg.List(a.core()))
 	if a.attRL != nil {
 		auth.POST("/tickets/:id/attachments/presign", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
-			u := c.MustGet("user").(AuthUser)
+			u := c.MustGet("user").(authpkg.AuthUser)
 			return u.ID
 		}, "attachments_presign"), attachmentspkg.Presign(a.core()))
 		auth.POST("/tickets/:id/attachments", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
-			u := c.MustGet("user").(AuthUser)
+			u := c.MustGet("user").(authpkg.AuthUser)
 			return u.ID
 		}, "attachments_finalize"), attachmentspkg.Finalize(a.core()))
 		auth.GET("/tickets/:id/attachments/:attID", a.rlMiddleware(a.attRL, func(c *gin.Context) string {
-			u := c.MustGet("user").(AuthUser)
+			u := c.MustGet("user").(authpkg.AuthUser)
 			return u.ID
 		}, "attachments_get"), attachmentspkg.Get(a.core()))
 	} else {
@@ -1004,16 +1006,6 @@ func (a *App) readyz(c *gin.Context) {
 	c.JSON(200, gin.H{"ok": true})
 }
 
-type AuthUser struct {
-	ID          string   `json:"id"`
-	ExternalID  string   `json:"external_id"`
-	Email       string   `json:"email"`
-	DisplayName string   `json:"display_name"`
-	Roles       []string `json:"roles"`
-}
-
-func (u AuthUser) GetRoles() []string { return u.Roles }
-
 // seedLocalAdmin inserts an admin user for local auth if one doesn't already
 // exist. It is safe to call multiple times.
 func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
@@ -1040,12 +1032,20 @@ func seedLocalAdmin(ctx context.Context, db *pgxpool.Pool) error {
 		return err
 	}
 	var uid string
-	if err := db.QueryRow(ctx, "insert into users (id, username, email, display_name, password_hash) values (gen_random_uuid(), 'admin', 'admin@example.com', 'Admin', $1) returning id", string(hash)).Scan(&uid); err != nil {
+	const insertUser = `
+		insert into users (id, external_id, username, email, display_name, password_hash)
+		values (gen_random_uuid(), 'local:admin', 'admin', 'admin@example.com', 'Admin', $1)
+		returning id::text`
+	if err := db.QueryRow(ctx, insertUser, string(hash)).Scan(&uid); err != nil {
 		return err
 	}
-	// Grant all roles to built-in admin (super user)
-	_, _ = db.Exec(ctx, `insert into user_roles (user_id, role_id)
-select $1, r.id from roles r on conflict do nothing`, uid)
+	// Ensure roles exist and are assigned to built-in admin (super user)
+	const ensureRole = `insert into roles (id, name) values (gen_random_uuid(), $1) on conflict do nothing`
+	const linkRole = `insert into user_roles (user_id, role_id) select $1, r.id from roles r where r.name=$2 on conflict do nothing`
+	for _, role := range []string{"admin", "agent", "manager", "requester"} {
+		_, _ = db.Exec(ctx, ensureRole, role)
+		_, _ = db.Exec(ctx, linkRole, uid, role)
+	}
 	log.Info().Str("username", "admin").Msg("seeded local admin user (dev)")
 	return nil
 }
@@ -1102,11 +1102,6 @@ func (a *App) exportTicketsStatus(c *gin.Context) {
 	}
 	if v, ok := c.Get("user"); ok {
 		switch u := v.(type) {
-		case AuthUser:
-			if st.Requester != "" && st.Requester != u.ID {
-				c.JSON(404, gin.H{"error": "not found"})
-				return
-			}
 		case authpkg.AuthUser:
 			if st.Requester != "" && st.Requester != u.ID {
 				c.JSON(404, gin.H{"error": "not found"})
@@ -1204,10 +1199,7 @@ func (a *App) exportTicketsBridge(c *gin.Context) {
 		// Enqueue job and return 202 with job_id; worker not exercised in tests
 		uVal, _ := c.Get("user")
 		requester := ""
-		switch u := uVal.(type) {
-		case AuthUser:
-			requester = u.ID
-		case authpkg.AuthUser:
+		if u, ok := uVal.(authpkg.AuthUser); ok {
 			requester = u.ID
 		}
 		if requester == "" {
@@ -1269,7 +1261,7 @@ func (a *App) getMyProfile(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "unauthenticated"})
 		return
 	}
-	au := uVal.(AuthUser)
+	au := uVal.(authpkg.AuthUser)
 	type profile struct {
 		Email       string `json:"email,omitempty"`
 		DisplayName string `json:"display_name,omitempty"`
@@ -1291,7 +1283,7 @@ func (a *App) updateMyProfile(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "unauthenticated"})
 		return
 	}
-	au := uVal.(AuthUser)
+	au := uVal.(authpkg.AuthUser)
 	var in struct {
 		Email       *string `json:"email"`
 		DisplayName *string `json:"display_name"`
@@ -1329,7 +1321,7 @@ func (a *App) changeMyPassword(c *gin.Context) {
 		c.AbortWithStatusJSON(401, gin.H{"error": "unauthenticated"})
 		return
 	}
-	au := uVal.(AuthUser)
+	au := uVal.(authpkg.AuthUser)
 	var in struct {
 		OldPassword string `json:"old_password"`
 		NewPassword string `json:"new_password"`

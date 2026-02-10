@@ -6,6 +6,7 @@ import TicketForm from './components/TicketForm';
 import TicketDetail from './components/TicketDetail';
 import KnowledgeBase from './components/KnowledgeBase';
 import ServiceCatalog from './components/ServiceCatalog';
+import { getSystemInfo } from './api';
 
 export default function App() {
   const auth = useAuth();
@@ -13,6 +14,18 @@ export default function App() {
   const [localReady, setLocalReady] = useState(!localMode);
   const [localAuthed, setLocalAuthed] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [oidcConfigured, setOidcConfigured] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const info = await getSystemInfo();
+        setOidcConfigured(info.oidc_status === 'configured');
+      } catch (e) {
+        console.error('Failed to fetch system info', e);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!localMode) return;
@@ -69,6 +82,18 @@ export default function App() {
             </div>
             <button className="rounded bg-blue-600 px-4 py-2 text-white" type="submit">Login</button>
           </form>
+          {oidcConfigured && (
+            <div className="mt-4 border-t pt-4">
+              <button
+                className="w-full rounded border border-gray-300 px-4 py-2 hover:bg-gray-50"
+                onClick={() => {
+                  window.location.href = '/api/auth/oidc/login';
+                }}
+              >
+                Sign in with OIDC
+              </button>
+            </div>
+          )}
         </div>
       );
   }

@@ -66,6 +66,14 @@ dev-up:
 	@echo "API available at: http://localhost:8080"
 	@echo "Health check: curl http://localhost:8080/healthz"
 
+# Start Tilt for Kubernetes development
+tilt:
+	tilt up
+
+# Start Skaffold for Kubernetes development
+skaffold:
+	skaffold dev
+
 # Stop development stack
 dev-down:
 	@echo "Stopping development stack..."

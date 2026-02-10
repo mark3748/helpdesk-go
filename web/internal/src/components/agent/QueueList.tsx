@@ -38,10 +38,7 @@ export default function QueueList() {
   }, [data, cursor]);
 
   useEffect(() => {
-    // Reset items when filters change (detected via simple length check or deep compare if needed)
-    // For now, simpler: if URL params change, we should probably reset.
-    // However, react-query handles refetching. We just need to clear items if we want fresh list.
-    setItems([]);
+    // Reset cursor when filters change. The data sync effect will handle clearing items.
     setCursor(undefined);
   }, [searchParams]);
 
@@ -50,7 +47,6 @@ export default function QueueList() {
     const sub = subscribeEvents(setConnected);
     const handler = () => {
       // When a relevant event occurs, refresh the list
-      setItems([]);
       setCursor(undefined);
       refetch();
     };
@@ -230,7 +226,6 @@ export default function QueueList() {
         onClose={() => setShowNew(false)}
         onCreated={() => {
           setShowNew(false);
-          setItems([]);
           setCursor(undefined);
           refetch();
         }}

@@ -1,0 +1,37 @@
+# Overrides for Tilt local development
+ingress:
+  enabled: true
+  className: "nginx"
+  hosts:
+    - host: helpdesk.local
+      paths:
+        - path: /
+          pathType: Prefix
+        - path: /api
+          pathType: Prefix
+
+ingressRequester:
+  enabled: true
+  className: "nginx"
+  hosts:
+    - host: requester.local
+
+env:
+  ENV: "dev"
+  DATABASE_URL: "postgres://postgres:postgres@postgres:5432/helpdesk?sslmode=disable"
+  REDIS_ADDR: "redis:6379"
+  ALLOWED_ORIGINS: "http://helpdesk.local,https://helpdesk.local,http://requester.local,https://requester.local"
+
+# Use the redis service name
+# REDIS_ADDR: "redis:6379"
+
+secrets:
+  enabled: true
+  data:
+    AUTH_LOCAL_SECRET: "tilt-dev-secret"
+    ADMIN_PASSWORD: "admin"
+
+frontendInternal:
+  enabled: true
+frontendRequester:
+  enabled: true

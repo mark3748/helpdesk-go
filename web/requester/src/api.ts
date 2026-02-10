@@ -100,6 +100,10 @@ export async function listKBArticles(q?: string, token?: string): Promise<KBArti
   return apiFetch<KBArticle[]>(`/kb${qs}`, {}, token);
 }
 
+export async function getSystemInfo(): Promise<{ oidc_status: string }> {
+  return apiFetch<{ oidc_status: string }>('/system/info');
+}
+
 export async function createKBArticle(
   data: { slug: string; title: string; body_md: string },
   token?: string,

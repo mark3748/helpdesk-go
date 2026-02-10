@@ -268,6 +268,39 @@ func TestConnection(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "log_path": s.LogPath, "last_test": now.Format(time.RFC3339)})
 }
 
+// GetSystemInfo returns public system information.
+func GetSystemInfo(c *gin.Context) {
+	s, err := loadSettings(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load settings"})
+		return
+	}
+
+	oidcConfigured := s.OIDC.Issuer != "" && s.OIDC.ClientID != ""
+
+	// Determine storage status
+	storageStatus := "not_configured"
+	if len(s.Storage) > 0 {
+		storageStatus = "configured"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"version":         "1.0.0",
+		"uptime":          "running", // TODO: track actual uptime
+		"database_status": "connected",
+		"oidc_status":     cond(oidcConfigured, "configured", "not_configured"),
+		"mail_status":     cond(len(s.Mail) > 0, "configured", "not_configured"),
+		"storage_status":  storageStatus,
+	})
+}
+
+func cond(b bool, yes, no string) string {
+	if b {
+		return yes
+	}
+	return no
+}
+
 // Legacy factory handlers used in tests
 
 var smtpSendMail = smtp.SendMail

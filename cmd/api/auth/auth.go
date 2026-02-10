@@ -87,103 +87,52 @@ func Middleware(a *app.App) gin.HandlerFunc {
 					u.Roles = append(u.Roles, g)
 				}
 			}
-			// Populate internal user ID and fill missing fields from DB if available
-			if a.DB != nil {
-				var id, em, dn string
-				row := a.DB.QueryRow(c.Request.Context(), `select id::text, coalesce(email,''), coalesce(display_name,'') from users where external_id=$1 or lower(email)=lower($2) or lower(username)=lower($3) limit 1`, u.ExternalID, u.Email, u.Email)
-				_ = row.Scan(&id, &em, &dn)
-				if id != "" {
-					u.ID = id
-				}
-				if u.Email == "" {
-					u.Email = em
-				}
-				if u.DisplayName == "" {
-					u.DisplayName = dn
-				}
-				if u.ID == "" && strings.HasPrefix(u.ExternalID, "local:") {
-					uname := strings.TrimPrefix(u.ExternalID, "local:")
-					_ = a.DB.QueryRow(c.Request.Context(), `select id::text, coalesce(email,''), coalesce(display_name,'') from users where lower(username)=lower($1) limit 1`, uname).Scan(&id, &em, &dn)
-					if id != "" {
-						u.ID = id
-					}
-					if u.Email == "" {
-						u.Email = em
-					}
-					if u.DisplayName == "" {
-						u.DisplayName = dn
-					}
-				}
-			}
-			// Augment roles with stored DB roles (union). Prefer querying by
-			// resolved user ID; fall back to external_id, then username/email.
-			if a.DB != nil {
-				ctx := c.Request.Context()
-				var rows pgx.Rows
-				var err error
-				switch {
-				case u.ID != "":
-					rows, err = a.DB.Query(ctx, `
-select r.name
-from users u
-left join user_roles ur on ur.user_id = u.id
-left join roles r on r.id = ur.role_id
-where u.id::text = $1`, u.ID)
-				case u.ExternalID != "":
-					rows, err = a.DB.Query(ctx, `
-select r.name
-from users u
-left join user_roles ur on ur.user_id = u.id
-left join roles r on r.id = ur.role_id
-where u.external_id = $1`, u.ExternalID)
-				case u.Email != "":
-					rows, err = a.DB.Query(ctx, `
-select r.name
-from users u
-left join user_roles ur on ur.user_id = u.id
-left join roles r on r.id = ur.role_id
-where lower(u.email) = lower($1)`, u.Email)
-				default:
-					rows, err = nil, nil
-				}
-				if err == nil && rows != nil {
-					defer rows.Close()
-					for rows.Next() {
-						var name *string
-						if err := rows.Scan(&name); err == nil {
-							if name != nil && *name != "" && !hasRole(u.Roles, *name) {
-								u.Roles = append(u.Roles, *name)
-							}
-						}
-					}
-				}
-				// Ensure local admin always retains baseline roles even if DB links are missing
-				if strings.HasPrefix(u.ExternalID, "local:") && strings.EqualFold(strings.TrimPrefix(u.ExternalID, "local:"), "admin") {
-					if !hasRole(u.Roles, "admin") {
-						u.Roles = append(u.Roles, "admin")
-					}
-					if !hasRole(u.Roles, "agent") {
-						u.Roles = append(u.Roles, "agent")
-					}
-				}
-			}
+			populateInternalUser(c, a, &u)
 			c.Set("user", u)
 			c.Next()
 			return
 		}
 
 		// OIDC/JWT bearer auth using JWKS
-		if a.Keyf == nil {
-			app.AbortError(c, http.StatusInternalServerError, "jwks_not_configured", "jwks not configured", nil)
-			return
-		}
 		auth := c.GetHeader("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
+			// Fallback to cookie auth if present (supports browser flow in OIDC mode)
+			cookie, err := c.Request.Cookie("hd_auth")
+			if err == nil && cookie.Value != "" {
+				token, err := jwt.Parse(cookie.Value, func(t *jwt.Token) (any, error) {
+					if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+						return nil, jwt.ErrTokenUnverifiable
+					}
+					return []byte(a.Cfg.AuthLocalSecret), nil
+				})
+				if err == nil && token.Valid {
+					if claims, ok := token.Claims.(jwt.MapClaims); ok {
+						u := AuthUser{
+							ExternalID:  getStringClaim(claims, "sub"),
+							Email:       getStringClaim(claims, "email"),
+							DisplayName: getStringClaim(claims, "name"),
+						}
+						if u.DisplayName == "" {
+							u.DisplayName = getStringClaim(claims, "preferred_username")
+						}
+						// Roles from DB later
+						populateInternalUser(c, a, &u)
+						c.Set("user", u)
+						c.Next()
+						return
+					}
+				}
+			}
+
 			metrics.AuthFailuresTotal.Inc()
 			app.AbortError(c, http.StatusUnauthorized, "unauthenticated", "missing bearer token", nil)
 			return
 		}
 		tokenStr := strings.TrimPrefix(auth, "Bearer ")
+		if a.Keyf == nil {
+			app.AbortError(c, http.StatusInternalServerError, "jwks_not_configured", "jwks not configured", nil)
+			return
+		}
 		// Enforce acceptable algorithms and validate standard time-based claims;
 		// allow optional leeway when configured.
 		opts := []jwt.ParserOption{jwt.WithValidMethods([]string{"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "HS256", "HS384", "HS512"})}
@@ -241,40 +190,7 @@ where lower(u.email) = lower($1)`, u.Email)
 				u.Roles = append(u.Roles, g)
 			}
 		}
-		// Populate internal user ID and fill missing fields from DB if available
-		if a.DB != nil {
-			var id, em, dn string
-			row := a.DB.QueryRow(c.Request.Context(), `select id::text, coalesce(email,''), coalesce(display_name,'') from users where external_id=$1 or lower(email)=lower($2) or lower(username)=lower($3) limit 1`, u.ExternalID, u.Email, u.Email)
-			_ = row.Scan(&id, &em, &dn)
-			if id != "" {
-				u.ID = id
-			}
-			if u.Email == "" {
-				u.Email = em
-			}
-			if u.DisplayName == "" {
-				u.DisplayName = dn
-			}
-		}
-		// Augment roles with stored DB roles (union)
-		if a.DB != nil && u.ExternalID != "" {
-			rows, err := a.DB.Query(c.Request.Context(), `
-select r.name from users u
-left join user_roles ur on ur.user_id=u.id
-left join roles r on r.id=ur.role_id
-where u.external_id=$1`, u.ExternalID)
-			if err == nil {
-				defer rows.Close()
-				for rows.Next() {
-					var name *string
-					if err := rows.Scan(&name); err == nil {
-						if name != nil && *name != "" && !hasRole(u.Roles, *name) {
-							u.Roles = append(u.Roles, *name)
-						}
-					}
-				}
-			}
-		}
+		populateInternalUser(c, a, &u)
 		c.Set("user", u)
 		c.Next()
 	}
@@ -285,6 +201,87 @@ func getStringClaim(c jwt.MapClaims, key string) string {
 		return v
 	}
 	return ""
+}
+
+func populateInternalUser(c *gin.Context, a *app.App, u *AuthUser) {
+	if a.DB == nil {
+		return
+	}
+	var id, em, dn string
+	row := a.DB.QueryRow(c.Request.Context(), `select id::text, coalesce(email,''), coalesce(display_name,'') from users where external_id=$1 or lower(email)=lower($2) or lower(username)=lower($3) limit 1`, u.ExternalID, u.Email, u.Email)
+	_ = row.Scan(&id, &em, &dn)
+	if id != "" {
+		u.ID = id
+	}
+	if u.Email == "" {
+		u.Email = em
+	}
+	if u.DisplayName == "" {
+		u.DisplayName = dn
+	}
+	if u.ID == "" && strings.HasPrefix(u.ExternalID, "local:") {
+		uname := strings.TrimPrefix(u.ExternalID, "local:")
+		_ = a.DB.QueryRow(c.Request.Context(), `select id::text, coalesce(email,''), coalesce(display_name,'') from users where lower(username)=lower($1) limit 1`, uname).Scan(&id, &em, &dn)
+		if id != "" {
+			u.ID = id
+		}
+		if u.Email == "" {
+			u.Email = em
+		}
+		if u.DisplayName == "" {
+			u.DisplayName = dn
+		}
+	}
+
+	// Augment roles with stored DB roles (union)
+	ctx := c.Request.Context()
+	var rows pgx.Rows
+	var err error
+	switch {
+	case u.ID != "":
+		rows, err = a.DB.Query(ctx, `
+select r.name
+from users u
+left join user_roles ur on ur.user_id = u.id
+left join roles r on r.id = ur.role_id
+where u.id::text = $1`, u.ID)
+	case u.ExternalID != "":
+		rows, err = a.DB.Query(ctx, `
+select r.name
+from users u
+left join user_roles ur on ur.user_id = u.id
+left join roles r on r.id = ur.role_id
+where u.external_id = $1`, u.ExternalID)
+	case u.Email != "":
+		rows, err = a.DB.Query(ctx, `
+select r.name
+from users u
+left join user_roles ur on ur.user_id = u.id
+left join roles r on r.id = ur.role_id
+where lower(u.email) = lower($1)`, u.Email)
+	default:
+		rows, err = nil, nil
+	}
+	if err == nil && rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var name *string
+			if err := rows.Scan(&name); err == nil {
+				if name != nil && *name != "" && !hasRole(u.Roles, *name) {
+					u.Roles = append(u.Roles, *name)
+				}
+			}
+		}
+	}
+	// Ensure local admin always retains baseline roles even if DB links are missing
+	if strings.HasPrefix(u.ExternalID, "local:") && strings.EqualFold(strings.TrimPrefix(u.ExternalID, "local:"), "admin") {
+		if !hasRole(u.Roles, "admin") {
+			u.Roles = append(u.Roles, "admin")
+		}
+		if !hasRole(u.Roles, "agent") {
+			u.Roles = append(u.Roles, "agent")
+		}
+	}
 }
 
 func audienceContains(c jwt.MapClaims, want string) bool {

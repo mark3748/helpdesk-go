@@ -1,8 +1,8 @@
-version: '3'
+version: "3"
 
 # Global variables (optional, but good for versioning)
 vars:
-  BINARY_DIR: 'bin'
+  BINARY_DIR: "bin"
 
 tasks:
   default:
@@ -70,6 +70,11 @@ tasks:
       - docker compose up -d db redis api worker
       - 'echo "API available at: http://localhost:8080"'
       - 'echo "Health check: curl http://localhost:8080/healthz"'
+
+  tilt:
+    desc: Start Tilt for Kubernetes development
+    cmds:
+      - tilt up
 
   dev-down:
     desc: Stop development stack

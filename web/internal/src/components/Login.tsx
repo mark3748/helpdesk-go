@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { Form, Input, Button, Typography, Alert } from 'antd';
+import { Form, Input, Button, Typography, Alert, Divider } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSystemInfo } from '../api';
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nav = useNavigate();
   const qc = useQueryClient();
+  const { data: systemInfo } = useSystemInfo();
 
   async function onFinish(values: { username: string; password: string }) {
     setLoading(true);
@@ -43,6 +45,19 @@ export default function Login() {
         <Button type="primary" htmlType="submit" block loading={loading}>
           Log in
         </Button>
+        {systemInfo?.oidc_status === 'configured' && (
+          <>
+            <Divider>OR</Divider>
+            <Button
+              block
+              onClick={() => {
+                window.location.href = '/api/auth/oidc/login';
+              }}
+            >
+              Sign in with OIDC
+            </Button>
+          </>
+        )}
         {(import.meta as any).env?.DEV && (
           <Typography.Paragraph type="secondary" style={{ marginTop: 12, textAlign: 'center' }}>
             Dev default: admin / admin

@@ -1,40 +1,12 @@
 import { Card, Row, Col, Statistic, List, Button, Space, Typography, Tag, Alert } from 'antd';
 import { SettingOutlined, DatabaseOutlined, MailOutlined, LockOutlined, CloudOutlined, UserOutlined } from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { useSystemInfo } from '../../api';
 
 const { Title, Text } = Typography;
 
-interface SystemInfo {
-  version: string;
-  uptime: string;
-  database_status: 'connected' | 'disconnected';
-  storage_status: 'configured' | 'not_configured';
-  mail_status: 'configured' | 'not_configured';
-  oidc_status: 'configured' | 'not_configured';
-  total_users: number;
-  total_tickets: number;
-  total_assets: number;
-}
-
 export default function AdminSettings() {
-  const { data: systemInfo, isLoading } = useQuery<SystemInfo>({
-    queryKey: ['system-info'],
-    queryFn: async () => {
-      // Mock data since this endpoint might not exist yet
-      return {
-        version: '1.0.0',
-        uptime: '5 days, 12 hours',
-        database_status: 'connected',
-        storage_status: 'configured',
-        mail_status: 'configured',
-        oidc_status: 'not_configured',
-        total_users: 25,
-        total_tickets: 150,
-        total_assets: 75,
-      } as SystemInfo;
-    },
-  });
+  const { data: systemInfo, isLoading } = useSystemInfo();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -128,7 +100,7 @@ export default function AdminSettings() {
             <Card loading={isLoading}>
               <Statistic
                 title="Total Users"
-                value={systemInfo?.total_users || 0}
+                value={(systemInfo as any)?.total_users ?? 'N/A'}
                 prefix={<UserOutlined />}
               />
             </Card>
