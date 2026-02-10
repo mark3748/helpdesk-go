@@ -143,8 +143,34 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
     });
   }, [activeRole]);
 
-  const parts = loc.pathname.split('/').filter(Boolean);
-  const selected = parts.length > 0 ? parts[0] : 'dashboard';
+  // Derive selected keys by matching current pathname against nav config
+  const selectedKeys = useMemo(() => {
+    const items = NAV_CONFIG[activeRole] || [];
+    const path = loc.pathname;
+    
+    // Find matching item in flat or nested structure
+    for (const item of items) {
+      // Check parent item path
+      if (item.path && path === item.path) {
+        return [item.key];
+      }
+      // Check children paths
+      if (item.children) {
+        for (const child of item.children) {
+          if (child.path && path.startsWith(child.path)) {
+            return [child.key];
+          }
+        }
+      }
+      // Fallback: if path starts with item path, select it
+      if (item.path && path.startsWith(item.path) && item.path !== '/') {
+        return [item.key];
+      }
+    }
+    
+    // Default to dashboard if no match
+    return ['dashboard'];
+  }, [activeRole, loc.pathname]);
 
 
   async function doLogout() {
@@ -201,7 +227,7 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <Menu
             mode="inline"
-            selectedKeys={[selected]}
+            selectedKeys={selectedKeys}
             defaultOpenKeys={['tickets-group']}
             style={{ borderRight: 0 }}
             items={menuItems}

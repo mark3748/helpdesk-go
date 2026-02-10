@@ -39,6 +39,8 @@ type Ticket struct {
 	CustomJSON  interface{} `json:"custom_json,omitempty"`
 	RequesterID string      `json:"requester_id,omitempty"`
 	Requester   string      `json:"requester,omitempty"`
+	CreatedAt   *time.Time  `json:"created_at,omitempty"`
+	Category    *string     `json:"category,omitempty"`
 }
 
 // createTicketReq mirrors the JSON body for creating a ticket.
@@ -488,8 +490,8 @@ func List(a *app.App) gin.HandlerFunc {
 		}
 
 		// Keep the first 9 columns in legacy order to satisfy existing tests,
-		// and append description as the last column for UI consumption.
-		sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, t.updated_at, t.description from tickets t left join requesters r on r.id=t.requester_id"
+		// and append description, created_at, and category for UI consumption.
+		sql := "select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, t.updated_at, t.description, t.created_at, t.category from tickets t left join requesters r on r.id=t.requester_id"
 		if len(where) > 0 {
 			sql += " where " + strings.Join(where, " and ")
 		}
@@ -536,12 +538,16 @@ func List(a *app.App) gin.HandlerFunc {
 			var assignee *string
 			var number any
 			var updated time.Time
-			if err := rows.Scan(&t.ID, &number, &t.Title, &t.Status, &assignee, &t.Priority, &t.RequesterID, &t.Requester, &updated, &t.Description); err != nil {
+			var createdAt time.Time
+			var category *string
+			if err := rows.Scan(&t.ID, &number, &t.Title, &t.Status, &assignee, &t.Priority, &t.RequesterID, &t.Requester, &updated, &t.Description, &createdAt, &category); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 			t.Number = number
 			t.AssigneeID = assignee
+			t.CreatedAt = &createdAt
+			t.Category = category
 			out = append(out, t)
 			ups = append(ups, updated)
 		}
@@ -602,18 +608,22 @@ func Get(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusOK, Ticket{})
 			return
 		}
-		// Keep legacy column order and append description last for compatibility
-		const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, t.description from tickets t left join requesters r on r.id=t.requester_id where t.id=$1`
+		// Keep legacy column order and append description, created_at, and category for compatibility
+		const q = `select t.id::text, t.number, t.title, t.status, t.assignee_id::text, t.priority, t.requester_id::text, coalesce(r.name, r.email, '') as requester, t.description, t.created_at, t.category from tickets t left join requesters r on r.id=t.requester_id where t.id=$1`
 		var t Ticket
 		var assignee *string
 		var number any
+		var createdAt time.Time
+		var category *string
 		row := a.DB.QueryRow(c.Request.Context(), q, c.Param("id"))
-		if err := row.Scan(&t.ID, &number, &t.Title, &t.Status, &assignee, &t.Priority, &t.RequesterID, &t.Requester, &t.Description); err != nil {
+		if err := row.Scan(&t.ID, &number, &t.Title, &t.Status, &assignee, &t.Priority, &t.RequesterID, &t.Requester, &t.Description, &createdAt, &category); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
 		t.Number = number
 		t.AssigneeID = assignee
+		t.CreatedAt = &createdAt
+		t.Category = category
 		c.JSON(http.StatusOK, t)
 	}
 }

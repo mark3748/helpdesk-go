@@ -450,8 +450,10 @@ func TestStorageConnection(c *gin.Context) {
 		return
 	}
 
-	// Check if bucket exists
-	exists, err := mc.BucketExists(c.Request.Context(), bucket)
+	// Check if bucket exists with timeout
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	exists, err := mc.BucketExists(ctx, bucket)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"ok": false, "error": fmt.Sprintf("connection failed: %v", err)})
 		return
