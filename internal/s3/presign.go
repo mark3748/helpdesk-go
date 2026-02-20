@@ -22,12 +22,14 @@ func (s Service) PresignPut(ctx context.Context, objectKey, contentType string, 
 	if ttl <= 0 || ttl > s.MaxTTL {
 		return "", fmt.Errorf("invalid ttl")
 	}
-	u, err := s.Client.PresignedPutObject(ctx, s.Bucket, objectKey, ttl)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	// Use Presign to allow including the Content-Type in the signature
+	u, err := s.Client.Presign(ctx, "PUT", s.Bucket, objectKey, ttl, url.Values{"Content-Type": []string{contentType}})
 	if err != nil {
 		return "", err
 	}
-	// contentType is returned so callers can persist it alongside the object key.
-	_ = contentType
 	return u.String(), nil
 }
 

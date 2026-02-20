@@ -15,14 +15,18 @@ export default function StorageSettings() {
       form.setFieldsValue({
         ...storage,
         use_ssl: storage.use_ssl === 'true',
+        path_style: storage.path_style === 'true',
       });
     }
   }, [data, form]);
 
   const onFinish = async (values: any) => {
     // Convert boolean to string for backend map[string]string
-    // Use nullish coalescing to handle undefined explicitly
-    const payload = { ...values, use_ssl: String(values.use_ssl ?? false) };
+    const payload = { 
+      ...values, 
+      use_ssl: String(values.use_ssl ?? false),
+      path_style: String(values.path_style ?? false) 
+    };
     await apiFetch('/settings/storage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -34,8 +38,11 @@ export default function StorageSettings() {
   const onTest = async () => {
     try {
       const values = await form.validateFields();
-      // Use nullish coalescing to handle undefined explicitly
-      const payload = { ...values, use_ssl: String(values.use_ssl ?? false) };
+      const payload = { 
+        ...values, 
+        use_ssl: String(values.use_ssl ?? false),
+        path_style: String(values.path_style ?? false)
+      };
       const res = await apiFetch<any>('/settings/storage/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,6 +66,9 @@ export default function StorageSettings() {
         <Form.Item label="Endpoint" name="endpoint" rules={[{ required: true }]}>
           <Input placeholder="s3.amazonaws.com or minio.local:9000" />
         </Form.Item>
+        <Form.Item label="Region" name="region">
+          <Input placeholder="us-east-1" />
+        </Form.Item>
         <Form.Item label="Bucket" name="bucket" rules={[{ required: true }]}>
           <Input />
         </Form.Item>
@@ -68,9 +78,14 @@ export default function StorageSettings() {
         <Form.Item label="Secret Access Key" name="secret_access_key" rules={[{ required: true }]}>
           <Input.Password />
         </Form.Item>
-        <Form.Item name="use_ssl" valuePropName="checked">
-          <Checkbox>Use SSL</Checkbox>
-        </Form.Item>
+        <div style={{ display: 'flex', gap: '24px' }}>
+          <Form.Item name="use_ssl" valuePropName="checked">
+            <Checkbox>Use SSL</Checkbox>
+          </Form.Item>
+          <Form.Item name="path_style" valuePropName="checked">
+            <Checkbox>Force Path Style (recommended for Garage/Custom S3)</Checkbox>
+          </Form.Item>
+        </div>
         <Form.Item>
           <div style={{ display: 'flex', gap: '8px' }}>
             <Button type="primary" htmlType="submit">

@@ -136,11 +136,6 @@ type DB interface {
 	Ping(ctx context.Context) error
 }
 
-type ObjectStore interface {
-	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
-	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
-}
-
 // Email address validation regex based on RFC 5322 simplified pattern
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 
@@ -277,7 +272,7 @@ func processQueueJob(ctx context.Context, db app.DB, c Config, rdb *redis.Client
 }
 
 // exportTickets generates the CSV and uploads it to the object store, returning the object key.
-func exportTickets(ctx context.Context, c Config, db DB, store ObjectStore, ids []string) (string, error) {
+func exportTickets(ctx context.Context, c Config, db DB, store app.ObjectStore, ids []string) (string, error) {
 	if store == nil {
 		return "", fmt.Errorf("object store not configured")
 	}
@@ -323,7 +318,7 @@ func exportTickets(ctx context.Context, c Config, db DB, store ObjectStore, ids 
 
 // exportAuditEvents exports new audit events since the last run to CSV and JSON.
 // It returns the last processed ID and object keys for CSV and JSON files.
-func exportAuditEvents(ctx context.Context, c Config, db DB, store ObjectStore, rdb *redis.Client) (string, string, string, error) {
+func exportAuditEvents(ctx context.Context, c Config, db DB, store app.ObjectStore, rdb *redis.Client) (string, string, string, error) {
 	if store == nil || c.AuditExportBucket == "" {
 		return "", "", "", fmt.Errorf("object store not configured")
 	}
@@ -416,7 +411,7 @@ func exportAuditEvents(ctx context.Context, c Config, db DB, store ObjectStore, 
 	return lastID, csvKey, jsonKey, nil
 }
 
-func handleAuditExportJob(ctx context.Context, c Config, db DB, store ObjectStore, rdb *redis.Client, jobID string) {
+func handleAuditExportJob(ctx context.Context, c Config, db DB, store app.ObjectStore, rdb *redis.Client, jobID string) {
 	_, csvKey, jsonKey, err := exportAuditEvents(ctx, c, db, store, rdb)
 	st := ExportStatus{}
 	if err != nil {
@@ -435,12 +430,12 @@ func handleAuditExportJob(ctx context.Context, c Config, db DB, store ObjectStor
 	}
 }
 
-func runAuditExport(ctx context.Context, c Config, db DB, store ObjectStore, rdb *redis.Client) error {
+func runAuditExport(ctx context.Context, c Config, db DB, store app.ObjectStore, rdb *redis.Client) error {
 	_, _, _, err := exportAuditEvents(ctx, c, db, store, rdb)
 	return err
 }
 
-func handleExportTicketsJob(ctx context.Context, c Config, db DB, store ObjectStore, rdb *redis.Client, jobID string, ej ExportTicketsJob) {
+func handleExportTicketsJob(ctx context.Context, c Config, db DB, store app.ObjectStore, rdb *redis.Client, jobID string, ej ExportTicketsJob) {
 	objectKey, err := exportTickets(ctx, c, db, store, ej.IDs)
 	st := ExportStatus{Requester: ej.Requester}
 	if err != nil {
@@ -562,7 +557,7 @@ func main() {
 	go startHealthServer(ctx, c.HealthAddr, db, rdb)
 
 	var mc *minio.Client
-	var store ObjectStore
+	var store app.ObjectStore
 	if c.MinIOEndpoint != "" {
 		mc, err = minio.New(c.MinIOEndpoint, &minio.Options{
 			Creds:  credentials.NewStaticV4(c.MinIOAccess, c.MinIOSecret, ""),
@@ -571,14 +566,14 @@ func main() {
 		if err != nil {
 			log.Error().Err(err).Msg("minio init")
 		} else {
-			store = mc
+			store = &app.MinioWrapper{Client: mc}
 		}
 	}
 
 	if c.IMAPHost != "" {
 		go func() {
 			for {
-				if err := pollIMAP(ctx, c, db, mc, rdb); err != nil {
+				if err := pollIMAP(ctx, c, db, store, rdb); err != nil {
 					log.Error().Err(err).Msg("poll imap")
 				}
 				time.Sleep(time.Minute)

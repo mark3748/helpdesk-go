@@ -44,7 +44,7 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	// Note: using captured values is safe; state may have changed but this is just an optimization
 	if time.Since(last) < 5*time.Second {
 		if client != nil {
-			return client, bucket, nil
+			return &MinioWrapper{client}, bucket, nil
 		}
 		// Return fallback during negative cache window
 		return d.Fallback, "", nil
@@ -56,7 +56,7 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	// Double check with write lock (re-read actual values to avoid race)
 	if time.Since(d.lastChecked) < 5*time.Second {
 		if d.cached != nil {
-			return d.cached, d.cachedBucket, nil
+			return &MinioWrapper{d.cached}, d.cachedBucket, nil
 		}
 		return d.Fallback, "", nil
 	}
@@ -105,6 +105,8 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	secret := cfg["secret_access_key"]
 	bucket = cfg["bucket"]
 	useSSL := cfg["use_ssl"] == "true"
+	region := cfg["region"]
+	pathStyle := cfg["path_style"] == "true"
 
 	// Auto-detect SSL scheme
 	if strings.HasPrefix(endpoint, "https://") {
@@ -126,25 +128,22 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 
 	// Re-create client if config changed
 	// Construct a config hash or string to compare
-	cfgStr := fmt.Sprintf("%s|%s|%s|%v", endpoint, access, secret, useSSL)
+	lookup := minio.BucketLookupAuto
+	if pathStyle {
+		lookup = minio.BucketLookupPath
+	}
+	cfgStr := fmt.Sprintf("%s|%s|%s|%v|%s|%d", endpoint, access, secret, useSSL, region, lookup)
 	if d.cached != nil && d.cachedCfg == cfgStr {
 		d.lastChecked = time.Now()
-		// Update bucket in case it changed but other config didn't?
-		// Actually bucket is NOT part of cfgStr above, so if ONLY bucket changes, we might miss it.
-		// Let's include bucket in cfgStr to be safe.
-		// But wait, if I include bucket in cfgStr, then cfgStr changes, so we re-create client.
-		// Re-creating client just for bucket change is wasteful but safe.
-		// Better: update cachedBucket if cfgStr matches but bucket differs?
-		// No, let's just include bucket in cfgStr.
-		// cfgStr := fmt.Sprintf("%s|%s|%s|%v|%s", endpoint, access, secret, useSSL, bucket)
-		// But I need to change cfgStr line below.
-		d.cachedBucket = bucket // Ensure it's updated if we return early?
-		return d.cached, bucket, nil
+		d.cachedBucket = bucket
+		return &MinioWrapper{d.cached}, bucket, nil
 	}
 
 	mc, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(access, secret, ""),
-		Secure: useSSL,
+		Creds:        credentials.NewStaticV4(access, secret, ""),
+		Secure:       useSSL,
+		Region:       region,
+		BucketLookup: lookup,
 	})
 	if err != nil {
 		// Cache the "client creation failure" state
@@ -160,7 +159,7 @@ func (d *DynamicObjectStore) getClient(ctx context.Context) (ObjectStore, string
 	d.cachedCfg = cfgStr
 	d.lastChecked = time.Now()
 
-	return mc, bucket, nil
+	return &MinioWrapper{mc}, bucket, nil
 }
 
 // DynamicObjectStore may override the caller-provided bucket name with a bucket
@@ -215,7 +214,7 @@ func (d *DynamicObjectStore) StatObject(ctx context.Context, bucketName, objectN
 }
 
 // PresignedPutObject delegates to the active store
-func (d *DynamicObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
+func (d *DynamicObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, contentType string) (*url.URL, error) {
 	store, realBucket, err := d.resolve(ctx, bucketName)
 	if err != nil {
 		return nil, err
@@ -223,7 +222,11 @@ func (d *DynamicObjectStore) PresignedPutObject(ctx context.Context, bucketName,
 	if store == nil {
 		return nil, fmt.Errorf("no object store configured")
 	}
-	return store.PresignedPutObject(ctx, realBucket, objectName, expiry)
+	if mw, ok := store.(*MinioWrapper); ok {
+		// Use the wrapper's implementation
+		return mw.PresignedPutObject(ctx, realBucket, objectName, expiry, contentType)
+	}
+	return store.PresignedPutObject(ctx, realBucket, objectName, expiry, contentType)
 }
 
 // PresignedGet/PresignedPut are supported by remote object stores; filesystem-backed

@@ -2,6 +2,7 @@ package assets
 
 import (
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -85,10 +86,11 @@ func PresignAssetUpload(a *app.App) gin.HandlerFunc {
 		objectKey := uuid.NewString()
 
 		// For MinIO/S3, create presigned URL
-		if a.M != nil {
-			if mc, ok := a.M.(*minio.Client); ok {
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if store != nil {
+			if mw, ok := store.(*app.MinioWrapper); ok {
 				// Build presigned PUT URL via s3 service helper
-				svc := s3svc.Service{Client: mc, Bucket: a.Cfg.MinIOBucket, MaxTTL: time.Minute}
+				svc := s3svc.Service{Client: mw.Client, Bucket: bucket, MaxTTL: time.Minute}
 				url, err := svc.PresignPut(c.Request.Context(), objectKey, "application/octet-stream", time.Minute)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create presigned URL"})
@@ -143,18 +145,21 @@ func FinalizeAssetAttachment(a *app.App) gin.HandlerFunc {
 		}
 
 		// Verify upload exists
-		if a.M != nil {
-			// For MinIO/S3, we assume the upload was successful if we got here
-			// In a real implementation, you might want to verify the object exists
-		} else {
-			// Check filesystem
-			root := filepath.Join(a.Cfg.FileStorePath, a.Cfg.MinIOBucket)
-			path := filepath.Clean(filepath.Join(root, in.AttachmentID))
-			if rel, err := filepath.Rel(root, path); err != nil || strings.HasPrefix(rel, "..") {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
-				return
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if store != nil {
+			if _, ok := store.(*app.MinioWrapper); ok {
+				// For MinIO/S3, we assume the upload was successful if we got here
+				// In a real implementation, you might want to verify the object exists
+			} else if fs, ok := store.(*app.FsObjectStore); ok {
+				// Check filesystem
+				root := filepath.Join(fs.Base, bucket)
+				path := filepath.Clean(filepath.Join(root, in.AttachmentID))
+				if rel, err := filepath.Rel(root, path); err != nil || strings.HasPrefix(rel, "..") {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
+					return
+				}
+				// Additional filesystem checks could be added here
 			}
-			// Additional filesystem checks could be added here
 		}
 
 		// Determine MIME type
@@ -195,9 +200,10 @@ func GetAssetAttachment(a *app.App) gin.HandlerFunc {
 		}
 
 		// For MinIO/S3, redirect to presigned URL
-		if a.M != nil {
-			if mc, ok := a.M.(*minio.Client); ok {
-				svc := s3svc.Service{Client: mc, Bucket: a.Cfg.MinIOBucket, MaxTTL: time.Minute}
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if store != nil {
+			if mw, ok := store.(*app.MinioWrapper); ok {
+				svc := s3svc.Service{Client: mw.Client, Bucket: bucket, MaxTTL: time.Minute}
 				url, err := svc.PresignGet(c.Request.Context(), objectKey, filename, time.Minute)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate download URL"})
@@ -206,19 +212,24 @@ func GetAssetAttachment(a *app.App) gin.HandlerFunc {
 				c.Redirect(http.StatusFound, url)
 				return
 			}
+
+			// Serve from filesystem store
+			if fs, ok := store.(*app.FsObjectStore); ok {
+				root := filepath.Join(fs.Base, bucket)
+				path := filepath.Clean(filepath.Join(root, objectKey))
+				if rel, err := filepath.Rel(root, path); err != nil || strings.HasPrefix(rel, "..") {
+					c.JSON(http.StatusForbidden, gin.H{"error": "invalid path"})
+					return
+				}
+
+				c.Header("Content-Type", mime)
+				c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
+				c.File(path)
+				return
+			}
 		}
 
-		// Serve from filesystem store
-		root := filepath.Join(a.Cfg.FileStorePath, a.Cfg.MinIOBucket)
-		path := filepath.Clean(filepath.Join(root, objectKey))
-		if rel, err := filepath.Rel(root, path); err != nil || strings.HasPrefix(rel, "..") {
-			c.JSON(http.StatusForbidden, gin.H{"error": "invalid path"})
-			return
-		}
-
-		c.Header("Content-Type", mime)
-		c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
-		c.File(path)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "object store not configured or supported"})
 	}
 }
 
@@ -228,8 +239,20 @@ func UploadAssetObject(a *app.App) gin.HandlerFunc {
 		objectKey := c.Param("objectKey")
 
 		// Only support when using filesystem store
-		if a.M != nil {
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if store == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "object store not configured"})
+			return
+		}
+
+		if _, ok := store.(*app.MinioWrapper); ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upload target"})
+			return
+		}
+
+		fs, ok := store.(*app.FsObjectStore)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid store for direct upload"})
 			return
 		}
 
@@ -240,7 +263,7 @@ func UploadAssetObject(a *app.App) gin.HandlerFunc {
 		}
 
 		// Save file
-		root := filepath.Join(a.Cfg.FileStorePath, a.Cfg.MinIOBucket)
+		root := filepath.Join(fs.Base, bucket)
 		path := filepath.Clean(filepath.Join(root, objectKey))
 		if rel, err := filepath.Rel(root, path); err != nil || strings.HasPrefix(rel, "..") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
@@ -274,12 +297,16 @@ func DeleteAssetAttachment(a *app.App) gin.HandlerFunc {
 		}
 
 		// Delete from storage
-		if a.M != nil {
-			if mc, ok := a.M.(*minio.Client); ok {
-				_ = mc.RemoveObject(c.Request.Context(), a.Cfg.MinIOBucket, objectKey, minio.RemoveObjectOptions{})
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if store != nil {
+			if mw, ok := store.(*app.MinioWrapper); ok {
+				_ = mw.RemoveObject(c.Request.Context(), bucket, objectKey, minio.RemoveObjectOptions{})
+			} else if fs, ok := store.(*app.FsObjectStore); ok {
+				root := filepath.Join(fs.Base, bucket)
+				path := filepath.Clean(filepath.Join(root, objectKey))
+				_ = os.Remove(path)
 			}
 		}
-		// For filesystem, we could delete the file here
 
 		// Delete from database
 		if _, err := a.DB.Exec(c.Request.Context(),

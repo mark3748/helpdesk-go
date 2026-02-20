@@ -53,6 +53,29 @@ Notes:
 - In `AUTH_MODE=local`, an admin user is auto-seeded if `ADMIN_PASSWORD` is set or when running with `ENV=dev`. If `ADMIN_PASSWORD` is omitted, a random password is generated and logged once.
 - For MinIO, set `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL` and omit `FILESTORE_PATH`.
 
+### External Object Storage (S3/Garage)
+
+The application supports S3-compatible storage for attachments and exports. You can configure this via **Admin > Storage Settings** in the UI.
+
+- **Force Path Style:** Recommended for Garage, Ceph, and older MinIO setups. It ensures the bucket name is part of the URL path rather than the hostname (e.g., `s3.example.com/bucket` vs `bucket.s3.example.com`).
+- **Region:** Required by some S3-compatible providers (defaults to `us-east-1` if empty).
+
+#### CORS Configuration
+Since uploads happen directly from the browser via presigned URLs, your S3 bucket **must** have a CORS policy allowing your Helpdesk domain. Example for Garage/AWS CLI:
+
+```json
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["https://helpdesk.yourdomain.com"],
+      "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+      "AllowedHeaders": ["*"],
+      "ExposeHeaders": ["ETag"]
+    }
+  ]
+}
+```
+
 ## Local Development
 
 - Build binaries:

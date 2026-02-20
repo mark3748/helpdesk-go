@@ -122,13 +122,12 @@ func Get(a *app.App) gin.HandlerFunc {
 			return
 		}
 
-		// Prefer a presigned URL for MinIO/S3 stores so the client downloads
 		// directly from object storage (short TTL) instead of proxying data
 		// through the API; filesystem-backed stores are served by reading from
 		// disk and streaming the bytes to the client.
-		if mc, ok := store.(*minio.Client); ok {
+		if mw, ok := store.(*app.MinioWrapper); ok {
 			// Use internal S3 helper for consistent TTL
-			svc := s3svc.Service{Client: mc, Bucket: bucket, MaxTTL: time.Minute}
+			svc := s3svc.Service{Client: mw.Client, Bucket: bucket, MaxTTL: time.Minute}
 			u, err := svc.PresignGet(c.Request.Context(), key, sanitizeFilename(fn), time.Minute)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -191,13 +190,13 @@ func PresignUpload(a *app.App) gin.HandlerFunc {
 		}
 
 		// Only MinIO-backed stores support presigned uploads; others are not implemented.
-		if _, ok := store.(*minio.Client); !ok {
+		if _, ok := store.(*app.MinioWrapper); !ok {
 			c.JSON(http.StatusNotImplemented, gin.H{"error": "presign not supported"})
 			return
 		}
 
 		// Use interface method
-		u, err := store.PresignedPutObject(c.Request.Context(), bucket, key, time.Minute)
+		u, err := store.PresignedPutObject(c.Request.Context(), bucket, key, time.Minute, req.ContentType)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -218,7 +217,7 @@ func PresignDownload(a *app.App) gin.HandlerFunc {
 		// Again, relying on type assertion for MinIO-specific s3svc helper for now
 		// unless we add PresignedGet to interface.
 
-		mc, ok := store.(*minio.Client)
+		mw, ok := store.(*app.MinioWrapper)
 		if !ok {
 			c.JSON(http.StatusNotImplemented, gin.H{"error": "presign not supported"})
 			return
@@ -230,7 +229,7 @@ func PresignDownload(a *app.App) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		svc := s3svc.Service{Client: mc, Bucket: bucket, MaxTTL: time.Minute}
+		svc := s3svc.Service{Client: mw.Client, Bucket: bucket, MaxTTL: time.Minute}
 		oc, cancel := a.ObjCtx(c.Request.Context())
 		defer cancel()
 		u, err := svc.PresignGet(oc, key, sanitizeFilename(fn), time.Minute)
@@ -309,7 +308,7 @@ func Presign(a *app.App) gin.HandlerFunc {
 		objectKey := uuid.New().String()
 
 		// Try using interface PresignedPutObject first
-		u, err := store.PresignedPutObject(c.Request.Context(), bucket, objectKey, time.Minute)
+		u, err := store.PresignedPutObject(c.Request.Context(), bucket, objectKey, time.Minute, in.Mime)
 		if err == nil && u != nil {
 			headers := map[string]string{}
 			if in.Mime != "" {
@@ -343,7 +342,7 @@ func UploadObject(a *app.App) gin.HandlerFunc {
 			return
 		}
 		// Disallow when using MinIO client; must use presigned URL
-		if _, ok := store.(*minio.Client); ok {
+		if _, ok := store.(*app.MinioWrapper); ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upload target"})
 			return
 		}

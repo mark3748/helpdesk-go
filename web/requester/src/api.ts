@@ -124,27 +124,12 @@ export async function deleteAttachment(id: string | number, attID: string | numb
 }
 
 export async function downloadAttachment(id: string | number, attID: string | number, token?: string): Promise<void> {
-  const headers: Record<string, string> = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}/tickets/${String(id)}/attachments/${String(attID)}`, {
-    headers,
-    redirect: 'follow',
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const blob = await res.blob();
-  // Try to extract filename from Content-Disposition
-  const cd = res.headers.get('Content-Disposition') || '';
-  const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
-  const fname = m ? decodeURIComponent(m[1] || m[2] || 'attachment') : 'attachment';
-  const url = URL.createObjectURL(blob);
+  const { url } = await apiFetch<{ url: string }>(`/tickets/${String(id)}/attachments/${String(attID)}/download-url`, {}, token);
   const a = document.createElement('a');
   a.href = url;
-  a.download = fname;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
 }
 
 export interface UploadOptions {

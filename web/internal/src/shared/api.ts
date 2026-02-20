@@ -200,23 +200,13 @@ export async function downloadAttachment(
   ticketId: string,
   attId: string,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/tickets/${ticketId}/attachments/${attId}`, {
-    credentials: 'include',
-    redirect: 'follow',
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const blob = await res.blob();
-  const cd = res.headers.get('Content-Disposition') || '';
-  const m = /filename\*=UTF-8''([^;]+)|filename="?([^\\";]+)"?/i.exec(cd);
-  const fname = m ? decodeURIComponent(m[1] || m[2] || 'attachment') : 'attachment';
-  const url = URL.createObjectURL(blob);
+  const { url } = await apiFetch<{ url: string }>(`/tickets/${ticketId}/attachments/${attId}/download-url`);
   const a = document.createElement('a');
   a.href = url;
-  a.download = fname;
+  // Let the browser handle the download. S3 presigned URL includes response-content-disposition.
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
 }
 
 // API object with common HTTP methods

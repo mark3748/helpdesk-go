@@ -234,7 +234,7 @@ type DB interface {
 type ObjectStore interface {
 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
 	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
-	PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error)
+	PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, contentType string) (*url.URL, error)
 	StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error)
 }
 
@@ -610,7 +610,7 @@ func main() {
 
 	var store ObjectStore
 	if mc != nil {
-		store = mc
+		store = &appcore.MinioWrapper{Client: mc}
 	} else if cfg.FileStorePath != "" {
 		base := mkdirWithFallback(
 			cfg.FileStorePath,
@@ -634,8 +634,8 @@ func main() {
 		store = &appcore.FsObjectStore{Base: base}
 	}
 
-	// If we have a DB and a store, wrap the store in a DynamicObjectStore to allow runtime overrides
-	if pool != nil && store != nil {
+	// If we have a DB, wrap the store in a DynamicObjectStore to allow runtime overrides
+	if pool != nil {
 		store = &appcore.DynamicObjectStore{
 			DB:       pool,
 			Fallback: store,
@@ -787,10 +787,12 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 			u := c.MustGet("user").(authpkg.AuthUser)
 			return u.ID
 		}, "attachments_get"), attachmentspkg.Get(a.core()))
+		auth.GET("/tickets/:id/attachments/:attID/download-url", attachmentspkg.PresignDownload(a.core()))
 	} else {
 		auth.POST("/tickets/:id/attachments/presign", attachmentspkg.Presign(a.core()))
 		auth.POST("/tickets/:id/attachments", attachmentspkg.Finalize(a.core()))
 		auth.GET("/tickets/:id/attachments/:attID", attachmentspkg.Get(a.core()))
+		auth.GET("/tickets/:id/attachments/:attID/download-url", attachmentspkg.PresignDownload(a.core()))
 	}
 	// Internal upload endpoint used when filesystem store is enabled
 	auth.PUT("/attachments/upload/:objectKey", attachmentspkg.UploadObject(a.core()))
@@ -954,37 +956,36 @@ func (a *App) readyz(c *gin.Context) {
 	}
 
 	if a.m != nil {
-		switch s := a.m.(type) {
-		case *minio.Client:
-			oc, cancel := a.objCtx(ctx)
-			defer cancel()
-			ok, err := s.BucketExists(oc, a.cfg.MinIOBucket)
-			if err != nil || !ok {
-				log.Error().Err(err).Str("bucket", a.cfg.MinIOBucket).Msg("readyz minio")
-				c.JSON(500, gin.H{"error": "object_store"})
-				return
+		store, bucket := a.core().ResolveStore(ctx)
+		if store != nil {
+			switch s := store.(type) {
+			case *appcore.MinioWrapper:
+				oc, cancel := a.objCtx(ctx)
+				defer cancel()
+				ok, err := s.BucketExists(oc, bucket)
+				if err != nil || !ok {
+					log.Error().Err(err).Str("bucket", bucket).Msg("readyz minio")
+					c.JSON(500, gin.H{"error": "object_store"})
+					return
+				}
+			case *appcore.FsObjectStore:
+				dir := s.Base
+				if bucket != "" {
+					dir = filepath.Join(dir, bucket)
+				}
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					log.Error().Err(err).Str("dir", dir).Msg("readyz filestore mkdir")
+					c.JSON(500, gin.H{"error": "object_store"})
+					return
+				}
+				testFile := filepath.Join(dir, ".readyz")
+				if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
+					log.Error().Err(err).Msg("readyz filestore")
+					c.JSON(500, gin.H{"error": "object_store"})
+					return
+				}
+				_ = os.Remove(testFile)
 			}
-		default:
-			// Filesystem store: ensure directory exists and is writable
-			dir := a.cfg.FileStorePath
-			if fs, ok := a.m.(*appcore.FsObjectStore); ok && fs.Base != "" {
-				dir = fs.Base
-			}
-			if a.cfg.MinIOBucket != "" {
-				dir = filepath.Join(dir, a.cfg.MinIOBucket)
-			}
-			if err := os.MkdirAll(dir, 0o755); err != nil {
-				log.Error().Err(err).Str("dir", dir).Msg("readyz filestore mkdir")
-				c.JSON(500, gin.H{"error": "object_store"})
-				return
-			}
-			testFile := filepath.Join(dir, ".readyz")
-			if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
-				log.Error().Err(err).Msg("readyz filestore")
-				c.JSON(500, gin.H{"error": "object_store"})
-				return
-			}
-			_ = os.Remove(testFile)
 		}
 	}
 
@@ -1134,8 +1135,9 @@ func (a *App) exportTicketsStatus(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "missing object key"})
 		return
 	}
-	if mc, ok := a.m.(*minio.Client); ok {
-		u, err := mc.PresignedGetObject(ctx, a.cfg.MinIOBucket, st.ObjectKey, 15*time.Minute, nil)
+	store, bucket := a.core().ResolveStore(ctx)
+	if mw, ok := store.(*appcore.MinioWrapper); ok {
+		u, err := mw.PresignedGetObject(ctx, bucket, st.ObjectKey, 15*time.Minute, nil)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "sign url"})
 			return

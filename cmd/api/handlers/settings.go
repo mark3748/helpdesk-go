@@ -425,6 +425,8 @@ func TestStorageConnection(c *gin.Context) {
 	secretKey := data["secret_access_key"]
 	bucket := data["bucket"]
 	useSSL := data["use_ssl"] == "true"
+	region := data["region"]
+	pathStyle := data["path_style"] == "true"
 
 	// Strip scheme if present
 	if strings.HasPrefix(endpoint, "https://") {
@@ -441,9 +443,15 @@ func TestStorageConnection(c *gin.Context) {
 	}
 
 	// Initialize MinIO client
+	lookup := minio.BucketLookupAuto
+	if pathStyle {
+		lookup = minio.BucketLookupPath
+	}
 	mc, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Secure: useSSL,
+		Creds:        credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure:       useSSL,
+		Region:       region,
+		BucketLookup: lookup,
 	})
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"ok": false, "error": fmt.Sprintf("failed to create client: %v", err)})

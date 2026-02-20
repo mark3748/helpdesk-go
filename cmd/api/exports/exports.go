@@ -21,7 +21,8 @@ type TicketsReq struct {
 
 func Tickets(a *app.App) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if a.M == nil {
+		store, bucket := a.ResolveStore(c.Request.Context())
+		if store == nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "minio not configured"})
 			return
 		}
@@ -60,15 +61,15 @@ func Tickets(a *app.App) gin.HandlerFunc {
 		objectKey := uuid.New().String() + ".csv"
 		oc, cancel := a.ObjCtx(ctx)
 		defer cancel()
-		_, err = a.M.PutObject(oc, a.Cfg.MinIOBucket, objectKey, bytes.NewReader(buf.Bytes()), int64(buf.Len()), minio.PutObjectOptions{ContentType: "text/csv"})
+		_, err = store.PutObject(oc, bucket, objectKey, bytes.NewReader(buf.Bytes()), int64(buf.Len()), minio.PutObjectOptions{ContentType: "text/csv"})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if mc, ok := a.M.(*minio.Client); ok {
+		if mw, ok := store.(*app.MinioWrapper); ok {
 			oc, cancel := a.ObjCtx(ctx)
 			defer cancel()
-			url, err := mc.PresignedGetObject(oc, a.Cfg.MinIOBucket, objectKey, time.Minute, nil)
+			url, err := mw.PresignedGetObject(oc, bucket, objectKey, time.Minute, nil)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -80,7 +81,7 @@ func Tickets(a *app.App) gin.HandlerFunc {
 		if a.Cfg.MinIOUseSSL {
 			scheme = "https"
 		}
-		url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.Cfg.MinIOEndpoint, a.Cfg.MinIOBucket, objectKey)
+		url := fmt.Sprintf("%s://%s/%s/%s", scheme, a.Cfg.MinIOEndpoint, bucket, objectKey)
 		c.JSON(http.StatusOK, gin.H{"url": url})
 	}
 }

@@ -257,6 +257,13 @@ readinessProbe:
 3. **Grafana Dashboards:**
    See `docs/grafana.md` for dashboard examples
 
+### Object Storage (S3/Garage)
+
+When using external S3 storage (like Garage or AWS), keep the following in mind:
+
+1. **CORS Configuration:** Browser-based uploads will fail unless you apply a CORS policy to your bucket that allows the Helpdesk frontend origin.
+2. **Force Path Style:** Many custom S3 providers (Garage, Ceph) do not support virtual-host style buckets by default. Enable "Force Path Style" in the UI Storage Settings if you encounter connection or upload issues.
+
 ### Backup and Recovery
 
 1. **Database Backups:**

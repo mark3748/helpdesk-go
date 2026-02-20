@@ -110,7 +110,7 @@ type ObjectStore interface {
 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
 	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
 	StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error)
-	PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error)
+	PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, contentType string) (*url.URL, error)
 }
 
 // fsObjectStore implements ObjectStore on the local filesystem for development/testing.
@@ -173,7 +173,7 @@ func (f *FsObjectStore) RemoveObject(ctx context.Context, bucketName, objectName
 }
 
 // PresignedPutObject is not supported for the filesystem store.
-func (f *FsObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
+func (f *FsObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, contentType string) (*url.URL, error) {
 	_ = ctx
 	return nil, os.ErrPermission
 }
@@ -197,6 +197,19 @@ func (f *FsObjectStore) StatObject(ctx context.Context, bucketName, objectName s
 		return minio.ObjectInfo{}, err
 	}
 	return minio.ObjectInfo{Key: objectName, Size: fi.Size()}, nil
+}
+
+// MinioWrapper adapts the minio.Client to our ObjectStore interface.
+type MinioWrapper struct {
+	*minio.Client
+}
+
+func (m *MinioWrapper) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, contentType string) (*url.URL, error) {
+	if contentType != "" {
+		// Use Presign to include Content-Type in the signature headers
+		return m.Client.Presign(ctx, "PUT", bucketName, objectName, expiry, url.Values{"Content-Type": []string{contentType}})
+	}
+	return m.Client.PresignedPutObject(ctx, bucketName, objectName, expiry)
 }
 
 // App wires dependencies and the Gin router.
