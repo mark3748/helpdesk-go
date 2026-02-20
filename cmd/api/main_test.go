@@ -613,7 +613,7 @@ func TestGetAttachment_MinIOPresign(t *testing.T) {
 		t.Fatalf("minio new: %v", err)
 	}
 	cfg := Config{Env: "test", MinIOEndpoint: "localhost:9000", MinIOBucket: "bucket", TestBypassAuth: true}
-	app := newTestApp(cfg, db, mc, nil)
+	app := newTestApp(cfg, db, &appcore.MinioWrapper{Client: mc}, nil)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/tickets/1/attachments/1", nil)

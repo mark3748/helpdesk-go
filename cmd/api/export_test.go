@@ -41,9 +41,10 @@ func (f *fakeObjectStore) RemoveObject(ctx context.Context, bucketName, objectNa
 	return nil
 }
 
-func (f *fakeObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration) (*url.URL, error) {
+func (f *fakeObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, contentType string) (*url.URL, error) {
 	_ = ctx
 	_ = expiry
+	_ = contentType
 	u, _ := url.Parse("http://fake/" + bucketName + "/" + objectName)
 	return u, nil
 }

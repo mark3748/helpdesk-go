@@ -4,8 +4,10 @@ import (
     "context"
     "encoding/json"
     "io"
+    "net/url"
     "strings"
     "testing"
+    "time"
 
     miniredis "github.com/alicebob/miniredis/v2"
     "github.com/jackc/pgx/v5"
@@ -31,6 +33,18 @@ func (f *fakeObjectStore) PutObject(ctx context.Context, bucketName, objectName 
 func (f *fakeObjectStore) RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error {
 	delete(f.objects, objectName)
 	return nil
+}
+
+func (f *fakeObjectStore) PresignedPutObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, contentType string) (*url.URL, error) {
+	return nil, nil
+}
+
+func (f *fakeObjectStore) StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error) {
+	b, ok := f.objects[objectName]
+	if !ok {
+		return minio.ObjectInfo{}, minio.ErrorResponse{Code: "NoSuchKey"}
+	}
+	return minio.ObjectInfo{Size: int64(len(b))}, nil
 }
 
 func (f *fakeObjectStore) URL() string { return "http://fake" }
