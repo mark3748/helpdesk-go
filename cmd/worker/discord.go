@@ -241,6 +241,17 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 				priority = int16(parsedPriority)
 			}
 
+			if i.Member == nil || i.Member.User == nil {
+				_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "❌ Unable to resolve user for this interaction.",
+						Flags:   discordgo.MessageFlagsEphemeral,
+					},
+				})
+				return
+			}
+
 			discordUserID := i.Member.User.ID
 			username := i.Member.User.Username
 			displayName := i.Member.Nick
