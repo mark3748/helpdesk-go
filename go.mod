@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.35.0
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/emersion/go-imap v1.2.1
 	github.com/emersion/go-message v0.15.0
@@ -30,7 +31,6 @@ require (
 require (
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bwmarrin/discordgo v0.29.0 // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
