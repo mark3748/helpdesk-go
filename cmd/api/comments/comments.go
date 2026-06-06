@@ -72,7 +72,7 @@ func Add(a *app.App) gin.HandlerFunc {
 			})
 			job, _ := json.Marshal(map[string]any{
 				"type": "discord_outgoing_comment",
-				"data": jobData,
+				"data": json.RawMessage(jobData),
 			})
 			if err := a.Q.RPush(c.Request.Context(), "jobs", job).Err(); err != nil {
 				log.Error().Err(err).Msg("failed to enqueue discord comment job")

@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 
@@ -16,16 +18,22 @@ import (
 	ws "github.com/mark3748/helpdesk-go/cmd/api/ws"
 )
 
-var dgSession *discordgo.Session
+var dgSession atomic.Pointer[discordgo.Session]
 
 // runDiscordBot connects to the Discord gateway, registers slash commands, and processes events.
 func runDiscordBot(ctx context.Context, c Config, db app.DB, store app.ObjectStore, rdb *redis.Client) error {
+	if strings.TrimSpace(c.DiscordGuildID) == "" {
+		return errors.New("DISCORD_GUILD_ID is required when Discord bot is enabled")
+	}
+	if strings.TrimSpace(c.DiscordChannelID) == "" {
+		return errors.New("DISCORD_CHANNEL_ID is required when Discord bot is enabled")
+	}
+
 	s, err := discordgo.New("Bot " + c.DiscordBotToken)
 	if err != nil {
 		return fmt.Errorf("invalid bot token: %w", err)
 	}
-
-	dgSession = s
+	s.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentMessageContent | discordgo.IntentsGuilds
 
 	// Register message create handler
 	s.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -41,7 +49,11 @@ func runDiscordBot(ctx context.Context, c Config, db app.DB, store app.ObjectSto
 	if err != nil {
 		return fmt.Errorf("error opening connection: %w", err)
 	}
-	defer s.Close()
+	dgSession.Store(s)
+	defer func() {
+		dgSession.Store(nil)
+		_ = s.Close()
+	}()
 
 	log.Info().Msg("Discord bot connected successfully")
 
@@ -176,12 +188,12 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 			priorityStr := "2"
 
 			for _, row := range data.Components {
-				actionsRow, ok := row.(*discordgo.ActionsRow)
+				actionsRow, ok := row.(discordgo.ActionsRow)
 				if !ok {
 					continue
 				}
 				for _, comp := range actionsRow.Components {
-					input, ok := comp.(*discordgo.TextInput)
+					input, ok := comp.(discordgo.TextInput)
 					if !ok {
 						continue
 					}
@@ -253,6 +265,9 @@ func handleLinkEmail(ctx context.Context, discordUserID, username, targetEmail s
 		`, discordUserID, existingReqID)
 		return err
 	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("lookup requester by email: %w", err)
+	}
 
 	// 2. If not found in requesters, check if we have a mapping already
 	var curReqID string
@@ -261,6 +276,9 @@ func handleLinkEmail(ctx context.Context, discordUserID, username, targetEmail s
 		// Update their current auto-created requester's email
 		_, err = db.Exec(ctx, "update requesters set email = $1 where id=$2", targetEmail, curReqID)
 		return err
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("lookup discord mapping: %w", err)
 	}
 
 	// 3. If no mapping exists, create new requester first
@@ -280,14 +298,19 @@ func handleCreateTicketFromDiscord(ctx context.Context, s *discordgo.Session, c 
 	var requesterID string
 	err := db.QueryRow(ctx, "select requester_id::text from discord_user_mappings where discord_user_id=$1", discordUserID).Scan(&requesterID)
 	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", "", "", fmt.Errorf("lookup discord user mapping: %w", err)
+		}
+
 		// Create guest requester
-		requesterID = uuid.NewString()
+		newID := uuid.NewString()
 		placeholderEmail := fmt.Sprintf("%s@discord.user", discordUserID)
-		_, err = db.Exec(ctx, `
+		err = db.QueryRow(ctx, `
 			insert into requesters (id, name, email)
 			values ($1, $2, $3)
 			on conflict (email) do update set name = coalesce(excluded.name, requesters.name)
-		`, requesterID, displayName, placeholderEmail)
+			returning id::text
+		`, newID, displayName, placeholderEmail).Scan(&requesterID)
 		if err != nil {
 			return "", "", "", fmt.Errorf("create guest requester: %w", err)
 		}
@@ -296,25 +319,21 @@ func handleCreateTicketFromDiscord(ctx context.Context, s *discordgo.Session, c 
 		_, err = db.Exec(ctx, `
 			insert into discord_user_mappings (discord_user_id, requester_id)
 			values ($1, $2)
+			on conflict (discord_user_id) do update set requester_id = excluded.requester_id
 		`, discordUserID, requesterID)
 		if err != nil {
 			return "", "", "", fmt.Errorf("create discord user mapping: %w", err)
 		}
 	}
 
-	// 2. Insert ticket
-	var ticketID, ticketNum string
-	const q = `
-		with s as (select nextval('ticket_seq') n)
-		insert into tickets (number, title, description, requester_id, priority, status, source)
-		values ((select 'HD-'||n from s), $1, $2, $3, $4, 'New', 'discord')
-		returning id::text, number`
-	err = db.QueryRow(ctx, q, title, desc, requesterID, priority).Scan(&ticketID, &ticketNum)
+	// 2. Reserve ticket number and create Discord thread before persisting ticket
+	var seqNum int64
+	err = db.QueryRow(ctx, "select nextval('ticket_seq')").Scan(&seqNum)
 	if err != nil {
-		return "", "", "", fmt.Errorf("insert ticket: %w", err)
+		return "", "", "", fmt.Errorf("reserve ticket number: %w", err)
 	}
+	ticketNum := fmt.Sprintf("HD-%d", seqNum)
 
-	// 3. Create Discord thread
 	thread, err := s.ThreadStartComplex(c.DiscordChannelID, &discordgo.ThreadStart{
 		Name:                fmt.Sprintf("%s: %s", ticketNum, title),
 		AutoArchiveDuration: 1440,
@@ -322,6 +341,17 @@ func handleCreateTicketFromDiscord(ctx context.Context, s *discordgo.Session, c 
 	})
 	if err != nil {
 		return "", "", "", fmt.Errorf("start discord thread: %w", err)
+	}
+
+	// 3. Insert ticket
+	var ticketID string
+	const q = `
+		insert into tickets (number, title, description, requester_id, priority, status, source)
+		values ($1, $2, $3, $4, $5, 'New', 'discord')
+		returning id::text`
+	err = db.QueryRow(ctx, q, ticketNum, title, desc, requesterID, priority).Scan(&ticketID)
+	if err != nil {
+		return "", "", "", fmt.Errorf("insert ticket: %w", err)
 	}
 
 	// Post initial ticket details in thread
@@ -353,7 +383,11 @@ func handleMessageCreate(ctx context.Context, s *discordgo.Session, m *discordgo
 	var ticketID string
 	err := db.QueryRow(ctx, "select ticket_id::text from discord_thread_mappings where discord_thread_id=$1", m.ChannelID).Scan(&ticketID)
 	if err != nil {
-		// Not a mapped ticket thread, ignore
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Not a mapped ticket thread, ignore
+			return
+		}
+		log.Error().Err(err).Msg("failed to resolve discord thread mapping")
 		return
 	}
 
@@ -361,8 +395,13 @@ func handleMessageCreate(ctx context.Context, s *discordgo.Session, m *discordgo
 	var requesterID string
 	err = db.QueryRow(ctx, "select requester_id::text from discord_user_mappings where discord_user_id=$1", m.Author.ID).Scan(&requesterID)
 	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			log.Error().Err(err).Msg("failed to resolve discord user mapping")
+			return
+		}
+
 		// Create guest requester
-		requesterID = uuid.NewString()
+		newID := uuid.NewString()
 		placeholderEmail := fmt.Sprintf("%s@discord.user", m.Author.ID)
 		displayName := m.Author.Username
 		if m.Member != nil && m.Member.Nick != "" {
@@ -370,16 +409,24 @@ func handleMessageCreate(ctx context.Context, s *discordgo.Session, m *discordgo
 		} else if m.Author.GlobalName != "" {
 			displayName = m.Author.GlobalName
 		}
-		_, err = db.Exec(ctx, `
+		err = db.QueryRow(ctx, `
 			insert into requesters (id, name, email)
 			values ($1, $2, $3)
 			on conflict (email) do update set name = coalesce(excluded.name, requesters.name)
-		`, requesterID, displayName, placeholderEmail)
-		if err == nil {
-			_, _ = db.Exec(ctx, `
-				insert into discord_user_mappings (discord_user_id, requester_id)
-				values ($1, $2)
-			`, m.Author.ID, requesterID)
+			returning id::text
+		`, newID, displayName, placeholderEmail).Scan(&requesterID)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to create guest requester")
+			return
+		}
+		_, err = db.Exec(ctx, `
+			insert into discord_user_mappings (discord_user_id, requester_id)
+			values ($1, $2)
+			on conflict (discord_user_id) do update set requester_id = excluded.requester_id
+		`, m.Author.ID, requesterID)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to upsert discord user mapping")
+			return
 		}
 	}
 
@@ -399,19 +446,23 @@ func handleMessageCreate(ctx context.Context, s *discordgo.Session, m *discordgo
 
 // sendCommentToDiscord posts outbound comments from the Helpdesk Web UI to the Discord thread.
 func sendCommentToDiscord(ctx context.Context, db app.DB, ticketID string, bodyMD string) error {
-	if dgSession == nil {
-		return nil
+	s := dgSession.Load()
+	if s == nil {
+		return errors.New("discord bot session is not available")
 	}
 
 	// Find the mapped Discord thread ID
 	var threadID string
 	err := db.QueryRow(ctx, "select discord_thread_id from discord_thread_mappings where ticket_id=$1", ticketID).Scan(&threadID)
 	if err != nil {
-		// No Discord thread mapped for this ticket, ignore
-		return nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			// No Discord thread mapped for this ticket, ignore
+			return nil
+		}
+		return fmt.Errorf("lookup discord thread mapping: %w", err)
 	}
 
 	msg := fmt.Sprintf("💬 **New Comment:**\n%s", bodyMD)
-	_, err = dgSession.ChannelMessageSend(threadID, msg)
+	_, err = s.ChannelMessageSend(threadID, msg)
 	return err
 }

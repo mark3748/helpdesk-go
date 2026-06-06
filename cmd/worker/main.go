@@ -99,7 +99,7 @@ func cfg() Config {
 			n, _ := strconv.Atoi(v)
 			return n
 		}(),
-		DiscordBotToken: getEnv("DISCORD_BOT_TOKEN", ""),
+		DiscordBotToken:  getEnv("DISCORD_BOT_TOKEN", ""),
 		DiscordGuildID:   getEnv("DISCORD_GUILD_ID", ""),
 		DiscordChannelID: getEnv("DISCORD_CHANNEL_ID", ""),
 	}
@@ -645,7 +645,9 @@ func main() {
 			if err := sendEmail(ctx, db, c, ej); err != nil {
 				log.Error().Err(err).Msg("send email")
 				// Do not retry validation errors (e.g. invalid/missing email addresses)
-				if !strings.Contains(err.Error(), "invalid To address") && ej.Retries < 3 {
+				if !strings.Contains(err.Error(), "invalid To address") &&
+					!strings.Contains(err.Error(), "invalid From address") &&
+					ej.Retries < 3 {
 					ej.Retries++
 					b, _ := json.Marshal(ej)
 					nb, _ := json.Marshal(Job{Type: "send_email", Data: b})

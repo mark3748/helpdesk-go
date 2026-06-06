@@ -19,6 +19,7 @@ create table if not exists discord_thread_mappings (
     channel_id text not null,
     created_at timestamptz not null default now()
 );
+create index if not exists discord_thread_mappings_ticket_id_idx on discord_thread_mappings(ticket_id);
 
 -- Update tickets.source check constraint to include 'discord'
 alter table tickets drop constraint if exists tickets_source_check;
@@ -26,9 +27,11 @@ alter table tickets add constraint tickets_source_check check (source in ('web',
 
 -- +goose Down
 alter table tickets drop constraint if exists tickets_source_check;
+update tickets set source = 'web' where source = 'discord';
 alter table tickets add constraint tickets_source_check check (source in ('web', 'email'));
 
 drop table if exists discord_thread_mappings;
 drop table if exists discord_user_mappings;
 alter table ticket_comments drop column if exists author_requester_id;
+delete from ticket_comments where author_id is null;
 alter table ticket_comments alter column author_id set not null;
