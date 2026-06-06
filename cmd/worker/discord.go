@@ -208,9 +208,10 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 				}
 			}
 
-			priority, err := strconv.Atoi(priorityStr)
-			if err != nil || priority < 1 || priority > 4 {
-				priority = 2
+			parsedPriority, err := strconv.ParseInt(priorityStr, 10, 16)
+			priority := int16(2)
+			if err == nil && parsedPriority >= 1 && parsedPriority <= 4 {
+				priority = int16(parsedPriority)
 			}
 
 			discordUserID := i.Member.User.ID
@@ -223,7 +224,7 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 				displayName = username
 			}
 
-			ticketNum, _, threadID, err := handleCreateTicketFromDiscord(ctx, s, c, discordUserID, displayName, username, title, desc, int16(priority), db)
+			ticketNum, _, threadID, err := handleCreateTicketFromDiscord(ctx, s, c, discordUserID, displayName, username, title, desc, priority, db)
 
 			var responseData *discordgo.InteractionResponseData
 			if err != nil {
