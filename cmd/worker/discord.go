@@ -49,12 +49,21 @@ func runDiscordBot(ctx context.Context, c Config, db app.DB, store app.ObjectSto
 	if err != nil {
 		return fmt.Errorf("error opening connection: %w", err)
 	}
-	botUser, err := s.User("@me")
-	if err != nil {
-		_ = s.Close()
-		return fmt.Errorf("resolve bot user: %w", err)
+	appID := ""
+	if s.State != nil && s.State.Application != nil {
+		appID = s.State.Application.ID
 	}
-	appID := botUser.ID
+	if appID == "" {
+		application, appErr := s.Application("@me")
+		if appErr != nil || application == nil || application.ID == "" {
+			_ = s.Close()
+			if appErr != nil {
+				return fmt.Errorf("resolve bot application id: %w", appErr)
+			}
+			return errors.New("resolve bot application id: missing application id")
+		}
+		appID = application.ID
+	}
 	dgSession.Store(s)
 	defer func() {
 		dgSession.Store(nil)
