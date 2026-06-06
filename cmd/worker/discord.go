@@ -49,6 +49,12 @@ func runDiscordBot(ctx context.Context, c Config, db app.DB, store app.ObjectSto
 	if err != nil {
 		return fmt.Errorf("error opening connection: %w", err)
 	}
+	botUser, err := s.User("@me")
+	if err != nil {
+		_ = s.Close()
+		return fmt.Errorf("resolve bot user: %w", err)
+	}
+	appID := botUser.ID
 	dgSession.Store(s)
 	defer func() {
 		dgSession.Store(nil)
@@ -79,7 +85,7 @@ func runDiscordBot(ctx context.Context, c Config, db app.DB, store app.ObjectSto
 
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
 	for idx, cmd := range commands {
-		reg, err := s.ApplicationCommandCreate(s.State.User.ID, c.DiscordGuildID, cmd)
+		reg, err := s.ApplicationCommandCreate(appID, c.DiscordGuildID, cmd)
 		if err != nil {
 			log.Error().Err(err).Str("command", cmd.Name).Msg("cannot create command")
 		} else {
@@ -93,7 +99,7 @@ func runDiscordBot(ctx context.Context, c Config, db app.DB, store app.ObjectSto
 	// Cleanup registered commands
 	for _, cmd := range registeredCommands {
 		if cmd != nil {
-			_ = s.ApplicationCommandDelete(s.State.User.ID, c.DiscordGuildID, cmd.ID)
+			_ = s.ApplicationCommandDelete(appID, c.DiscordGuildID, cmd.ID)
 		}
 	}
 
@@ -158,6 +164,14 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 			}
 
 		case "link-email":
+			if len(data.Options) == 0 {
+				respondInteractionError(s, i, "❌ Missing required email option.")
+				return
+			}
+			if i.Member == nil || i.Member.User == nil {
+				respondInteractionError(s, i, "❌ Unable to identify your Discord user.")
+				return
+			}
 			emailOpt := data.Options[0].StringValue()
 			discordUserID := i.Member.User.ID
 			username := i.Member.User.Username
@@ -183,6 +197,10 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 	case discordgo.InteractionModalSubmit:
 		data := i.ModalSubmitData()
 		if data.CustomID == "create_ticket_modal" {
+			if i.Member == nil || i.Member.User == nil {
+				respondInteractionError(s, i, "❌ Unable to identify your Discord user.")
+				return
+			}
 			title := ""
 			desc := ""
 			priorityStr := "2"
@@ -244,6 +262,18 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 				Data: responseData,
 			})
 		}
+	}
+}
+
+func respondInteractionError(s *discordgo.Session, i *discordgo.InteractionCreate, msg string) {
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: msg,
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	}); err != nil {
+		log.Error().Err(err).Msg("error sending interaction error response")
 	}
 }
 
@@ -352,6 +382,9 @@ func handleCreateTicketFromDiscord(ctx context.Context, s *discordgo.Session, c 
 		returning id::text`
 	err = db.QueryRow(ctx, q, ticketNum, title, desc, requesterID, priority).Scan(&ticketID)
 	if err != nil {
+		if _, delErr := s.ChannelDelete(thread.ID); delErr != nil {
+			log.Error().Err(delErr).Str("thread_id", thread.ID).Msg("failed to cleanup discord thread after ticket insert failure")
+		}
 		return "", "", "", fmt.Errorf("insert ticket: %w", err)
 	}
 
@@ -367,6 +400,12 @@ func handleCreateTicketFromDiscord(ctx context.Context, s *discordgo.Session, c 
 		values ($1, $2, $3)
 	`, thread.ID, ticketID, c.DiscordChannelID)
 	if err != nil {
+		if _, delErr := db.Exec(ctx, "delete from tickets where id=$1", ticketID); delErr != nil {
+			log.Error().Err(delErr).Str("ticket_id", ticketID).Msg("failed to cleanup ticket after mapping insert failure")
+		}
+		if _, delErr := s.ChannelDelete(thread.ID); delErr != nil {
+			log.Error().Err(delErr).Str("thread_id", thread.ID).Msg("failed to cleanup discord thread after mapping insert failure")
+		}
 		return "", "", "", fmt.Errorf("insert thread mapping: %w", err)
 	}
 
