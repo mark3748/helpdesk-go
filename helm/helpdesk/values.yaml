@@ -109,6 +109,9 @@ env:
   IMAP_USER: ""
   IMAP_PASS: ""
   IMAP_FOLDER: "INBOX"
+  DISCORD_BOT_TOKEN: ""
+  DISCORD_GUILD_ID: ""
+  DISCORD_CHANNEL_ID: ""
 
 resources:
   # Default resource requests and limits for API container

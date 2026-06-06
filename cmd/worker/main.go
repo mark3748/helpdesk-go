@@ -58,6 +58,9 @@ type Config struct {
 	AuditExportBucket        string
 	AuditExportPrefix        string
 	AuditExportRetentionDays int
+	DiscordBotToken          string
+	DiscordGuildID           string
+	DiscordChannelID         string
 }
 
 func getEnv(key, def string) string {
@@ -96,6 +99,9 @@ func cfg() Config {
 			n, _ := strconv.Atoi(v)
 			return n
 		}(),
+		DiscordBotToken: getEnv("DISCORD_BOT_TOKEN", ""),
+		DiscordGuildID:   getEnv("DISCORD_GUILD_ID", ""),
+		DiscordChannelID: getEnv("DISCORD_CHANNEL_ID", ""),
 	}
 }
 
@@ -581,6 +587,14 @@ func main() {
 		}()
 	}
 
+	if c.DiscordBotToken != "" {
+		go func() {
+			if err := runDiscordBot(ctx, c, db, store, rdb); err != nil {
+				log.Error().Err(err).Msg("run discord bot")
+			}
+		}()
+	}
+
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
@@ -630,7 +644,8 @@ func main() {
 			}
 			if err := sendEmail(ctx, db, c, ej); err != nil {
 				log.Error().Err(err).Msg("send email")
-				if ej.Retries < 3 {
+				// Do not retry validation errors (e.g. invalid/missing email addresses)
+				if !strings.Contains(err.Error(), "invalid To address") && ej.Retries < 3 {
 					ej.Retries++
 					b, _ := json.Marshal(ej)
 					nb, _ := json.Marshal(Job{Type: "send_email", Data: b})
@@ -638,6 +653,18 @@ func main() {
 						log.Error().Err(err).Msg("requeue email job")
 					}
 				}
+			}
+		case "discord_outgoing_comment":
+			var dj struct {
+				TicketID string `json:"ticket_id"`
+				BodyMD   string `json:"body_md"`
+			}
+			if err := json.Unmarshal(job.Data, &dj); err != nil {
+				log.Error().Err(err).Msg("unmarshal discord outgoing comment job")
+				continue
+			}
+			if err := sendCommentToDiscord(ctx, db, dj.TicketID, dj.BodyMD); err != nil {
+				log.Error().Err(err).Msg("send comment to discord")
 			}
 		case "export_tickets":
 			var ej ExportTicketsJob
