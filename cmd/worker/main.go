@@ -665,8 +665,15 @@ func main() {
 				log.Error().Err(err).Msg("unmarshal discord outgoing comment job")
 				continue
 			}
-			if strings.TrimSpace(dj.TicketID) == "" || strings.TrimSpace(dj.BodyMD) == "" {
-				log.Warn().Str("ticket_id", dj.TicketID).Msg("skipping discord outgoing comment job with missing required fields")
+			missing := make([]string, 0, 2)
+			if strings.TrimSpace(dj.TicketID) == "" {
+				missing = append(missing, "ticket_id")
+			}
+			if strings.TrimSpace(dj.BodyMD) == "" {
+				missing = append(missing, "body_md")
+			}
+			if len(missing) > 0 {
+				log.Warn().Strs("missing_fields", missing).Msg("skipping discord outgoing comment job with missing required fields")
 				continue
 			}
 			if err := sendCommentToDiscord(ctx, db, dj.TicketID, dj.BodyMD); err != nil {
