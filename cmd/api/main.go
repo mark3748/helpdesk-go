@@ -1159,13 +1159,25 @@ func (a *App) enqueueEmail(ctx context.Context, to, template string, data any) {
 	if a.q == nil {
 		return
 	}
-	payload := map[string]any{
+	emailPayload, err := json.Marshal(map[string]any{
 		"to":       to,
 		"template": template,
 		"data":     data,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("marshal email job payload")
+		return
 	}
-	b, _ := json.Marshal(payload)
-	if err := a.q.RPush(ctx, "email_queue", b).Err(); err != nil {
+
+	job, err := json.Marshal(map[string]any{
+		"type": "send_email",
+		"data": json.RawMessage(emailPayload),
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("marshal email job")
+		return
+	}
+	if err := a.q.RPush(ctx, "jobs", job).Err(); err != nil {
 		log.Error().Err(err).Msg("enqueue email")
 	}
 }

@@ -571,11 +571,7 @@ func main() {
 		if err != nil {
 			log.Warn().Err(err).Str("path", logFile).Msg("using stdout for logs")
 		} else {
-			if c.Env == "dev" {
-				writer = zerolog.MultiLevelWriter(f, writer)
-			} else {
-				writer = f
-			}
+			writer = zerolog.MultiLevelWriter(f, writer)
 			defer f.Close()
 		}
 	}
