@@ -1,0 +1,13 @@
+{{ define "discord_link_verification_subject" }}Verify your Discord Helpdesk link{{ end }}
+{{ define "discord_link_verification_body" }}
+Hello,
+
+Use this verification token in Discord with /verify-email:
+
+{{ .Token }}
+
+This token expires in {{ .ExpiresIn }}. If you did not request this link, you can ignore this email.
+
+Thanks,
+Helpdesk
+{{ end }}

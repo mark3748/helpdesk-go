@@ -1,12 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/redis/go-redis/v9"
 )
 
 type discordTestRow struct {
@@ -55,125 +61,135 @@ func (db *discordTestDB) Ping(ctx context.Context) error {
 	return nil
 }
 
-func TestHandleLinkEmail_NewUser(t *testing.T) {
+func TestBeginDiscordEmailLink_EnqueuesVerificationWithoutMapping(t *testing.T) {
 	db := &discordTestDB{
 		queryRow: func(sql string, args ...any) pgx.Row {
-			// Simulate no existing requester and no existing mapping
 			return discordTestRow{scan: func(dest ...any) error {
-				return pgx.ErrNoRows
+				*(dest[0].(*string)) = "challenge-1"
+				return nil
 			}}
 		},
 	}
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
 
-	err := handleLinkEmail(context.Background(), "discord123", "johndoe", "john@example.com", db)
+	err := beginDiscordEmailLink(context.Background(), "discord123", "John@Example.com", db, rdb)
 	if err != nil {
-		t.Fatalf("handleLinkEmail failed: %v", err)
+		t.Fatalf("beginDiscordEmailLink failed: %v", err)
+	}
+	if strings.Contains(db.lastSQL, "discord_user_mappings") {
+		t.Fatal("begin flow must not create a Discord user mapping")
+	}
+	if got := db.lastArgs[1]; got != "john@example.com" {
+		t.Fatalf("normalized email = %v, want john@example.com", got)
 	}
 
-	// Verify new requester was inserted
-	foundRequesterInsert := false
-	foundMappingInsert := false
-	for _, sql := range db.execs {
-		if strings.Contains(sql, "insert into requesters") {
-			foundRequesterInsert = true
-		}
-		if strings.Contains(sql, "insert into discord_user_mappings") {
-			foundMappingInsert = true
-		}
+	items, err := rdb.LRange(context.Background(), "jobs", 0, -1).Result()
+	if err != nil {
+		t.Fatalf("read queued jobs: %v", err)
 	}
-
-	if !foundRequesterInsert {
-		t.Error("expected insert into requesters")
+	if len(items) != 1 {
+		t.Fatalf("queued jobs = %d, want 1", len(items))
 	}
-	if !foundMappingInsert {
-		t.Error("expected insert into discord_user_mappings")
+	var job Job
+	if err := json.Unmarshal([]byte(items[0]), &job); err != nil {
+		t.Fatalf("unmarshal job: %v", err)
+	}
+	if job.Type != "send_email" {
+		t.Fatalf("job type = %q, want send_email", job.Type)
+	}
+	var emailJob EmailJob
+	if err := json.Unmarshal(job.Data, &emailJob); err != nil {
+		t.Fatalf("unmarshal email job: %v", err)
+	}
+	if emailJob.To != "john@example.com" || emailJob.Template != "discord_link_verification" {
+		t.Fatalf("unexpected email job: %+v", emailJob)
+	}
+	data, ok := emailJob.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("email job data type = %T", emailJob.Data)
+	}
+	token, _ := data["Token"].(string)
+	if token == "" {
+		t.Fatal("verification token missing from email")
+	}
+	storedHash, ok := db.lastArgs[2].([]byte)
+	if !ok {
+		t.Fatalf("stored token hash type = %T", db.lastArgs[2])
+	}
+	wantHash := sha256.Sum256([]byte(token))
+	if !bytes.Equal(storedHash, wantHash[:]) {
+		t.Fatal("stored token hash does not match emailed token")
+	}
+	if bytes.Equal(storedHash, []byte(token)) {
+		t.Fatal("plaintext token was stored")
 	}
 }
 
-func TestHandleLinkEmail_ExistingRequester(t *testing.T) {
-	db := &discordTestDB{
-		queryRow: func(sql string, args ...any) pgx.Row {
-			// Simulate existing requester with email
-			if strings.Contains(sql, "requesters") {
-				return discordTestRow{scan: func(dest ...any) error {
-					*(dest[0].(*string)) = "req-uuid-123"
-					return nil
-				}}
-			}
-			return discordTestRow{scan: func(dest ...any) error {
-				return pgx.ErrNoRows
-			}}
-		},
-	}
-
-	err := handleLinkEmail(context.Background(), "discord123", "johndoe", "john@example.com", db)
-	if err != nil {
-		t.Fatalf("handleLinkEmail failed: %v", err)
-	}
-
-	// Verify we only upsert mapping to the existing requester ID, no requester insert
-	foundRequesterInsert := false
-	foundMappingInsert := false
-	for _, sql := range db.execs {
-		if strings.Contains(sql, "insert into requesters") {
-			foundRequesterInsert = true
-		}
-		if strings.Contains(sql, "insert into discord_user_mappings") {
-			foundMappingInsert = true
-		}
-	}
-
-	if foundRequesterInsert {
-		t.Error("should not insert new requester if email already exists")
-	}
-	if !foundMappingInsert {
-		t.Error("expected upsert into discord_user_mappings")
-	}
-}
-
-func TestHandleLinkEmail_ExistingMappingUpdateEmail(t *testing.T) {
-	db := &discordTestDB{
-		queryRow: func(sql string, args ...any) pgx.Row {
-			// Simulate no requester with email, but existing mapping
-			if strings.Contains(sql, "select id::text") {
-				return discordTestRow{scan: func(dest ...any) error {
-					return pgx.ErrNoRows
-				}}
-			}
-			if strings.Contains(sql, "discord_user_mappings") {
-				return discordTestRow{scan: func(dest ...any) error {
-					*(dest[0].(*string)) = "req-uuid-123"
-					return nil
-				}}
-			}
-			return discordTestRow{scan: func(dest ...any) error {
-				return pgx.ErrNoRows
-			}}
-		},
-	}
-
-	err := handleLinkEmail(context.Background(), "discord123", "johndoe", "john@example.com", db)
-	if err != nil {
-		t.Fatalf("handleLinkEmail failed: %v", err)
-	}
-
-	// Verify we updated the requester's email directly
-	foundUpdateEmail := false
-	for _, sql := range db.execs {
-		if strings.Contains(sql, "update requesters set email") {
-			foundUpdateEmail = true
-		}
-	}
-
-	if !foundUpdateEmail {
-		t.Error("expected update requesters set email")
-	}
-}
-
-func TestHandleLinkEmail_InvalidEmail(t *testing.T) {
+func TestBeginDiscordEmailLink_RateLimited(t *testing.T) {
 	db := &discordTestDB{}
-	err := handleLinkEmail(context.Background(), "discord123", "johndoe", "", db)
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	err := beginDiscordEmailLink(context.Background(), "discord123", "john@example.com", db, rdb)
+	if !errors.Is(err, errDiscordLinkRateLimited) {
+		t.Fatalf("error = %v, want errDiscordLinkRateLimited", err)
+	}
+	if got := rdb.LLen(context.Background(), "jobs").Val(); got != 0 {
+		t.Fatal("rate-limited request queued an email")
+	}
+}
+
+func TestBeginDiscordEmailLink_InvalidEmail(t *testing.T) {
+	db := &discordTestDB{}
+	err := beginDiscordEmailLink(context.Background(), "discord123", "", db, nil)
 	if err == nil {
 		t.Fatal("expected error for empty email")
+	}
+}
+
+func TestCompleteDiscordEmailLink_ConsumesChallengeAndMapsRequester(t *testing.T) {
+	db := &discordTestDB{
+		queryRow: func(sql string, args ...any) pgx.Row {
+			return discordTestRow{scan: func(dest ...any) error {
+				*(dest[0].(*string)) = "requester-1"
+				return nil
+			}}
+		},
+	}
+
+	err := completeDiscordEmailLink(context.Background(), "discord123", "johndoe", "secret-token", db)
+	if err != nil {
+		t.Fatalf("completeDiscordEmailLink failed: %v", err)
+	}
+	if !strings.Contains(db.lastSQL, "set consumed_at = now()") {
+		t.Fatal("verification query does not consume the challenge")
+	}
+	if !strings.Contains(db.lastSQL, "insert into discord_user_mappings") {
+		t.Fatal("verification query does not create the mapping")
+	}
+	storedHash := db.lastArgs[1].([]byte)
+	wantHash := sha256.Sum256([]byte("secret-token"))
+	if !bytes.Equal(storedHash, wantHash[:]) {
+		t.Fatal("verification query did not use the token hash")
+	}
+}
+
+func TestCompleteDiscordEmailLink_RejectsInvalidOrReusedToken(t *testing.T) {
+	db := &discordTestDB{}
+	err := completeDiscordEmailLink(context.Background(), "discord123", "johndoe", "bad-token", db)
+	if !errors.Is(err, errDiscordLinkInvalid) {
+		t.Fatalf("error = %v, want errDiscordLinkInvalid", err)
+	}
+}
+
+func TestDiscordEmailLinkEnabled(t *testing.T) {
+	if discordEmailLinkEnabled(Config{SMTPHost: "smtp.example.com"}) {
+		t.Fatal("email linking enabled without SMTP_FROM")
+	}
+	if !discordEmailLinkEnabled(Config{SMTPHost: "smtp.example.com", SMTPFrom: "helpdesk@example.com"}) {
+		t.Fatal("email linking disabled with complete SMTP configuration")
 	}
 }

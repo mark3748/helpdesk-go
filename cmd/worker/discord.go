@@ -2,11 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
@@ -19,6 +24,16 @@ import (
 )
 
 var dgSession atomic.Pointer[discordgo.Session]
+
+const (
+	discordLinkChallengeTTLMinutes = 15
+	discordLinkChallengeLimit      = 3
+)
+
+var (
+	errDiscordLinkRateLimited = errors.New("too many verification requests; try again later")
+	errDiscordLinkInvalid     = errors.New("invalid or expired verification token")
+)
 
 // runDiscordBot connects to the Discord gateway, registers slash commands, and processes events.
 func runDiscordBot(ctx context.Context, c Config, db app.DB, store app.ObjectStore, rdb *redis.Client) error {
@@ -78,9 +93,11 @@ func runDiscordBot(ctx context.Context, c Config, db app.DB, store app.ObjectSto
 			Name:        "create-ticket",
 			Description: "Create a new support ticket",
 		},
-		{
+	}
+	if discordEmailLinkEnabled(c) {
+		commands = append(commands, &discordgo.ApplicationCommand{
 			Name:        "link-email",
-			Description: "Link your Discord account to a Helpdesk email address",
+			Description: "Send an email verification token for account linking",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
@@ -89,7 +106,20 @@ func runDiscordBot(ctx context.Context, c Config, db app.DB, store app.ObjectSto
 					Required:    true,
 				},
 			},
-		},
+		}, &discordgo.ApplicationCommand{
+			Name:        "verify-email",
+			Description: "Complete email verification and link your account",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "token",
+					Description: "Verification token sent to your email",
+					Required:    true,
+				},
+			},
+		})
+	} else {
+		log.Warn().Msg("Discord email linking disabled because SMTP_HOST or SMTP_FROM is not configured")
 	}
 
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
@@ -102,9 +132,20 @@ func runDiscordBot(ctx context.Context, c Config, db app.DB, store app.ObjectSto
 		}
 	}
 
-	// Wait for context to end
-	<-ctx.Done()
+	cleanupTicker := time.NewTicker(time.Hour)
+	defer cleanupTicker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			goto shutdown
+		case <-cleanupTicker.C:
+			if err := cleanupExpiredDiscordLinkChallenges(ctx, db); err != nil {
+				log.Error().Err(err).Msg("cleanup expired Discord link challenges")
+			}
+		}
+	}
 
+shutdown:
 	// Cleanup registered commands
 	for _, cmd := range registeredCommands {
 		if cmd != nil {
@@ -173,6 +214,10 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 			}
 
 		case "link-email":
+			if !discordEmailLinkEnabled(c) {
+				respondInteractionError(s, i, "❌ Email linking is not configured.")
+				return
+			}
 			if len(data.Options) == 0 {
 				respondInteractionError(s, i, "❌ Missing required email option.")
 				return
@@ -183,24 +228,44 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 			}
 			emailOpt := data.Options[0].StringValue()
 			discordUserID := i.Member.User.ID
-			username := i.Member.User.Username
-
-			err := handleLinkEmail(ctx, discordUserID, username, emailOpt, db)
+			err := beginDiscordEmailLink(ctx, discordUserID, emailOpt, db, rdb)
 
 			var respMsg string
 			if err != nil {
-				respMsg = fmt.Sprintf("❌ Failed to link email: %v", err)
+				if errors.Is(err, errDiscordLinkRateLimited) {
+					respMsg = "❌ Too many verification requests. Please try again later."
+				} else {
+					respMsg = "❌ Unable to start email verification."
+					log.Error().Err(err).Str("discord_user_id", discordUserID).Msg("start Discord email verification")
+				}
 			} else {
-				respMsg = fmt.Sprintf("✅ Successfully linked your Discord account to **%s**!", emailOpt)
+				respMsg = "✅ If that address can receive email, a verification token has been sent. Use `/verify-email` within 15 minutes."
 			}
 
-			_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: respMsg,
-					Flags:   discordgo.MessageFlagsEphemeral,
-				},
-			})
+			respondInteractionError(s, i, respMsg)
+
+		case "verify-email":
+			if len(data.Options) == 0 {
+				respondInteractionError(s, i, "❌ Missing required verification token.")
+				return
+			}
+			if i.Member == nil || i.Member.User == nil {
+				respondInteractionError(s, i, "❌ Unable to identify your Discord user.")
+				return
+			}
+
+			discordUserID := i.Member.User.ID
+			err := completeDiscordEmailLink(ctx, discordUserID, i.Member.User.Username, data.Options[0].StringValue(), db)
+			if errors.Is(err, errDiscordLinkInvalid) {
+				respondInteractionError(s, i, "❌ Invalid or expired verification token.")
+				return
+			}
+			if err != nil {
+				log.Error().Err(err).Str("discord_user_id", discordUserID).Msg("complete Discord email verification")
+				respondInteractionError(s, i, "❌ Unable to complete email verification.")
+				return
+			}
+			respondInteractionError(s, i, "✅ Your Discord account is now linked to the verified email address.")
 		}
 
 	case discordgo.InteractionModalSubmit:
@@ -297,49 +362,137 @@ func respondInteractionError(s *discordgo.Session, i *discordgo.InteractionCreat
 	}
 }
 
-// handleLinkEmail maps/updates Discord account to requester email.
-func handleLinkEmail(ctx context.Context, discordUserID, username, targetEmail string, db app.DB) error {
-	targetEmail = strings.ToLower(strings.TrimSpace(targetEmail))
-	if targetEmail == "" {
-		return errors.New("email cannot be empty")
-	}
+func discordEmailLinkEnabled(c Config) bool {
+	return strings.TrimSpace(c.SMTPHost) != "" && strings.TrimSpace(c.SMTPFrom) != ""
+}
 
-	// 1. Check if a requester with this email already exists
-	var existingReqID string
-	err := db.QueryRow(ctx, "select id::text from requesters where lower(email) = $1", targetEmail).Scan(&existingReqID)
-	if err == nil {
-		// Linked to existing requester. Upsert mapping.
-		_, err = db.Exec(ctx, `
-			insert into discord_user_mappings (discord_user_id, requester_id)
-			values ($1, $2)
-			on conflict (discord_user_id) do update set requester_id = excluded.requester_id
-		`, discordUserID, existingReqID)
-		return err
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("lookup requester by email: %w", err)
-	}
-
-	// 2. If not found in requesters, check if we have a mapping already
-	var curReqID string
-	err = db.QueryRow(ctx, "select requester_id::text from discord_user_mappings where discord_user_id=$1", discordUserID).Scan(&curReqID)
-	if err == nil {
-		// Update their current auto-created requester's email
-		_, err = db.Exec(ctx, "update requesters set email = $1 where id=$2", targetEmail, curReqID)
-		return err
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("lookup discord mapping: %w", err)
-	}
-
-	// 3. If no mapping exists, create new requester first
-	newID := uuid.NewString()
-	_, err = db.Exec(ctx, "insert into requesters (id, name, email) values ($1, $2, $3)", newID, username, targetEmail)
+// beginDiscordEmailLink creates a short-lived challenge and emails the plaintext token.
+func beginDiscordEmailLink(ctx context.Context, discordUserID, targetEmail string, db app.DB, rdb *redis.Client) error {
+	email, err := sanitizeAndValidateEmail(strings.ToLower(strings.TrimSpace(targetEmail)))
 	if err != nil {
 		return err
 	}
+	if rdb == nil {
+		return errors.New("Redis is required for Discord email verification")
+	}
 
-	_, err = db.Exec(ctx, "insert into discord_user_mappings (discord_user_id, requester_id) values ($1, $2)", discordUserID, newID)
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return fmt.Errorf("generate verification token: %w", err)
+	}
+	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
+	tokenHash := sha256.Sum256([]byte(token))
+
+	var challengeID string
+	err = db.QueryRow(ctx, `
+		with allowed as (
+			select count(*) < $4 as ok
+			from discord_link_challenges
+			where created_at > now() - interval '1 hour'
+			  and (discord_user_id = $1 or email = $2)
+		),
+		invalidated as (
+			update discord_link_challenges
+			set consumed_at = now()
+			where discord_user_id = $1
+			  and consumed_at is null
+			  and (select ok from allowed)
+			returning id
+		),
+		inserted as (
+			insert into discord_link_challenges (discord_user_id, email, token_hash, expires_at)
+			select $1, $2, $3, now() + make_interval(mins => $5)
+			where (select ok from allowed)
+			returning id::text
+		)
+		select id from inserted
+	`, discordUserID, email, tokenHash[:], discordLinkChallengeLimit, discordLinkChallengeTTLMinutes).Scan(&challengeID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errDiscordLinkRateLimited
+	}
+	if err != nil {
+		return fmt.Errorf("create Discord link challenge: %w", err)
+	}
+
+	jobData, err := json.Marshal(EmailJob{
+		To:       email,
+		Template: "discord_link_verification",
+		Data: map[string]any{
+			"Token":     token,
+			"ExpiresIn": fmt.Sprintf("%d minutes", discordLinkChallengeTTLMinutes),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal verification email: %w", err)
+	}
+	job, err := json.Marshal(Job{Type: "send_email", Data: jobData})
+	if err != nil {
+		return fmt.Errorf("marshal verification email job: %w", err)
+	}
+	if err := rdb.RPush(ctx, "jobs", job).Err(); err != nil {
+		_, _ = db.Exec(ctx, "update discord_link_challenges set consumed_at = now() where id = $1", challengeID)
+		return fmt.Errorf("enqueue verification email: %w", err)
+	}
+	return nil
+}
+
+// completeDiscordEmailLink atomically consumes a challenge and creates the verified mapping.
+func completeDiscordEmailLink(ctx context.Context, discordUserID, username, token string, db app.DB) error {
+	tokenHash := sha256.Sum256([]byte(strings.TrimSpace(token)))
+
+	var requesterID string
+	err := db.QueryRow(ctx, `
+		with consumed as (
+			update discord_link_challenges
+			set consumed_at = now()
+			where discord_user_id = $1
+			  and token_hash = $2
+			  and consumed_at is null
+			  and expires_at > now()
+			returning email
+		),
+		existing_requester as (
+			select r.id
+			from requesters r
+			join consumed c on lower(r.email) = c.email
+			limit 1
+		),
+		created_requester as (
+			insert into requesters (email, name)
+			select c.email, $3
+			from consumed c
+			where not exists (select 1 from existing_requester)
+			on conflict (email) do update set email = excluded.email
+			returning id
+		),
+		requester as (
+			select id from existing_requester
+			union all
+			select id from created_requester
+		),
+		mapped as (
+			insert into discord_user_mappings (discord_user_id, requester_id)
+			select $1, id from requester
+			on conflict (discord_user_id) do update set requester_id = excluded.requester_id
+			returning requester_id::text
+		)
+		select requester_id from mapped
+	`, discordUserID, tokenHash[:], username).Scan(&requesterID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errDiscordLinkInvalid
+	}
+	if err != nil {
+		return fmt.Errorf("complete Discord link challenge: %w", err)
+	}
+	return nil
+}
+
+func cleanupExpiredDiscordLinkChallenges(ctx context.Context, db app.DB) error {
+	_, err := db.Exec(ctx, `
+		delete from discord_link_challenges
+		where expires_at < now() - interval '24 hours'
+		   or consumed_at < now() - interval '24 hours'
+	`)
 	return err
 }
 
