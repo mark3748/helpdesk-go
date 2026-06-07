@@ -46,6 +46,7 @@ type Config struct {
 	SMTPPass                 string
 	SMTPFrom                 string
 	IMAPHost                 string
+	IMAPPort                 string
 	IMAPUser                 string
 	IMAPPass                 string
 	IMAPFolder               string
@@ -83,6 +84,7 @@ func cfg() Config {
 		SMTPPass:          getEnv("SMTP_PASS", ""),
 		SMTPFrom:          getEnv("SMTP_FROM", ""),
 		IMAPHost:          getEnv("IMAP_HOST", ""),
+		IMAPPort:          getEnv("IMAP_PORT", "993"),
 		IMAPUser:          getEnv("IMAP_USER", ""),
 		IMAPPass:          getEnv("IMAP_PASS", ""),
 		IMAPFolder:        getEnv("IMAP_FOLDER", "INBOX"),
@@ -244,6 +246,43 @@ func sendEmail(ctx context.Context, db app.DB, c Config, j EmailJob) error {
 		_, _ = db.Exec(ctx, `insert into email_outbound (to_addr, subject, body_html, status, retries, ticket_id) values ($1,$2,$3,$4,$5,$6)`, sanitizedTo, sanitizedSubject, bodyBuf.String(), status, j.Retries, j.TicketID)
 	}
 	return nil
+}
+
+// effectiveMailConfig overlays non-empty database settings on environment defaults.
+func effectiveMailConfig(ctx context.Context, db app.DB, c Config) Config {
+	if db == nil {
+		return c
+	}
+	var raw []byte
+	if err := db.QueryRow(ctx, "select mail from settings where id=1").Scan(&raw); err != nil || len(raw) == 0 {
+		return c
+	}
+	var mail map[string]string
+	if err := json.Unmarshal(raw, &mail); err != nil {
+		return c
+	}
+	apply := func(key string, target *string) {
+		if value := strings.TrimSpace(mail[key]); value != "" {
+			*target = value
+		}
+	}
+	apply("smtp_host", &c.SMTPHost)
+	apply("smtp_port", &c.SMTPPort)
+	if strings.TrimSpace(mail["smtp_host"]) == "" {
+		apply("host", &c.SMTPHost)
+	}
+	if strings.TrimSpace(mail["smtp_port"]) == "" {
+		apply("port", &c.SMTPPort)
+	}
+	apply("smtp_user", &c.SMTPUser)
+	apply("smtp_pass", &c.SMTPPass)
+	apply("smtp_from", &c.SMTPFrom)
+	apply("imap_host", &c.IMAPHost)
+	apply("imap_port", &c.IMAPPort)
+	apply("imap_user", &c.IMAPUser)
+	apply("imap_pass", &c.IMAPPass)
+	apply("imap_folder", &c.IMAPFolder)
+	return c
 }
 
 // processQueueJob pops one job and processes it (test helper)
@@ -576,20 +615,23 @@ func main() {
 		}
 	}
 
-	if c.IMAPHost != "" {
-		go func() {
-			for {
-				if err := pollIMAP(ctx, c, db, store, rdb); err != nil {
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			mailConfig := effectiveMailConfig(ctx, db, c)
+			if mailConfig.IMAPHost != "" {
+				if err := pollIMAP(ctx, mailConfig, db, store, rdb); err != nil {
 					log.Error().Err(err).Msg("poll imap")
 				}
-				time.Sleep(time.Minute)
 			}
-		}()
-	}
+			<-ticker.C
+		}
+	}()
 
 	if c.DiscordBotToken != "" {
 		go func() {
-			if err := runDiscordBot(ctx, c, db, store, rdb); err != nil {
+			if err := runDiscordBot(ctx, effectiveMailConfig(ctx, db, c), db, store, rdb); err != nil {
 				log.Error().Err(err).Msg("run discord bot")
 			}
 		}()
@@ -642,7 +684,7 @@ func main() {
 				log.Error().Err(err).Msg("unmarshal email job")
 				continue
 			}
-			if err := sendEmail(ctx, db, c, ej); err != nil {
+			if err := sendEmail(ctx, db, effectiveMailConfig(ctx, db, c), ej); err != nil {
 				log.Error().Err(err).Msg("send email")
 				// Do not retry validation errors (e.g. invalid/missing email addresses)
 				if !strings.Contains(err.Error(), "invalid To address") &&

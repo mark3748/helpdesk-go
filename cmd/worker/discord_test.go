@@ -193,3 +193,36 @@ func TestDiscordEmailLinkEnabled(t *testing.T) {
 		t.Fatal("email linking disabled with complete SMTP configuration")
 	}
 }
+
+func TestEffectiveMailConfigDatabaseOverridesEnvironment(t *testing.T) {
+	db := &discordTestDB{
+		queryRow: func(sql string, args ...any) pgx.Row {
+			return discordTestRow{scan: func(dest ...any) error {
+				*(dest[0].(*[]byte)) = []byte(`{
+					"smtp_host":"db-smtp.example.com",
+					"smtp_pass":"db-secret",
+					"imap_host":"db-imap.example.com",
+					"imap_port":"1993"
+				}`)
+				return nil
+			}}
+		},
+	}
+	base := Config{
+		SMTPHost: "env-smtp.example.com",
+		SMTPPort: "25",
+		SMTPPass: "env-secret",
+		IMAPPort: "993",
+	}
+
+	got := effectiveMailConfig(context.Background(), db, base)
+	if got.SMTPHost != "db-smtp.example.com" || got.SMTPPass != "db-secret" {
+		t.Fatalf("SMTP database override not applied: %+v", got)
+	}
+	if got.SMTPPort != "25" {
+		t.Fatalf("empty database SMTP port should preserve environment fallback, got %q", got.SMTPPort)
+	}
+	if got.IMAPHost != "db-imap.example.com" || got.IMAPPort != "1993" {
+		t.Fatalf("IMAP database override not applied: %+v", got)
+	}
+}

@@ -166,7 +166,7 @@ Examples:
       # MINIO_SECRET_KEY: "..."
       # MINIO_BUCKET: "attachments"
   ```
-- You can combine `secrets.data` with `env:` in `values.yaml`. Explicit `env:` keys win if duplicated.
+- You can combine `secrets.data` with `env:` in `values.yaml`. Empty `env:` values are omitted so they do not override Secret values; non-empty explicit `env:` keys win if duplicated.
 
 ### Private Registry Pull
 If your images are in a private registry (e.g., GHCR), add an imagePullSecret and reference it:
@@ -263,7 +263,8 @@ Worker (cmd/worker):
 - `DATABASE_URL`, `REDIS_ADDR`, `ENV`.
 - SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
 - Discord (optional): `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, `DISCORD_CHANNEL_ID`. Email-verified account linking commands are registered only when `SMTP_HOST` and `SMTP_FROM` are also configured.
-- IMAP (optional): `IMAP_HOST`, `IMAP_USER`, `IMAP_PASS`, `IMAP_FOLDER`.
+- IMAP (optional): `IMAP_HOST`, `IMAP_PORT`, `IMAP_USER`, `IMAP_PASS`, `IMAP_FOLDER`.
+- Mail settings saved through the admin UI override non-empty worker environment values. Passwords are never returned to the browser, and leaving a password field blank preserves the configured secret.
 - MinIO/S3: `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`.
 - `LOG_PATH`: directory for worker log output (default system temp dir, e.g. `/tmp`). Falls back to stdout if unwritable.
 

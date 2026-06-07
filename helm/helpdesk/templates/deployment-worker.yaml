@@ -49,8 +49,10 @@ spec:
           {{- end }}
           env:
             {{- range $k, $v := .Values.env }}
+            {{- if ne (toString $v) "" }}
             - name: {{ $k | quote }}
               value: {{ $v | quote }}
+            {{- end }}
             {{- end }}
             - name: HEALTH_ADDR
               value: ":8081"

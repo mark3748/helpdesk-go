@@ -106,6 +106,7 @@ env:
   SMTP_PASS: ""
   SMTP_FROM: ""
   IMAP_HOST: ""
+  IMAP_PORT: "993"
   IMAP_USER: ""
   IMAP_PASS: ""
   IMAP_FOLDER: "INBOX"

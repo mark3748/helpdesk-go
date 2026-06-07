@@ -244,6 +244,48 @@ func TestMailTestDefaults(t *testing.T) {
 	}
 }
 
+func TestPublicMailSettingsMergesEnvironmentAndRedactsPasswords(t *testing.T) {
+	t.Setenv("SMTP_HOST", "env-smtp.example.com")
+	t.Setenv("SMTP_PORT", "587")
+	t.Setenv("SMTP_PASS", "env-secret")
+	t.Setenv("IMAP_PASS", "env-imap-secret")
+
+	got := publicMailSettings(map[string]string{"smtp_host": "db-smtp.example.com"})
+	if got["smtp_host"] != "db-smtp.example.com" {
+		t.Fatalf("database setting did not override environment: %#v", got)
+	}
+	if got["smtp_port"] != "587" {
+		t.Fatalf("environment fallback missing: %#v", got)
+	}
+	if got["smtp_pass"] != "" || got["imap_pass"] != "" {
+		t.Fatalf("passwords exposed in public settings: %#v", got)
+	}
+	if got["smtp_pass_configured"] != "true" || got["imap_pass_configured"] != "true" {
+		t.Fatalf("password configured flags missing: %#v", got)
+	}
+}
+
+func TestPrepareMailSettingsUpdatePreservesStoredPasswords(t *testing.T) {
+	db := &fakeDB{s: Settings{Mail: map[string]string{
+		"smtp_host": "smtp.example.com",
+		"smtp_pass": "stored-smtp-secret",
+		"imap_pass": "stored-imap-secret",
+	}}}
+	InitSettings(context.Background(), db, "/tmp/logs")
+
+	got := prepareMailSettingsUpdate(context.Background(), map[string]string{
+		"smtp_host": "new-smtp.example.com",
+		"smtp_pass": "",
+		"imap_pass": "",
+	})
+	if got["smtp_pass"] != "stored-smtp-secret" || got["imap_pass"] != "stored-imap-secret" {
+		t.Fatalf("blank password fields did not preserve stored secrets: %#v", got)
+	}
+	if got["smtp_host"] != "new-smtp.example.com" {
+		t.Fatalf("non-secret update was not applied: %#v", got)
+	}
+}
+
 func TestStorageConnectionHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

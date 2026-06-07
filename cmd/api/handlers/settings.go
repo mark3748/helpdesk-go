@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/smtp"
+	"os"
 	"strings"
 	"time"
 
@@ -55,6 +56,77 @@ var (
 	// in-memory fallback for tests when no DB is wired
 	memMail map[string]string
 )
+
+var mailSettingKeys = []string{
+	"smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from",
+	"imap_host", "imap_port", "imap_user", "imap_pass", "imap_folder",
+	"host", "port",
+}
+
+func effectiveMailSettings(stored map[string]string) map[string]string {
+	out := map[string]string{
+		"smtp_host":   os.Getenv("SMTP_HOST"),
+		"smtp_port":   os.Getenv("SMTP_PORT"),
+		"smtp_user":   os.Getenv("SMTP_USER"),
+		"smtp_pass":   os.Getenv("SMTP_PASS"),
+		"smtp_from":   os.Getenv("SMTP_FROM"),
+		"imap_host":   os.Getenv("IMAP_HOST"),
+		"imap_port":   os.Getenv("IMAP_PORT"),
+		"imap_user":   os.Getenv("IMAP_USER"),
+		"imap_pass":   os.Getenv("IMAP_PASS"),
+		"imap_folder": os.Getenv("IMAP_FOLDER"),
+	}
+	if out["smtp_port"] == "" {
+		out["smtp_port"] = "25"
+	}
+	if out["imap_port"] == "" {
+		out["imap_port"] = "993"
+	}
+	if out["imap_folder"] == "" {
+		out["imap_folder"] = "INBOX"
+	}
+	for _, key := range mailSettingKeys {
+		if value := strings.TrimSpace(stored[key]); value != "" {
+			out[key] = value
+		}
+	}
+	if strings.TrimSpace(stored["smtp_host"]) == "" && strings.TrimSpace(stored["host"]) != "" {
+		out["smtp_host"] = strings.TrimSpace(stored["host"])
+	}
+	if strings.TrimSpace(stored["smtp_port"]) == "" && strings.TrimSpace(stored["port"]) != "" {
+		out["smtp_port"] = strings.TrimSpace(stored["port"])
+	}
+	return out
+}
+
+func publicMailSettings(stored map[string]string) map[string]string {
+	out := effectiveMailSettings(stored)
+	out["smtp_pass_configured"] = cond(out["smtp_pass"] != "", "true", "false")
+	out["imap_pass_configured"] = cond(out["imap_pass"] != "", "true", "false")
+	out["smtp_pass"] = ""
+	out["imap_pass"] = ""
+	return out
+}
+
+func prepareMailSettingsUpdate(ctx context.Context, data map[string]string) map[string]string {
+	var current map[string]string
+	if dbStore == nil {
+		current = memMail
+	} else if settings, err := loadSettings(ctx); err == nil {
+		current = settings.Mail
+	}
+	out := make(map[string]string, len(mailSettingKeys))
+	for _, key := range mailSettingKeys {
+		value := strings.TrimSpace(data[key])
+		if (key == "smtp_pass" || key == "imap_pass") && value == "" {
+			value = current[key]
+		}
+		if value != "" {
+			out[key] = value
+		}
+	}
+	return out
+}
 
 // InitSettings ensures a row exists, sets initial log path, and stores DB handle.
 func InitSettings(ctx context.Context, db DB, logPath string) {
@@ -161,6 +233,7 @@ func GetSettings(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	s.Mail = publicMailSettings(s.Mail)
 	c.JSON(http.StatusOK, s)
 }
 
@@ -209,6 +282,7 @@ func SaveMailSettings(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	data = prepareMailSettingsUpdate(c.Request.Context(), data)
 	if dbStore == nil {
 		// store in memory for tests
 		memMail = make(map[string]string, len(data))
@@ -234,16 +308,16 @@ func MailSettings() map[string]string {
 		for k, v := range memMail {
 			out[k] = v
 		}
-		return out
+		return effectiveMailSettings(out)
 	}
 	if dbStore == nil {
-		return map[string]string{}
+		return effectiveMailSettings(nil)
 	}
 	s, err := loadSettings(context.Background())
 	if err != nil {
 		return map[string]string{}
 	}
-	return s.Mail
+	return effectiveMailSettings(s.Mail)
 }
 
 // SendTestMail enqueues a test email via the worker.
@@ -256,8 +330,16 @@ func SendTestMail(c *gin.Context) {
 	if to == "" {
 		to = MailSettings()["smtp_from"]
 	}
+	if strings.TrimSpace(to) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "test email recipient is required"})
+		return
+	}
 	EnqueueEmail(c.Request.Context(), to, "test_email", nil)
-	c.JSON(http.StatusOK, gin.H{"queued": true})
+	now := time.Now()
+	if dbStore != nil {
+		_, _ = dbStore.Exec(c.Request.Context(), "update settings set last_test=$1 where id=1", now)
+	}
+	c.JSON(http.StatusOK, gin.H{"queued": true, "last_test": now.Format(time.RFC3339)})
 }
 
 // TestConnection records a test timestamp and returns log path and last result.
@@ -293,7 +375,7 @@ func GetSystemInfo(c *gin.Context) {
 		"uptime":          "running", // TODO: track actual uptime
 		"database_status": "connected",
 		"oidc_status":     cond(oidcConfigured, "configured", "not_configured"),
-		"mail_status":     cond(len(s.Mail) > 0, "configured", "not_configured"),
+		"mail_status":     cond(MailSettings()["smtp_host"] != "", "configured", "not_configured"),
 		"storage_status":  storageStatus,
 	})
 }
