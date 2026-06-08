@@ -28,6 +28,10 @@ var dgSession atomic.Pointer[discordgo.Session]
 const (
 	discordLinkChallengeTTLMinutes = 15
 	discordLinkChallengeLimit      = 3
+	discordCreateTicketModalID     = "create_ticket_modal"
+	discordTicketTitleInputID      = "ticket_title"
+	discordTicketDescInputID       = "ticket_desc"
+	discordTicketPriorityInputID   = "ticket_priority"
 )
 
 var (
@@ -168,13 +172,13 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseModal,
 				Data: &discordgo.InteractionResponseData{
-					CustomID: "create_ticket_modal",
+					CustomID: discordCreateTicketModalID,
 					Title:    "Create Support Ticket",
 					Components: []discordgo.MessageComponent{
 						discordgo.ActionsRow{
 							Components: []discordgo.MessageComponent{
 								discordgo.TextInput{
-									CustomID:    "ticket_title",
+									CustomID:    discordTicketTitleInputID,
 									Label:       "Title",
 									Style:       discordgo.TextInputShort,
 									Placeholder: "Brief summary of your request",
@@ -186,7 +190,7 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 						discordgo.ActionsRow{
 							Components: []discordgo.MessageComponent{
 								discordgo.TextInput{
-									CustomID:    "ticket_desc",
+									CustomID:    discordTicketDescInputID,
 									Label:       "Description",
 									Style:       discordgo.TextInputParagraph,
 									Placeholder: "Provide details of the issue",
@@ -197,8 +201,8 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 						discordgo.ActionsRow{
 							Components: []discordgo.MessageComponent{
 								discordgo.TextInput{
-									CustomID:    "ticket_priority",
-									Label:       "Priority (1=Low, 2=Medium, 3=High, 4=Urgent)",
+									CustomID:    discordTicketPriorityInputID,
+									Label:       "Priority (1=Critical, 2=High, 3=Medium, 4=Low)",
 									Style:       discordgo.TextInputShort,
 									Placeholder: "2",
 									Required:    true,
@@ -270,34 +274,25 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 
 	case discordgo.InteractionModalSubmit:
 		data := i.ModalSubmitData()
-		if data.CustomID == "create_ticket_modal" {
+		if data.CustomID == discordCreateTicketModalID {
 			if i.Member == nil || i.Member.User == nil {
 				respondInteractionError(s, i, "❌ Unable to identify your Discord user.")
 				return
 			}
-			title := ""
-			desc := ""
-			priorityStr := "2"
-
-			for _, row := range data.Components {
-				actionsRow, ok := row.(discordgo.ActionsRow)
-				if !ok {
-					continue
-				}
-				for _, comp := range actionsRow.Components {
-					input, ok := comp.(discordgo.TextInput)
-					if !ok {
-						continue
-					}
-					switch input.CustomID {
-					case "ticket_title":
-						title = input.Value
-					case "ticket_desc":
-						desc = input.Value
-					case "ticket_priority":
-						priorityStr = input.Value
-					}
-				}
+			inputs := discordModalTextInputValues(data)
+			title := strings.TrimSpace(inputs[discordTicketTitleInputID])
+			desc := strings.TrimSpace(inputs[discordTicketDescInputID])
+			priorityStr := strings.TrimSpace(inputs[discordTicketPriorityInputID])
+			if title == "" || desc == "" {
+				log.Warn().
+					Bool("missing_title", title == "").
+					Bool("missing_description", desc == "").
+					Msg("rejecting create-ticket modal with missing required fields")
+				respondInteractionError(s, i, "❌ Ticket title and description are required.")
+				return
+			}
+			if priorityStr == "" {
+				priorityStr = "2"
 			}
 
 			parsedPriority, err := strconv.ParseInt(priorityStr, 10, 16)
@@ -348,6 +343,30 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 			})
 		}
 	}
+}
+
+func discordModalTextInputValues(data discordgo.ModalSubmitInteractionData) map[string]string {
+	values := make(map[string]string)
+	for _, component := range data.Components {
+		var children []discordgo.MessageComponent
+		switch row := component.(type) {
+		case *discordgo.ActionsRow:
+			children = row.Components
+		case discordgo.ActionsRow:
+			children = row.Components
+		default:
+			continue
+		}
+		for _, component := range children {
+			switch input := component.(type) {
+			case *discordgo.TextInput:
+				values[input.CustomID] = input.Value
+			case discordgo.TextInput:
+				values[input.CustomID] = input.Value
+			}
+		}
+	}
+	return values
 }
 
 func respondInteractionError(s *discordgo.Session, i *discordgo.InteractionCreate, msg string) {

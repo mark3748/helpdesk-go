@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
@@ -191,6 +192,32 @@ func TestDiscordEmailLinkEnabled(t *testing.T) {
 	}
 	if !discordEmailLinkEnabled(Config{SMTPHost: "smtp.example.com", SMTPFrom: "helpdesk@example.com"}) {
 		t.Fatal("email linking disabled with complete SMTP configuration")
+	}
+}
+
+func TestDiscordModalTextInputValues_ExtractsDiscordGoPointerComponents(t *testing.T) {
+	var data discordgo.ModalSubmitInteractionData
+	err := json.Unmarshal([]byte(`{
+		"custom_id": "create_ticket_modal",
+		"components": [
+			{"type": 1, "components": [{"type": 4, "custom_id": "ticket_title", "value": "Printer is jammed"}]},
+			{"type": 1, "components": [{"type": 4, "custom_id": "ticket_desc", "value": "Third floor printer"}]},
+			{"type": 1, "components": [{"type": 4, "custom_id": "ticket_priority", "value": "3"}]}
+		]
+	}`), &data)
+	if err != nil {
+		t.Fatalf("unmarshal Discord modal: %v", err)
+	}
+
+	values := discordModalTextInputValues(data)
+	if got := values[discordTicketTitleInputID]; got != "Printer is jammed" {
+		t.Fatalf("title = %q, want Printer is jammed", got)
+	}
+	if got := values[discordTicketDescInputID]; got != "Third floor printer" {
+		t.Fatalf("description = %q, want Third floor printer", got)
+	}
+	if got := values[discordTicketPriorityInputID]; got != "3" {
+		t.Fatalf("priority = %q, want 3", got)
 	}
 }
 
