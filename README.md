@@ -165,6 +165,7 @@ Examples:
       # MINIO_ACCESS_KEY: "..."
       # MINIO_SECRET_KEY: "..."
       # MINIO_BUCKET: "attachments"
+      # MINIO_USE_SSL: false
   ```
 - You can combine `secrets.data` with `env:` in `values.yaml`. Empty `env:` values are omitted so they do not override Secret values; non-empty explicit `env:` keys win if duplicated.
 
