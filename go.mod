@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.35.0
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/emersion/go-imap v1.2.1
 	github.com/emersion/go-message v0.15.0

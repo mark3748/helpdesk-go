@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -372,6 +373,50 @@ func TestEnqueueEmail_InfinityError(t *testing.T) {
 
 	// This should not panic and should handle the marshal error gracefully
 	app.enqueueEmail(ctx, "test@example.com", "test_template", unmarshalableData)
+}
+
+func TestEnqueueEmail_UsesWorkerJobContract(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	app := &App{q: rdb}
+	ctx := context.Background()
+	app.enqueueEmail(ctx, "test@example.com", "test_template", map[string]any{"ticket_id": "123"})
+
+	if mr.Exists("email_queue") {
+		t.Fatal("expected legacy email_queue to remain empty")
+	}
+	jobs, err := mr.List("jobs")
+	if err != nil {
+		t.Fatalf("read worker jobs queue: %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("expected one worker job, got %d", len(jobs))
+	}
+
+	var job struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(jobs[0]), &job); err != nil {
+		t.Fatalf("unmarshal worker job: %v", err)
+	}
+	if job.Type != "send_email" {
+		t.Fatalf("expected send_email job, got %q", job.Type)
+	}
+
+	var payload struct {
+		To       string         `json:"to"`
+		Template string         `json:"template"`
+		Data     map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(job.Data, &payload); err != nil {
+		t.Fatalf("unmarshal email payload: %v", err)
+	}
+	if payload.To != "test@example.com" || payload.Template != "test_template" || payload.Data["ticket_id"] != "123" {
+		t.Fatalf("unexpected email payload: %+v", payload)
+	}
 }
 
 func TestCreateTicketValidationErrors(t *testing.T) {

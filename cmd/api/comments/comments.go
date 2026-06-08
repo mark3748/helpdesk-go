@@ -1,12 +1,14 @@
 package comments
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	app "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
 	eventspkg "github.com/mark3748/helpdesk-go/cmd/api/events"
+	"github.com/rs/zerolog/log"
 )
 
 func List(a *app.App) gin.HandlerFunc {
@@ -61,6 +63,22 @@ func Add(a *app.App) gin.HandlerFunc {
 			return
 		}
 		eventspkg.Emit(c.Request.Context(), a.DB, c.Param("id"), "ticket_updated", map[string]any{"id": c.Param("id")})
+
+		// Enqueue Discord comment sync job if Redis is configured
+		if a.Q != nil {
+			jobData, _ := json.Marshal(map[string]any{
+				"ticket_id": c.Param("id"),
+				"body_md":   in.BodyMD,
+			})
+			job, _ := json.Marshal(map[string]any{
+				"type": "discord_outgoing_comment",
+				"data": json.RawMessage(jobData),
+			})
+			if err := a.Q.RPush(c.Request.Context(), "jobs", job).Err(); err != nil {
+				log.Error().Err(err).Msg("failed to enqueue discord comment job")
+			}
+		}
+
 		c.JSON(http.StatusCreated, gin.H{"id": id})
 	}
 }

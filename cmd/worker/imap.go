@@ -42,7 +42,11 @@ func pollIMAP(ctx context.Context, c Config, db app.DB, store app.ObjectStore, r
 	if c.MinIOBucket != "" && store == nil {
 		return fmt.Errorf("object store is nil")
 	}
-	addr := fmt.Sprintf("%s:993", c.IMAPHost)
+	port := c.IMAPPort
+	if port == "" {
+		port = "993"
+	}
+	addr := fmt.Sprintf("%s:%s", c.IMAPHost, port)
 	cli, err := dialIMAP(addr)
 	if err != nil {
 		return err

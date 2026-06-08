@@ -9,12 +9,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	apppkg "github.com/mark3748/helpdesk-go/cmd/api/app"
 	authpkg "github.com/mark3748/helpdesk-go/cmd/api/auth"
 	"github.com/mark3748/helpdesk-go/cmd/api/testutil"
+	"github.com/redis/go-redis/v9"
 )
 
 func TestList(t *testing.T) {
@@ -34,7 +36,6 @@ func TestList(t *testing.T) {
 						if !strings.Contains(sql, "ticket_comments") {
 							return nil, errors.New("unexpected sql")
 						}
-						// Return 1 row
 						idx := 0
 						return &testutil.MockRows{
 							NextFunc: func() bool {
@@ -132,7 +133,6 @@ func TestAdd(t *testing.T) {
 						}
 					},
 					ExecFunc: func(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
-						// Called by Emit
 						return pgconn.CommandTag{}, nil
 					},
 				}
@@ -212,5 +212,75 @@ func TestAdd(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAdd_EnqueuesDiscordOutgoingCommentJob(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db := &testutil.MockDB{
+		QueryRowFunc: func(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+			return &testutil.MockRow{
+				ScanFunc: func(dest ...interface{}) error {
+					*(dest[0].(*string)) = "c-new"
+					return nil
+				},
+			}
+		},
+		ExecFunc: func(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+			return pgconn.CommandTag{}, nil
+		},
+	}
+
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() {
+		_ = rdb.Close()
+	})
+
+	cfg := apppkg.Config{Env: "test", TestBypassAuth: true}
+	a := apppkg.NewApp(cfg, db, nil, nil, rdb)
+	a.R.POST("/tickets/:id/comments", authpkg.Middleware(a), Add(a))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/tickets/ticket-1/comments", strings.NewReader(`{"body_md":"new comment"}`))
+	req.Header.Set("Content-Type", "application/json")
+	a.R.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Add() status = %v, want %v", rr.Code, http.StatusCreated)
+	}
+
+	items, err := rdb.LRange(context.Background(), "jobs", 0, -1).Result()
+	if err != nil {
+		t.Fatalf("LRange jobs: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("jobs len = %d, want 1", len(items))
+	}
+
+	var job struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(items[0]), &job); err != nil {
+		t.Fatalf("unmarshal job: %v", err)
+	}
+	if job.Type != "discord_outgoing_comment" {
+		t.Fatalf("job type = %q, want discord_outgoing_comment", job.Type)
+	}
+
+	var payload struct {
+		TicketID string `json:"ticket_id"`
+		BodyMD   string `json:"body_md"`
+	}
+	if err := json.Unmarshal(job.Data, &payload); err != nil {
+		t.Fatalf("unmarshal job payload: %v", err)
+	}
+	if payload.TicketID != "ticket-1" {
+		t.Fatalf("payload.ticket_id = %q, want ticket-1", payload.TicketID)
+	}
+	if payload.BodyMD != "new comment" {
+		t.Fatalf("payload.body_md = %q, want new comment", payload.BodyMD)
 	}
 }

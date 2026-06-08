@@ -193,11 +193,13 @@ export function useSaveOIDCSettings() {
 }
 
 export function useSendTestEmail() {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      apiFetch('/settings/mail/send-test', {
+    mutationFn: (to?: string) =>
+      apiFetch(`/settings/mail/send-test${to ? `?to=${encodeURIComponent(to)}` : ''}`, {
         method: 'POST',
       }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   });
 }
 
