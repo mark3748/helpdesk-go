@@ -221,6 +221,32 @@ func TestDiscordModalTextInputValues_ExtractsDiscordGoPointerComponents(t *testi
 	}
 }
 
+func TestSendCommentToDiscord_UnmappedTicketIgnoresUnavailableSession(t *testing.T) {
+	dgSession.Store(nil)
+
+	err := sendCommentToDiscord(context.Background(), &discordTestDB{}, "ticket-1", "hello")
+	if err != nil {
+		t.Fatalf("unmapped ticket returned error with unavailable Discord session: %v", err)
+	}
+}
+
+func TestSendCommentToDiscord_MappedTicketRequiresSession(t *testing.T) {
+	dgSession.Store(nil)
+	db := &discordTestDB{
+		queryRow: func(sql string, args ...any) pgx.Row {
+			return discordTestRow{scan: func(dest ...any) error {
+				*(dest[0].(*string)) = "thread-1"
+				return nil
+			}}
+		},
+	}
+
+	err := sendCommentToDiscord(context.Background(), db, "ticket-1", "hello")
+	if err == nil || !strings.Contains(err.Error(), "session is not available") {
+		t.Fatalf("mapped ticket error = %v, want unavailable session error", err)
+	}
+}
+
 func TestEffectiveMailConfigDatabaseOverridesEnvironment(t *testing.T) {
 	db := &discordTestDB{
 		queryRow: func(sql string, args ...any) pgx.Row {

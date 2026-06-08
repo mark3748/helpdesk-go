@@ -301,17 +301,6 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 				priority = int16(parsedPriority)
 			}
 
-			if i.Member == nil || i.Member.User == nil {
-				_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Content: "❌ Unable to resolve user for this interaction.",
-						Flags:   discordgo.MessageFlagsEphemeral,
-					},
-				})
-				return
-			}
-
 			discordUserID := i.Member.User.ID
 			username := i.Member.User.Username
 			displayName := i.Member.Nick
@@ -678,11 +667,6 @@ func handleMessageCreate(ctx context.Context, s *discordgo.Session, m *discordgo
 
 // sendCommentToDiscord posts outbound comments from the Helpdesk Web UI to the Discord thread.
 func sendCommentToDiscord(ctx context.Context, db app.DB, ticketID string, bodyMD string) error {
-	s := dgSession.Load()
-	if s == nil {
-		return errors.New("discord bot session is not available")
-	}
-
 	// Find the mapped Discord thread ID
 	var threadID string
 	err := db.QueryRow(ctx, "select discord_thread_id from discord_thread_mappings where ticket_id=$1", ticketID).Scan(&threadID)
@@ -692,6 +676,11 @@ func sendCommentToDiscord(ctx context.Context, db app.DB, ticketID string, bodyM
 			return nil
 		}
 		return fmt.Errorf("lookup discord thread mapping: %w", err)
+	}
+
+	s := dgSession.Load()
+	if s == nil {
+		return errors.New("discord bot session is not available")
 	}
 
 	msg := fmt.Sprintf("💬 **New Comment:**\n%s", bodyMD)
