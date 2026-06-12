@@ -221,6 +221,31 @@ func TestDiscordModalTextInputValues_ExtractsDiscordGoPointerComponents(t *testi
 	}
 }
 
+func TestCreateTicketModalFieldsMeetDiscordLengthLimits(t *testing.T) {
+	data := createTicketModalData()
+	if len(data.Title) < 1 || len(data.Title) > 45 {
+		t.Fatalf("modal title length = %d, Discord requires 1-45", len(data.Title))
+	}
+	for rowIndex, component := range data.Components {
+		row, ok := component.(discordgo.ActionsRow)
+		if !ok {
+			t.Fatalf("component %d is %T, want discordgo.ActionsRow", rowIndex, component)
+		}
+		for inputIndex, child := range row.Components {
+			input, ok := child.(discordgo.TextInput)
+			if !ok {
+				t.Fatalf("component %d.%d is %T, want discordgo.TextInput", rowIndex, inputIndex, child)
+			}
+			if len(input.Label) < 1 || len(input.Label) > 45 {
+				t.Fatalf("component %d.%d label %q length = %d, Discord requires 1-45", rowIndex, inputIndex, input.Label, len(input.Label))
+			}
+			if len(input.Placeholder) > 100 {
+				t.Fatalf("component %d.%d placeholder length = %d, Discord allows at most 100", rowIndex, inputIndex, len(input.Placeholder))
+			}
+		}
+	}
+}
+
 func TestSendCommentToDiscord_UnmappedTicketIgnoresUnavailableSession(t *testing.T) {
 	dgSession.Store(nil)
 
@@ -277,5 +302,30 @@ func TestEffectiveMailConfigDatabaseOverridesEnvironment(t *testing.T) {
 	}
 	if got.IMAPHost != "db-imap.example.com" || got.IMAPPort != "1993" {
 		t.Fatalf("IMAP database override not applied: %+v", got)
+	}
+}
+
+func TestEffectiveDiscordConfigDatabaseOverridesEnvironment(t *testing.T) {
+	db := &discordTestDB{
+		queryRow: func(sql string, args ...any) pgx.Row {
+			return discordTestRow{scan: func(dest ...any) error {
+				*(dest[0].(*[]byte)) = []byte(`{
+					"bot_token":"db-token",
+					"guild_id":"db-guild",
+					"channel_id":"db-channel"
+				}`)
+				return nil
+			}}
+		},
+	}
+	base := Config{
+		DiscordBotToken:  "env-token",
+		DiscordGuildID:   "env-guild",
+		DiscordChannelID: "env-channel",
+	}
+
+	got := effectiveDiscordConfig(context.Background(), db, base)
+	if got.DiscordBotToken != "db-token" || got.DiscordGuildID != "db-guild" || got.DiscordChannelID != "db-channel" {
+		t.Fatalf("Discord database override not applied: %+v", got)
 	}
 }

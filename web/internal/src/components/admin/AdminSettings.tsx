@@ -1,5 +1,5 @@
 import { Card, Row, Col, Statistic, List, Button, Space, Typography, Tag, Alert } from 'antd';
-import { SettingOutlined, DatabaseOutlined, MailOutlined, LockOutlined, CloudOutlined, UserOutlined } from '@ant-design/icons';
+import { SettingOutlined, DatabaseOutlined, MailOutlined, LockOutlined, CloudOutlined, UserOutlined, DiscordOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { useSystemInfo } from '../../api';
 
@@ -37,6 +37,13 @@ export default function AdminSettings() {
   };
 
   const settingsCategories = [
+    {
+      title: 'Discord Bot',
+      description: 'Configure Discord ticket creation and thread synchronization',
+      icon: <DiscordOutlined />,
+      path: '/settings/discord',
+      status: systemInfo?.discord_status,
+    },
     {
       title: 'Mail Settings',
       description: 'Configure SMTP settings for email notifications',
@@ -150,6 +157,12 @@ export default function AdminSettings() {
                   <Text>OIDC Authentication</Text>
                   <Tag color={getStatusColor(systemInfo?.oidc_status || '')}>
                     {getStatusText(systemInfo?.oidc_status || 'unknown')}
+                  </Tag>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text>Discord Bot</Text>
+                  <Tag color={getStatusColor(systemInfo?.discord_status || '')}>
+                    {getStatusText(systemInfo?.discord_status || 'unknown')}
                   </Tag>
                 </div>
               </Space>

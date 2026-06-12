@@ -1,3 +1,11 @@
+# Discord Bot Configuration UI
+
+**Summary:**
+- Added an admin settings page for Discord bot token, server ID, and ticket channel ID.
+- Discord bot tokens are redacted from API responses and preserved when the UI token field is left blank.
+- Saved Discord settings override worker environment variables after a worker restart.
+- Added Discord application setup, permissions, Helm/Tilt configuration, and troubleshooting documentation.
+
 # 0.4.5: UI Improvements
 
 **Summary:**

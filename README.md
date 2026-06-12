@@ -264,6 +264,7 @@ Worker (cmd/worker):
 - `DATABASE_URL`, `REDIS_ADDR`, `ENV`.
 - SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
 - Discord (optional): `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, `DISCORD_CHANNEL_ID`. Email-verified account linking commands are registered only when `SMTP_HOST` and `SMTP_FROM` are also configured.
+- Discord settings may also be saved under **Admin Settings → Discord Bot**. Saved values override worker environment variables after the worker is restarted. See [docs/discord.md](docs/discord.md) for setup and permissions.
 - IMAP (optional): `IMAP_HOST`, `IMAP_PORT`, `IMAP_USER`, `IMAP_PASS`, `IMAP_FOLDER`.
 - Mail settings saved through the admin UI override non-empty worker environment values. Passwords are never returned to the browser, and leaving a password field blank preserves the configured secret.
 - MinIO/S3: `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_USE_SSL`.

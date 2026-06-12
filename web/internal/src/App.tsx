@@ -9,6 +9,7 @@ import MailSettings from './components/admin/MailSettings';
 import OIDCSettings from './components/admin/OIDCSettings';
 import StorageSettings from './components/admin/StorageSettings';
 import AdminSettings from './components/admin/AdminSettings';
+import DiscordSettings from './components/admin/DiscordSettings';
 import AdminUsers from './components/admin/AdminUsers';
 import QueueManager from './components/manager/QueueManager';
 import ManagerAnalytics from './components/manager/ManagerAnalytics';
@@ -67,6 +68,7 @@ export default function App() {
                   <Route path="/settings/mail" element={<MailSettings />} />
                   <Route path="/settings/oidc" element={<OIDCSettings />} />
                   <Route path="/settings/storage" element={<StorageSettings />} />
+                  <Route path="/settings/discord" element={<DiscordSettings />} />
                   <Route path="/settings/users" element={<AdminUsers />} />
                   <Route path="/assets/categories" element={<AssetCategories />} />
                   <Route path="/assets/import" element={<AssetImport />} />
