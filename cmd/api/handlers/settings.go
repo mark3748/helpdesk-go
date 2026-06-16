@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/mark3748/helpdesk-go/internal/buildinfo"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -455,7 +456,8 @@ func GetSystemInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"version":         "1.0.0",
+		"version":         buildinfo.RuntimeVersion(),
+		"web_version":     buildinfo.RuntimeWebVersion(),
 		"uptime":          "running", // TODO: track actual uptime
 		"database_status": "connected",
 		"oidc_status":     cond(oidcConfigured, "configured", "not_configured"),

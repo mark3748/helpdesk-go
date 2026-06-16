@@ -164,7 +164,26 @@ func Search(a *app.App) gin.HandlerFunc {
 		}
 		q := strings.TrimSpace(c.Query("q"))
 		if q == "" {
-			c.JSON(http.StatusOK, []Requester{})
+			const sql = `
+			select id::text, coalesce(email,''), coalesce(name,''), coalesce(phone,'')
+			from requesters
+			order by created_at desc
+			limit 100`
+			rows, err := a.DB.Query(c.Request.Context(), sql)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+			out := []Requester{}
+			for rows.Next() {
+				var r Requester
+				if err := rows.Scan(&r.ID, &r.Email, &r.Name, &r.Phone); err != nil {
+					continue
+				}
+				out = append(out, r)
+			}
+			c.JSON(http.StatusOK, out)
 			return
 		}
 		// Sanitize input to prevent wildcard abuse (performance)

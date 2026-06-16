@@ -2,11 +2,12 @@
 FROM golang:1.25-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
+ARG APP_VERSION=dev
 WORKDIR /src
 COPY . .
 WORKDIR /src/cmd/api
 RUN go mod tidy \
-    && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -o /out/api
+    && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -ldflags="-X github.com/mark3748/helpdesk-go/internal/buildinfo.Version=${APP_VERSION}" -o /out/api
 # Run
 FROM gcr.io/distroless/static:nonroot
 COPY --from=build /out/api /api

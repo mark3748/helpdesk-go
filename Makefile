@@ -1,4 +1,7 @@
-.PHONY: help build test docker lint-helm clean dev-up dev-down
+.PHONY: help build test docker lint-helm clean dev-up dev-down publish-helm
+
+VERSION ?= dev
+CHART_VERSION := $(shell sed -n 's/^version: //p' helm/helpdesk/Chart.yaml)
 
 # Default target
 help:
@@ -16,7 +19,7 @@ help:
 # Build binaries
 build:
 	@echo "Building API binary..."
-	cd cmd/api && go mod tidy && go build -o ../../bin/api
+	cd cmd/api && go mod tidy && go build -ldflags="-X github.com/mark3748/helpdesk-go/internal/buildinfo.Version=$(VERSION)" -o ../../bin/api
 	@echo "Building worker binary..."
 	cd cmd/worker && go mod tidy && go build -o ../../bin/worker
 	@echo "Build complete!"
@@ -33,7 +36,7 @@ test:
 # Build Docker images
 docker:
 	@echo "Building Docker images..."
-	docker build -f Dockerfile.api -t helpdesk-api .
+	docker build --build-arg APP_VERSION=$(VERSION) -f Dockerfile.api -t helpdesk-api .
 	docker build -f Dockerfile.worker -t helpdesk-worker .
 	docker build -f Dockerfile.frontend-internal -t helpdesk-internal-frontend .
 	docker build -f Dockerfile.frontend-requester -t helpdesk-requester-frontend .
@@ -49,6 +52,10 @@ lint-helm:
 	@echo "Packaging Helm chart..."
 	helm package helm/helpdesk
 	@echo "Helm chart validation complete!"
+
+publish-helm: lint-helm
+	@echo "Publishing Helm chart to GHCR..."
+	helm push helpdesk-$(CHART_VERSION).tgz oci://ghcr.io/mark3748/charts
 
 # Clean build artifacts
 clean:

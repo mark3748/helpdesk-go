@@ -3,6 +3,7 @@ version: "3"
 # Global variables (optional, but good for versioning)
 vars:
   BINARY_DIR: "bin"
+  VERSION: '{{default "dev" .VERSION}}'
 
 tasks:
   default:
@@ -15,7 +16,7 @@ tasks:
     cmds:
       - echo "Building API binary..."
       - go mod tidy
-      - go build -o {{.BINARY_DIR}}/api{{exeExt}} ./cmd/api
+      - go build -ldflags="-X github.com/mark3748/helpdesk-go/internal/buildinfo.Version={{.VERSION}}" -o {{.BINARY_DIR}}/api{{exeExt}} ./cmd/api
       - echo "Building worker binary..."
       - go build -o {{.BINARY_DIR}}/worker{{exeExt}} ./cmd/worker
       - echo "Build complete!"
@@ -43,7 +44,7 @@ tasks:
     desc: Build Docker images
     cmds:
       - echo "Building Docker images..."
-      - docker build -f Dockerfile.api -t helpdesk-api .
+      - docker build --build-arg APP_VERSION={{.VERSION}} -f Dockerfile.api -t helpdesk-api .
       - docker build -f Dockerfile.worker -t helpdesk-worker .
       - docker build -f Dockerfile.frontend-internal -t helpdesk-internal-frontend .
       - docker build -f Dockerfile.frontend-requester -t helpdesk-requester-frontend .

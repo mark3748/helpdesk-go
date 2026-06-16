@@ -64,6 +64,7 @@ const NAV_CONFIG: Record<Role, NavGroup[]> = {
     { key: 'admin-mail', label: 'Mail Settings', icon: <SolutionOutlined />, path: '/settings/mail' },
     { key: 'admin-oidc', label: 'OIDC Settings', icon: <GlobalOutlined />, path: '/settings/oidc' },
     { key: 'admin-storage', label: 'Storage Settings', icon: <DatabaseOutlined />, path: '/settings/storage' },
+    { key: 'admin-discord', label: 'Discord Settings', icon: <ContainerOutlined />, path: '/settings/discord' },
   ],
 };
 
@@ -147,6 +148,22 @@ export function SidebarLayout({ children }: { children?: ReactNode }) {
   const selectedKeys = useMemo(() => {
     const items = NAV_CONFIG[activeRole] || [];
     const fullPath = loc.pathname + loc.search;
+    const concreteItems: Array<{ key: string; path: string }> = [];
+    for (const item of items) {
+      if (item.path) {
+        concreteItems.push({ key: item.key, path: item.path });
+      }
+      for (const child of item.children || []) {
+        concreteItems.push({ key: child.key, path: child.path });
+      }
+    }
+    concreteItems.sort((a, b) => b.path.length - a.path.length);
+
+    for (const item of concreteItems) {
+      if (fullPath === item.path || (item.path !== '/' && loc.pathname === item.path)) {
+        return [item.key];
+      }
+    }
     
     // Find matching item in flat or nested structure
     for (const item of items) {
