@@ -41,3 +41,4 @@ cmd/api/api
 .serena/
 CLAUDE.md
 helm/local-values.yaml
+helm/**/*.tgz
