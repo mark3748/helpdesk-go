@@ -48,10 +48,14 @@ func (db *fakeDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 			if p, ok := dest[2].(*[]byte); ok {
 				*p = b
 			}
-			if p, ok := dest[3].(*string); ok {
+			b, _ = json.Marshal(db.s.Discord)
+			if p, ok := dest[3].(*[]byte); ok {
+				*p = b
+			}
+			if p, ok := dest[4].(*string); ok {
 				*p = db.s.LogPath
 			}
-			if p, ok := dest[4].(**time.Time); ok {
+			if p, ok := dest[5].(**time.Time); ok {
 				if db.s.LastTest != "" {
 					t, _ := time.Parse(time.RFC3339, db.s.LastTest)
 					*p = &t
@@ -94,6 +98,13 @@ func (db *fakeDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.Com
 			_ = json.Unmarshal([]byte(v), &db.s.Mail)
 		case []byte:
 			_ = json.Unmarshal(v, &db.s.Mail)
+		}
+	case strings.Contains(s, "update settings set discord"):
+		switch v := args[0].(type) {
+		case string:
+			_ = json.Unmarshal([]byte(v), &db.s.Discord)
+		case []byte:
+			_ = json.Unmarshal(v, &db.s.Discord)
 		}
 	case strings.Contains(s, "update settings set last_test"):
 		if t, ok := args[0].(time.Time); ok {
@@ -283,6 +294,87 @@ func TestPrepareMailSettingsUpdatePreservesStoredPasswords(t *testing.T) {
 	}
 	if got["smtp_host"] != "new-smtp.example.com" {
 		t.Fatalf("non-secret update was not applied: %#v", got)
+	}
+}
+
+func TestPublicDiscordSettingsMergesEnvironmentAndRedactsToken(t *testing.T) {
+	t.Setenv("DISCORD_BOT_TOKEN", "env-token")
+	t.Setenv("DISCORD_GUILD_ID", "env-guild")
+	t.Setenv("DISCORD_CHANNEL_ID", "env-channel")
+
+	got := publicDiscordSettings(map[string]string{"guild_id": "db-guild"})
+	if got["guild_id"] != "db-guild" || got["channel_id"] != "env-channel" {
+		t.Fatalf("Discord settings were not merged: %#v", got)
+	}
+	if got["bot_token"] != "" || got["bot_token_configured"] != "true" {
+		t.Fatalf("Discord token was exposed or configured flag missing: %#v", got)
+	}
+}
+
+func TestGetSystemInfoRequiresCompleteDiscordSettings(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := &fakeDB{s: Settings{Discord: map[string]string{}}}
+	InitSettings(context.Background(), db, "/tmp/logs")
+
+	r := gin.New()
+	r.GET("/system/info", GetSystemInfo)
+
+	t.Setenv("DISCORD_BOT_TOKEN", "env-token")
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/system/info", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	var partial map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &partial); err != nil {
+		t.Fatal(err)
+	}
+	if partial["discord_status"] != "not_configured" {
+		t.Fatalf("partial Discord settings reported configured: %#v", partial)
+	}
+
+	db.s.Discord = map[string]string{
+		"guild_id":   "db-guild",
+		"channel_id": "db-channel",
+	}
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, "/system/info", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	var complete map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &complete); err != nil {
+		t.Fatal(err)
+	}
+	if complete["discord_status"] != "configured" {
+		t.Fatalf("complete Discord settings were not reported configured: %#v", complete)
+	}
+}
+
+func TestSaveDiscordSettingsPreservesStoredToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := &fakeDB{s: Settings{Discord: map[string]string{
+		"bot_token":  "stored-token",
+		"guild_id":   "old-guild",
+		"channel_id": "old-channel",
+	}}}
+	InitSettings(context.Background(), db, "/tmp/logs")
+
+	r := gin.New()
+	r.POST("/settings/discord", SaveDiscordSettings)
+	body := bytes.NewBufferString(`{"bot_token":"","guild_id":"new-guild","channel_id":"new-channel"}`)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/settings/discord", body)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", w.Code, w.Body.String())
+	}
+	if db.s.Discord["bot_token"] != "stored-token" || db.s.Discord["guild_id"] != "new-guild" {
+		t.Fatalf("Discord settings were not saved correctly: %#v", db.s.Discord)
 	}
 }
 

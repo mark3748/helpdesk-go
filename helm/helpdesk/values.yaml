@@ -81,6 +81,8 @@ ingressRequester:
 env:
   ENV: "prod"
   ADDR: ":8080"
+  APP_VERSION: "0.4.6"
+  WEB_APP_VERSION: "0.4.6"
   # CORS: allow origins for UIs calling the API (comma-separated)
   ALLOWED_ORIGINS: ""
   # External services (set to your endpoints)

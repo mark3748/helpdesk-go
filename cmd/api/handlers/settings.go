@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/mark3748/helpdesk-go/internal/buildinfo"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -43,6 +44,7 @@ type Settings struct {
 	Storage  map[string]string `json:"storage"`
 	OIDC     OIDCSettings      `json:"oidc"`
 	Mail     map[string]string `json:"mail"`
+	Discord  map[string]string `json:"discord"`
 	LogPath  string            `json:"log_path"`
 	LastTest string            `json:"last_test"`
 }
@@ -54,7 +56,8 @@ var (
 	// EnqueueEmail is set by the API to enqueue email jobs.
 	EnqueueEmail func(ctx context.Context, to, template string, data interface{})
 	// in-memory fallback for tests when no DB is wired
-	memMail map[string]string
+	memMail    map[string]string
+	memDiscord map[string]string
 )
 
 var mailSettingKeys = []string{
@@ -62,6 +65,8 @@ var mailSettingKeys = []string{
 	"imap_host", "imap_port", "imap_user", "imap_pass", "imap_folder",
 	"host", "port",
 }
+
+var discordSettingKeys = []string{"bot_token", "guild_id", "channel_id"}
 
 func effectiveMailSettings(stored map[string]string) map[string]string {
 	out := map[string]string{
@@ -128,6 +133,57 @@ func prepareMailSettingsUpdate(ctx context.Context, data map[string]string) map[
 	return out
 }
 
+func effectiveDiscordSettings(stored map[string]string) map[string]string {
+	out := map[string]string{
+		"bot_token":  os.Getenv("DISCORD_BOT_TOKEN"),
+		"guild_id":   os.Getenv("DISCORD_GUILD_ID"),
+		"channel_id": os.Getenv("DISCORD_CHANNEL_ID"),
+	}
+	for _, key := range discordSettingKeys {
+		if value := strings.TrimSpace(stored[key]); value != "" {
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func publicDiscordSettings(stored map[string]string) map[string]string {
+	out := effectiveDiscordSettings(stored)
+	out["bot_token_configured"] = cond(out["bot_token"] != "", "true", "false")
+	out["bot_token"] = ""
+	return out
+}
+
+func discordConfigured(stored map[string]string) bool {
+	settings := effectiveDiscordSettings(stored)
+	for _, key := range discordSettingKeys {
+		if strings.TrimSpace(settings[key]) == "" {
+			return false
+		}
+	}
+	return true
+}
+
+func prepareDiscordSettingsUpdate(ctx context.Context, data map[string]string) map[string]string {
+	var current map[string]string
+	if dbStore == nil {
+		current = memDiscord
+	} else if settings, err := loadSettings(ctx); err == nil {
+		current = settings.Discord
+	}
+	out := make(map[string]string, len(discordSettingKeys))
+	for _, key := range discordSettingKeys {
+		value := strings.TrimSpace(data[key])
+		if key == "bot_token" && value == "" {
+			value = current[key]
+		}
+		if value != "" {
+			out[key] = value
+		}
+	}
+	return out
+}
+
 // InitSettings ensures a row exists, sets initial log path, and stores DB handle.
 func InitSettings(ctx context.Context, db DB, logPath string) {
 	dbStore = db
@@ -147,18 +203,20 @@ func loadSettings(ctx context.Context) (Settings, error) {
 		s.Storage = map[string]string{}
 		s.OIDC = OIDCSettings{}
 		s.Mail = map[string]string{}
+		s.Discord = map[string]string{}
 		s.LogPath = startupLog
 		return s, nil
 	}
-	var storage, oidc, mail []byte
+	var storage, oidc, mail, discord []byte
 	var lt *time.Time
-	row := dbStore.QueryRow(ctx, "select storage, oidc, mail, log_path, last_test from settings where id=1")
-	err := row.Scan(&storage, &oidc, &mail, &s.LogPath, &lt)
+	row := dbStore.QueryRow(ctx, "select storage, oidc, mail, discord, log_path, last_test from settings where id=1")
+	err := row.Scan(&storage, &oidc, &mail, &discord, &s.LogPath, &lt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			s.Storage = map[string]string{}
 			s.OIDC = OIDCSettings{}
 			s.Mail = map[string]string{}
+			s.Discord = map[string]string{}
 			s.LogPath = "/config/logs"
 			return s, nil
 		}
@@ -176,6 +234,11 @@ func loadSettings(ctx context.Context) (Settings, error) {
 		_ = json.Unmarshal(mail, &s.Mail)
 	} else {
 		s.Mail = map[string]string{}
+	}
+	if len(discord) > 0 {
+		_ = json.Unmarshal(discord, &s.Discord)
+	} else {
+		s.Discord = map[string]string{}
 	}
 	if lt != nil {
 		s.LastTest = lt.Format(time.RFC3339)
@@ -190,18 +253,20 @@ func loadSettingsLegacy(ctx context.Context, db DB) (Settings, error) {
 		s.Storage = map[string]string{}
 		s.OIDC = OIDCSettings{}
 		s.Mail = map[string]string{}
+		s.Discord = map[string]string{}
 		s.LogPath = startupLog
 		return s, nil
 	}
-	var storage, oidc, mail []byte
+	var storage, oidc, mail, discord []byte
 	var lt *time.Time
-	row := db.QueryRow(ctx, "select storage, oidc, mail, log_path, last_test from settings where id=1")
-	err := row.Scan(&storage, &oidc, &mail, &s.LogPath, &lt)
+	row := db.QueryRow(ctx, "select storage, oidc, mail, discord, log_path, last_test from settings where id=1")
+	err := row.Scan(&storage, &oidc, &mail, &discord, &s.LogPath, &lt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			s.Storage = map[string]string{}
 			s.OIDC = OIDCSettings{}
 			s.Mail = map[string]string{}
+			s.Discord = map[string]string{}
 			s.LogPath = "/config/logs"
 			return s, nil
 		}
@@ -219,6 +284,11 @@ func loadSettingsLegacy(ctx context.Context, db DB) (Settings, error) {
 		_ = json.Unmarshal(mail, &s.Mail)
 	} else {
 		s.Mail = map[string]string{}
+	}
+	if len(discord) > 0 {
+		_ = json.Unmarshal(discord, &s.Discord)
+	} else {
+		s.Discord = map[string]string{}
 	}
 	if lt != nil {
 		s.LastTest = lt.Format(time.RFC3339)
@@ -234,6 +304,7 @@ func GetSettings(c *gin.Context) {
 		return
 	}
 	s.Mail = publicMailSettings(s.Mail)
+	s.Discord = publicDiscordSettings(s.Discord)
 	c.JSON(http.StatusOK, s)
 }
 
@@ -298,6 +369,30 @@ func SaveMailSettings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// SaveDiscordSettings stores Discord bot configuration.
+func SaveDiscordSettings(c *gin.Context) {
+	var data map[string]string
+	if err := c.ShouldBindJSON(&data); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	data = prepareDiscordSettingsUpdate(c.Request.Context(), data)
+	if dbStore == nil {
+		memDiscord = make(map[string]string, len(data))
+		for k, v := range data {
+			memDiscord[k] = v
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "restart_required": true})
+		return
+	}
+	b, _ := json.Marshal(data)
+	if _, err := dbStore.Exec(c.Request.Context(), "update settings set discord=$1::jsonb where id=1", string(b)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "restart_required": true})
 }
 
 // MailSettings returns the current mail settings (from DB).
@@ -371,12 +466,14 @@ func GetSystemInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"version":         "1.0.0",
+		"version":         buildinfo.RuntimeVersion(),
+		"web_version":     buildinfo.RuntimeWebVersion(),
 		"uptime":          "running", // TODO: track actual uptime
 		"database_status": "connected",
 		"oidc_status":     cond(oidcConfigured, "configured", "not_configured"),
 		"mail_status":     cond(MailSettings()["smtp_host"] != "", "configured", "not_configured"),
 		"storage_status":  storageStatus,
+		"discord_status":  cond(discordConfigured(s.Discord), "configured", "not_configured"),
 	})
 }
 

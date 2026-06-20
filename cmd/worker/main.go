@@ -285,6 +285,30 @@ func effectiveMailConfig(ctx context.Context, db app.DB, c Config) Config {
 	return c
 }
 
+// effectiveDiscordConfig overlays non-empty database settings on environment defaults.
+func effectiveDiscordConfig(ctx context.Context, db app.DB, c Config) Config {
+	if db == nil {
+		return c
+	}
+	var raw []byte
+	if err := db.QueryRow(ctx, "select discord from settings where id=1").Scan(&raw); err != nil || len(raw) == 0 {
+		return c
+	}
+	var discord map[string]string
+	if err := json.Unmarshal(raw, &discord); err != nil {
+		return c
+	}
+	apply := func(key string, target *string) {
+		if value := strings.TrimSpace(discord[key]); value != "" {
+			*target = value
+		}
+	}
+	apply("bot_token", &c.DiscordBotToken)
+	apply("guild_id", &c.DiscordGuildID)
+	apply("channel_id", &c.DiscordChannelID)
+	return c
+}
+
 // processQueueJob pops one job and processes it (test helper)
 func processQueueJob(ctx context.Context, db app.DB, c Config, rdb *redis.Client, send func(context.Context, app.DB, Config, EmailJob) error) error {
 	res, err := rdb.LPop(ctx, "jobs").Result()
@@ -625,9 +649,10 @@ func main() {
 		}
 	}()
 
-	if c.DiscordBotToken != "" {
+	discordConfig := effectiveDiscordConfig(ctx, db, c)
+	if discordConfig.DiscordBotToken != "" {
 		go func() {
-			if err := runDiscordBot(ctx, effectiveMailConfig(ctx, db, c), db, store, rdb); err != nil {
+			if err := runDiscordBot(ctx, effectiveMailConfig(ctx, db, discordConfig), db, store, rdb); err != nil {
 				log.Error().Err(err).Msg("run discord bot")
 			}
 		}()

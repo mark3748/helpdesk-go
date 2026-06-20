@@ -736,6 +736,7 @@ func (a *App) mountAPI(rg *gin.RouterGroup) {
 	auth.POST("/settings/oidc", authpkg.RequireRole("admin"), handlers.SaveOIDCSettings)
 	auth.POST("/settings/mail", authpkg.RequireRole("admin"), handlers.SaveMailSettings)
 	auth.POST("/settings/mail/send-test", authpkg.RequireRole("admin"), handlers.SendTestMail)
+	auth.POST("/settings/discord", authpkg.RequireRole("admin"), handlers.SaveDiscordSettings)
 
 	auth.GET("/users/:id/roles", authpkg.RequireRole("admin"), authpkg.ListUserRoles(a.core()))
 	auth.POST("/users/:id/roles", authpkg.RequireRole("admin"), authpkg.AddUserRole(a.core()))

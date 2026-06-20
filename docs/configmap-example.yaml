@@ -9,3 +9,5 @@ data:
   OIDC_ISSUER: https://idp.example.com
   MINIO_ENDPOINT: http://minio:9000
   SMTP_HOST: smtp.example.com
+  DISCORD_GUILD_ID: "123456789012345678"
+  DISCORD_CHANNEL_ID: "123456789012345678"

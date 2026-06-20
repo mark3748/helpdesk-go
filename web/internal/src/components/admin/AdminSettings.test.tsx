@@ -16,11 +16,27 @@ function renderWithClient(ui: React.ReactElement) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
-test('shows settings data', async () => {
+test('shows settings data and Discord configuration', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      version: 'test',
+      uptime: 'running',
+      database_status: 'connected',
+      storage_status: 'configured',
+      mail_status: 'configured',
+      oidc_status: 'configured',
+      discord_status: 'configured',
+    }),
+  }));
+
   renderWithClient(<AdminSettings />);
   await waitFor(() => {
     expect(screen.getByText(/System Version/)).toBeTruthy();
+    expect(screen.getAllByText('Discord Bot').length).toBeGreaterThan(0);
   });
 });

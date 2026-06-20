@@ -2256,6 +2256,7 @@ export interface components {
             description?: string;
             /** Format: uuid */
             requester_id?: string;
+            requester?: string;
             /** Format: uuid */
             assignee_id?: string | null;
             /** Format: uuid */

@@ -171,47 +171,7 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 			// Show interactive creation modal
 			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseModal,
-				Data: &discordgo.InteractionResponseData{
-					CustomID: discordCreateTicketModalID,
-					Title:    "Create Support Ticket",
-					Components: []discordgo.MessageComponent{
-						discordgo.ActionsRow{
-							Components: []discordgo.MessageComponent{
-								discordgo.TextInput{
-									CustomID:    discordTicketTitleInputID,
-									Label:       "Title",
-									Style:       discordgo.TextInputShort,
-									Placeholder: "Brief summary of your request",
-									Required:    true,
-									MinLength:   3,
-								},
-							},
-						},
-						discordgo.ActionsRow{
-							Components: []discordgo.MessageComponent{
-								discordgo.TextInput{
-									CustomID:    discordTicketDescInputID,
-									Label:       "Description",
-									Style:       discordgo.TextInputParagraph,
-									Placeholder: "Provide details of the issue",
-									Required:    true,
-								},
-							},
-						},
-						discordgo.ActionsRow{
-							Components: []discordgo.MessageComponent{
-								discordgo.TextInput{
-									CustomID:    discordTicketPriorityInputID,
-									Label:       "Priority (1=Critical, 2=High, 3=Medium, 4=Low)",
-									Style:       discordgo.TextInputShort,
-									Placeholder: "2",
-									Required:    true,
-									MaxLength:   1,
-								},
-							},
-						},
-					},
-				},
+				Data: createTicketModalData(),
 			})
 			if err != nil {
 				log.Error().Err(err).Msg("error responding with create-ticket modal")
@@ -331,6 +291,50 @@ func handleInteractionCreate(ctx context.Context, s *discordgo.Session, i *disco
 				Data: responseData,
 			})
 		}
+	}
+}
+
+func createTicketModalData() *discordgo.InteractionResponseData {
+	return &discordgo.InteractionResponseData{
+		CustomID: discordCreateTicketModalID,
+		Title:    "Create Support Ticket",
+		Components: []discordgo.MessageComponent{
+			discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					discordgo.TextInput{
+						CustomID:    discordTicketTitleInputID,
+						Label:       "Title",
+						Style:       discordgo.TextInputShort,
+						Placeholder: "Brief summary of your request",
+						Required:    true,
+						MinLength:   3,
+					},
+				},
+			},
+			discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					discordgo.TextInput{
+						CustomID:    discordTicketDescInputID,
+						Label:       "Description",
+						Style:       discordgo.TextInputParagraph,
+						Placeholder: "Provide details of the issue",
+						Required:    true,
+					},
+				},
+			},
+			discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					discordgo.TextInput{
+						CustomID:    discordTicketPriorityInputID,
+						Label:       "Priority (1-4)",
+						Style:       discordgo.TextInputShort,
+						Placeholder: "1 Critical, 2 High, 3 Medium, 4 Low",
+						Required:    true,
+						MaxLength:   1,
+					},
+				},
+			},
+		},
 	}
 }
 

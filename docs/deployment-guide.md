@@ -136,6 +136,7 @@ secrets:
     MINIO_ACCESS_KEY: "access-key"
     MINIO_SECRET_KEY: "secret-key"
     SMTP_PASS: "smtp-password"
+    DISCORD_BOT_TOKEN: "discord-bot-token"
 ```
 
 2. **Enable SSL/TLS everywhere:**
@@ -149,6 +150,10 @@ MINIO_USE_SSL=true
 # SMTP
 SMTP_PORT=587  # Use STARTTLS
 ```
+
+Discord bot setup, permissions, and configuration are documented in
+[discord.md](discord.md). Store `DISCORD_BOT_TOKEN` as a secret. Changes saved
+through the admin UI take effect after restarting the worker.
 
 3. **Set appropriate timeouts:**
 ```bash

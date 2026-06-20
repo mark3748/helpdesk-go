@@ -1,0 +1,3 @@
+mark3748/helpdesk-go-site:
+  - source: docs/openapi.yaml
+    dest: openapi/helpdesk-go.yaml

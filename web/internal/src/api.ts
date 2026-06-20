@@ -162,6 +162,7 @@ export function useSystemInfo() {
         storage_status: 'configured' | 'not_configured';
         mail_status: 'configured' | 'not_configured';
         oidc_status: 'configured' | 'not_configured';
+        discord_status: 'configured' | 'not_configured';
       }>('/system/info'),
   });
 }
@@ -176,6 +177,22 @@ export function useSaveMailSettings() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  });
+}
+
+export function useSaveDiscordSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      apiFetch('/settings/discord', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] });
+      qc.invalidateQueries({ queryKey: ['system-info'] });
+    },
   });
 }
 
