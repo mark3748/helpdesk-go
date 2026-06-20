@@ -1,4 +1,4 @@
-# Discord Bot Configuration UI
+# 0.4.6: Discord Bot Configuration UI
 
 **Summary:**
 - Added an admin settings page for Discord bot token, server ID, and ticket channel ID.
