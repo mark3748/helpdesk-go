@@ -154,6 +154,16 @@ func publicDiscordSettings(stored map[string]string) map[string]string {
 	return out
 }
 
+func discordConfigured(stored map[string]string) bool {
+	settings := effectiveDiscordSettings(stored)
+	for _, key := range discordSettingKeys {
+		if strings.TrimSpace(settings[key]) == "" {
+			return false
+		}
+	}
+	return true
+}
+
 func prepareDiscordSettingsUpdate(ctx context.Context, data map[string]string) map[string]string {
 	var current map[string]string
 	if dbStore == nil {
@@ -463,7 +473,7 @@ func GetSystemInfo(c *gin.Context) {
 		"oidc_status":     cond(oidcConfigured, "configured", "not_configured"),
 		"mail_status":     cond(MailSettings()["smtp_host"] != "", "configured", "not_configured"),
 		"storage_status":  storageStatus,
-		"discord_status":  cond(effectiveDiscordSettings(s.Discord)["bot_token"] != "", "configured", "not_configured"),
+		"discord_status":  cond(discordConfigured(s.Discord), "configured", "not_configured"),
 	})
 }
 
